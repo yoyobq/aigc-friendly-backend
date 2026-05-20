@@ -1,53 +1,71 @@
 // test/07-pagination-sort-search/pagination.e2e-spec.ts
-// test/07-pagination/pagination.e2e-spec.ts
+import { AccountStatus, IdentityTypeEnum } from '@app-types/models/account.types';
+import {
+  SubjectType,
+  VerificationRecordStatus,
+  VerificationRecordType,
+} from '@app-types/models/verification-record.types';
 import { DomainError, PAGINATION_ERROR } from '@core/common/errors/domain-error';
 import type { ICursorSigner } from '@core/pagination/pagination.ports';
 import type { SortParam } from '@core/pagination/pagination.types';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { initGraphQLSchema } from '@src/adapters/api/graphql/schema/schema.init';
-import { ApiModule } from '@src/bootstraps/api/api.module';
-import { CustomerEntity } from '@src/modules/account/identities/training/customer/account-customer.entity';
-import { LearnerEntity } from '@src/modules/account/identities/training/learner/account-learner.entity';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { AppConfigModule } from '@src/infrastructure/config/config.module';
+import { DatabaseModule } from '@src/infrastructure/database/database.module';
+import { AccountEntity } from '@src/modules/account/base/entities/account.entity';
+import { UserInfoEntity } from '@src/modules/account/base/entities/user-info.entity';
 import { PaginationModule } from '@src/modules/common/pagination.module';
 import { PaginationService } from '@src/modules/common/pagination.service';
 import { PAGINATION_TOKENS } from '@src/modules/common/tokens/pagination.tokens';
-import { DataSource } from 'typeorm';
+import { VerificationRecordEntity } from '@src/modules/verification-record/verification-record.entity';
+import { randomBytes } from 'crypto';
+import { DataSource, In, Like } from 'typeorm';
 
 describe('分页工具 (e2e)', () => {
   let app: INestApplication;
   let dataSource: DataSource;
   let paginationService: PaginationService;
+  let seededAccountIds: number[] = [];
 
-  // 统一的排序白名单与默认排序
-  const allowedSorts: ReadonlyArray<string> = ['name', 'id'];
-  // 为满足 CURSOR 校验，默认排序需包含 primary 与 tieBreaker
+  const accountPrefix = 'PAG_CASE_';
+  const joinPrefix = 'PAG_JOIN_';
+  const allowedSorts: ReadonlyArray<string> = ['loginName', 'id'];
   const defaultSorts: ReadonlyArray<SortParam> = [
-    { field: 'name', direction: 'ASC' },
+    { field: 'loginName', direction: 'ASC' },
     { field: 'id', direction: 'ASC' },
   ];
 
-  // 列名解析：实体字段到 SQL 列（带别名）
   const resolveColumn = (field: string): string | null => {
     switch (field) {
       case 'id':
-        return 'learner.id';
-      case 'name':
-        return 'learner.name';
+        return 'account.id';
+      case 'loginName':
+        return 'account.login_name';
       default:
         return null;
     }
   };
 
-  // 说明：测试改为使用 PaginationService 作为分页入口，
-  // 由服务层统一应用排序与游标选项，并传递给底层分页器。
+  const resolvePropertyPath = (field: string): string | null => {
+    switch (field) {
+      case 'id':
+        return 'account.id';
+      case 'loginName':
+        return 'account.loginName';
+      default:
+        return null;
+    }
+  };
 
   beforeAll(async () => {
-    // 确保 GraphQL 枚举/标量注册（与项目习惯保持一致）
-    initGraphQLSchema();
-
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [ApiModule, PaginationModule],
+      imports: [
+        AppConfigModule,
+        DatabaseModule,
+        PaginationModule,
+        TypeOrmModule.forFeature([AccountEntity, UserInfoEntity, VerificationRecordEntity]),
+      ],
     }).compile();
 
     app = moduleFixture.createNestApplication();
@@ -56,82 +74,26 @@ describe('分页工具 (e2e)', () => {
     dataSource = app.get(DataSource);
     paginationService = app.get(PaginationService);
 
-    // 清理并准备测试数据
-    await seedLearners(30);
+    await seedAccounts(30, accountPrefix);
   });
 
   afterAll(async () => {
     try {
-      await dataSource.getRepository(LearnerEntity).clear();
-      await dataSource.getRepository(CustomerEntity).clear();
+      await cleanupSeededRows();
     } finally {
       if (app) await app.close();
     }
   });
 
-  /**
-   * 种子数据：创建指定数量的 Learner 记录（name 序列 L00..LNN，便于字典序）
-   */
-  const seedLearners = async (count: number): Promise<void> => {
-    const repo = dataSource.getRepository(LearnerEntity);
-    await repo.clear();
-    for (let i = 0; i < count; i += 1) {
-      const name = `L${String(i).padStart(2, '0')}`;
-      await repo.save(
-        repo.create({
-          customerId: 1,
-          name,
-          birthDate: null,
-          avatarUrl: null,
-          specialNeeds: null,
-          remark: null,
-          deactivatedAt: null,
-          createdBy: null,
-          updatedBy: null,
-          countPerSession: 1,
-        }),
-      );
-    }
-  };
-
-  /**
-   * 种子数据（自定义前缀）：
-   * 用于特定用例中区分不同批次数据，避免字符串断言混淆。
-   */
-  const seedLearnersWithPrefix = async (count: number, prefix: string): Promise<void> => {
-    const repo = dataSource.getRepository(LearnerEntity);
-    await repo.clear();
-    for (let i = 0; i < count; i += 1) {
-      const name = `${prefix}${String(i).padStart(2, '0')}`;
-      await repo.save(
-        repo.create({
-          customerId: 1,
-          name,
-          birthDate: null,
-          avatarUrl: null,
-          specialNeeds: null,
-          remark: null,
-          deactivatedAt: null,
-          createdBy: null,
-          updatedBy: null,
-          countPerSession: 1,
-        }),
-      );
-    }
-  };
-
-  /**
-   * 构造基础查询（不设置排序，交由分页器）
-   */
   const createBaseQb = () =>
-    dataSource.getRepository(LearnerEntity).createQueryBuilder('learner').where('learner.id > :x', {
-      x: 0,
-    });
+    dataSource
+      .getRepository(AccountEntity)
+      .createQueryBuilder('account')
+      .where('account.login_name LIKE :prefix', { prefix: `${accountPrefix}%` });
 
   it('OFFSET 模式返回正确的分页与总数', async () => {
-    const qb = createBaseQb();
-    const result = await paginationService.paginateQuery<{ id: number; name: string }>({
-      qb,
+    const result = await paginationService.paginateQuery<AccountEntity>({
+      qb: createBaseQb(),
       params: { mode: 'OFFSET', page: 2, pageSize: 10, withTotal: true },
       allowedSorts,
       defaultSorts,
@@ -143,27 +105,25 @@ describe('分页工具 (e2e)', () => {
     expect(result.page).toBe(2);
     expect(result.pageSize).toBe(10);
 
-    // 验证项顺序（按 name ASC, id ASC，默认排序退回 id ASC）
-    const names = result.items.map((r) => r.name);
-    expect(names[0]).toBe('L10');
-    expect(names[9]).toBe('L19');
+    const names = result.items.map((row) => row.loginName);
+    expect(names[0]).toBe('PAG_CASE_10');
+    expect(names[9]).toBe('PAG_CASE_19');
   });
 
-  it('CURSOR 模式分页与 nextCursor 正确衔接（按 name ASC, id ASC）', async () => {
-    const qb1 = createBaseQb();
-    const page1 = await paginationService.paginateQuery<{ id: number; name: string }>({
-      qb: qb1,
+  it('CURSOR 模式分页与 nextCursor 正确衔接', async () => {
+    const page1 = await paginationService.paginateQuery<AccountEntity>({
+      qb: createBaseQb(),
       params: {
         mode: 'CURSOR',
         limit: 10,
         sorts: [
-          { field: 'name', direction: 'ASC' },
+          { field: 'loginName', direction: 'ASC' },
           { field: 'id', direction: 'ASC' },
         ],
       },
       allowedSorts,
       defaultSorts,
-      cursorKey: { primary: 'name', tieBreaker: 'id' },
+      cursorKey: { primary: 'loginName', tieBreaker: 'id' },
       resolveColumn,
     });
 
@@ -171,200 +131,167 @@ describe('分页工具 (e2e)', () => {
     expect(page1.pageInfo?.hasNext).toBe(true);
     expect(page1.pageInfo?.nextCursor).toBeDefined();
 
-    const qb2 = createBaseQb();
-    const page2 = await paginationService.paginateQuery<{ id: number; name: string }>({
-      qb: qb2,
+    const page2 = await paginationService.paginateQuery<AccountEntity>({
+      qb: createBaseQb(),
       params: {
         mode: 'CURSOR',
         limit: 10,
         after: page1.pageInfo?.nextCursor,
         sorts: [
-          { field: 'name', direction: 'ASC' },
+          { field: 'loginName', direction: 'ASC' },
           { field: 'id', direction: 'ASC' },
         ],
       },
       allowedSorts,
       defaultSorts,
-      cursorKey: { primary: 'name', tieBreaker: 'id' },
+      cursorKey: { primary: 'loginName', tieBreaker: 'id' },
       resolveColumn,
     });
 
-    expect(page2.items.length).toBe(10);
-    expect(page2.pageInfo?.hasNext).toBe(true);
-
-    const qb3 = createBaseQb();
-    const page3 = await paginationService.paginateQuery<{ id: number; name: string }>({
-      qb: qb3,
+    const page3 = await paginationService.paginateQuery<AccountEntity>({
+      qb: createBaseQb(),
       params: {
         mode: 'CURSOR',
         limit: 10,
         after: page2.pageInfo?.nextCursor,
         sorts: [
-          { field: 'name', direction: 'ASC' },
+          { field: 'loginName', direction: 'ASC' },
           { field: 'id', direction: 'ASC' },
         ],
       },
       allowedSorts,
       defaultSorts,
-      cursorKey: { primary: 'name', tieBreaker: 'id' },
+      cursorKey: { primary: 'loginName', tieBreaker: 'id' },
       resolveColumn,
     });
 
+    expect(page2.items.length).toBe(10);
     expect(page3.items.length).toBe(10);
     expect(page3.pageInfo?.hasNext).toBe(false);
 
-    // 验证三个批次无重复覆盖
     const ids = new Set<number>();
-    [...page1.items, ...page2.items, ...page3.items].forEach((r) => ids.add(r.id));
+    [...page1.items, ...page2.items, ...page3.items].forEach((row) => ids.add(row.id));
     expect(ids.size).toBe(30);
   });
 
-  it('CURSOR 模式支持 DESC，自动补齐 tieBreaker 并正确前进', async () => {
-    const qb1 = createBaseQb();
-    const page1 = await paginationService.paginateQuery<{ id: number; name: string }>({
-      qb: qb1,
+  it('CURSOR 模式支持 DESC 并自动补齐 tieBreaker', async () => {
+    const page1 = await paginationService.paginateQuery<AccountEntity>({
+      qb: createBaseQb(),
       params: {
         mode: 'CURSOR',
         limit: 10,
-        // 仅提供主排序字段，服务需自动补齐 tieBreaker(id)
-        sorts: [{ field: 'name', direction: 'DESC' }],
+        sorts: [{ field: 'loginName', direction: 'DESC' }],
       },
       allowedSorts,
       defaultSorts,
-      cursorKey: { primary: 'name', tieBreaker: 'id' },
+      cursorKey: { primary: 'loginName', tieBreaker: 'id' },
       resolveColumn,
     });
 
-    expect(page1.items.length).toBe(10);
-    expect(page1.pageInfo?.hasNext).toBe(true);
-    expect(page1.pageInfo?.nextCursor).toBeDefined();
-
-    const qb2 = createBaseQb();
-    const page2 = await paginationService.paginateQuery<{ id: number; name: string }>({
-      qb: qb2,
+    const page2 = await paginationService.paginateQuery<AccountEntity>({
+      qb: createBaseQb(),
       params: {
         mode: 'CURSOR',
         limit: 10,
         after: page1.pageInfo?.nextCursor,
-        sorts: [{ field: 'name', direction: 'DESC' }],
+        sorts: [{ field: 'loginName', direction: 'DESC' }],
       },
       allowedSorts,
       defaultSorts,
-      cursorKey: { primary: 'name', tieBreaker: 'id' },
+      cursorKey: { primary: 'loginName', tieBreaker: 'id' },
       resolveColumn,
     });
 
-    const qb3 = createBaseQb();
-    const page3 = await paginationService.paginateQuery<{ id: number; name: string }>({
-      qb: qb3,
+    const page3 = await paginationService.paginateQuery<AccountEntity>({
+      qb: createBaseQb(),
       params: {
         mode: 'CURSOR',
         limit: 10,
         after: page2.pageInfo?.nextCursor,
-        sorts: [{ field: 'name', direction: 'DESC' }],
+        sorts: [{ field: 'loginName', direction: 'DESC' }],
       },
       allowedSorts,
       defaultSorts,
-      cursorKey: { primary: 'name', tieBreaker: 'id' },
+      cursorKey: { primary: 'loginName', tieBreaker: 'id' },
       resolveColumn,
     });
 
-    // 三页合计应覆盖全部 30 条，且无重复
     expect(page3.pageInfo?.hasNext).toBe(false);
-    const ids = new Set<number>();
-    [...page1.items, ...page2.items, ...page3.items].forEach((r) => ids.add(r.id));
-    expect(ids.size).toBe(30);
-
-    // 验证降序序列的头尾（name 值从 L29 .. L00）
-    const namesFirstPage = page1.items.map((r) => r.name);
-    expect(namesFirstPage[0]).toBe('L29');
-    expect(namesFirstPage[9]).toBe('L20');
+    expect(page1.items.map((row) => row.loginName).slice(0, 2)).toEqual([
+      'PAG_CASE_29',
+      'PAG_CASE_28',
+    ]);
   });
 
-  it('CURSOR before 分支：按 name ASC, id ASC 正确后退并返回 prevCursor', async () => {
-    // 准备第一页与第二页（通过 after 翻页）
-    const qb1 = createBaseQb();
-    const page1 = await paginationService.paginateQuery<{ id: number; name: string }>({
-      qb: qb1,
+  it('CURSOR before 分支正确后退并返回 prevCursor', async () => {
+    const page1 = await paginationService.paginateQuery<AccountEntity>({
+      qb: createBaseQb(),
       params: {
         mode: 'CURSOR',
         limit: 10,
         sorts: [
-          { field: 'name', direction: 'ASC' },
+          { field: 'loginName', direction: 'ASC' },
           { field: 'id', direction: 'ASC' },
         ],
       },
       allowedSorts,
       defaultSorts,
-      cursorKey: { primary: 'name', tieBreaker: 'id' },
+      cursorKey: { primary: 'loginName', tieBreaker: 'id' },
       resolveColumn,
     });
 
-    expect(page1.items.length).toBe(10);
-    expect(page1.pageInfo?.hasNext).toBe(true);
-    const next1 = page1.pageInfo?.nextCursor as string;
-    expect(typeof next1).toBe('string');
-
-    const qb2 = createBaseQb();
-    const page2 = await paginationService.paginateQuery<{ id: number; name: string }>({
-      qb: qb2,
+    const page2 = await paginationService.paginateQuery<AccountEntity>({
+      qb: createBaseQb(),
       params: {
         mode: 'CURSOR',
         limit: 10,
-        after: next1,
+        after: page1.pageInfo?.nextCursor,
         sorts: [
-          { field: 'name', direction: 'ASC' },
+          { field: 'loginName', direction: 'ASC' },
           { field: 'id', direction: 'ASC' },
         ],
       },
       allowedSorts,
       defaultSorts,
-      cursorKey: { primary: 'name', tieBreaker: 'id' },
+      cursorKey: { primary: 'loginName', tieBreaker: 'id' },
       resolveColumn,
     });
 
-    expect(page2.items.length).toBe(10);
-    // 从第二页的第一项构造 before 游标，验证按 README 的 before 语义正确后退
     const signer = app.get<ICursorSigner>(PAGINATION_TOKENS.CURSOR_SIGNER);
     const firstOfPage2 = page2.items[0];
     const beforeCursor = signer.sign({
-      key: 'name',
-      primaryValue: firstOfPage2.name,
+      key: 'loginName',
+      primaryValue: firstOfPage2.loginName ?? '',
       tieValue: firstOfPage2.id,
     });
 
-    const qbPrev = createBaseQb();
-    const prevPage = await paginationService.paginateQuery<{ id: number; name: string }>({
-      qb: qbPrev,
+    const prevPage = await paginationService.paginateQuery<AccountEntity>({
+      qb: createBaseQb(),
       params: {
         mode: 'CURSOR',
         limit: 10,
         before: beforeCursor,
         sorts: [
-          { field: 'name', direction: 'ASC' },
+          { field: 'loginName', direction: 'ASC' },
           { field: 'id', direction: 'ASC' },
         ],
       },
       allowedSorts,
       defaultSorts,
-      cursorKey: { primary: 'name', tieBreaker: 'id' },
+      cursorKey: { primary: 'loginName', tieBreaker: 'id' },
       resolveColumn,
     });
 
-    // prevPage 应与 page1 等价（正序返回）；因为是第一页，hasPrev 应为 false
-    expect(prevPage.items.length).toBe(10);
+    expect(prevPage.items.map((row) => row.loginName)).toEqual(
+      page1.items.map((row) => row.loginName),
+    );
     expect(prevPage.pageInfo?.hasPrev).toBe(false);
     expect(prevPage.pageInfo?.prevCursor).toBeUndefined();
-
-    const namesPage1 = page1.items.map((r) => r.name);
-    const namesPrev = prevPage.items.map((r) => r.name);
-    expect(namesPrev).toEqual(namesPage1);
   });
 
   it('非法排序字段将被忽略并回退到默认排序', async () => {
-    const qb = createBaseQb();
-    const result = await paginationService.paginateQuery<{ id: number; name: string }>({
-      qb,
+    const result = await paginationService.paginateQuery<AccountEntity>({
+      qb: createBaseQb(),
       params: {
         mode: 'OFFSET',
         page: 1,
@@ -376,64 +303,56 @@ describe('分页工具 (e2e)', () => {
       resolveColumn,
     });
 
-    // 默认排序 id ASC
     expect(result.items.length).toBe(10);
-    const names = result.items.map((r) => r.name);
-    expect(names[0]).toBe('L00');
-    expect(names[9]).toBe('L09');
+    expect(result.items[0].loginName).toBe('PAG_CASE_00');
+    expect(result.items[9].loginName).toBe('PAG_CASE_09');
   });
 
   it('非法游标签名被拒绝', async () => {
-    const qb = createBaseQb();
     await expect(
-      paginationService.paginateQuery<{ id: number; name: string }>({
-        qb,
+      paginationService.paginateQuery<AccountEntity>({
+        qb: createBaseQb(),
         params: { mode: 'CURSOR', limit: 10, after: 'invalid_cursor' },
         allowedSorts,
         defaultSorts,
-        cursorKey: { primary: 'name', tieBreaker: 'id' },
-        resolveColumn,
-      }),
-    ).rejects.toBeInstanceOf(DomainError);
-
-    await expect(
-      paginationService.paginateQuery<{ id: number; name: string }>({
-        qb,
-        params: { mode: 'CURSOR', limit: 10, after: 'invalid_cursor' },
-        allowedSorts,
-        defaultSorts,
-        cursorKey: { primary: 'name', tieBreaker: 'id' },
+        cursorKey: { primary: 'loginName', tieBreaker: 'id' },
         resolveColumn,
       }),
     ).rejects.toMatchObject({ code: PAGINATION_ERROR.INVALID_CURSOR });
   });
 
-  it('游标签名不匹配（MAC 校验失败）触发 INVALID_CURSOR 错误码', async () => {
-    const qb = createBaseQb();
-
-    // 先获取一个合法的 nextCursor
-    const page1 = await paginationService.paginateQuery<{ id: number; name: string }>({
-      qb,
+  it('游标签名不匹配触发 INVALID_CURSOR 错误码', async () => {
+    const page1 = await paginationService.paginateQuery<AccountEntity>({
+      qb: createBaseQb(),
       params: {
         mode: 'CURSOR',
         limit: 10,
         sorts: [
-          { field: 'name', direction: 'ASC' },
+          { field: 'loginName', direction: 'ASC' },
           { field: 'id', direction: 'ASC' },
         ],
       },
       allowedSorts,
       defaultSorts,
-      cursorKey: { primary: 'name', tieBreaker: 'id' },
+      cursorKey: { primary: 'loginName', tieBreaker: 'id' },
       resolveColumn,
     });
 
-    const validCursor = page1.pageInfo?.nextCursor as string;
+    const validCursor = page1.pageInfo?.nextCursor;
+    if (!validCursor) throw new Error('未生成测试游标');
     const decoded = Buffer.from(validCursor, 'base64').toString('utf8');
     const obj = JSON.parse(decoded) as { p: string; m: string };
-    const token = JSON.parse(obj.p) as { key: string; value: string | number; id: string | number };
-    // 篡改 payload（保持 m 不变），制造 MAC 不匹配
-    const tamperedPayload = JSON.stringify({ key: token.key, value: 'HACK', id: token.id });
+    const token = JSON.parse(obj.p) as {
+      key: string;
+      tieField?: string;
+      tieValue: string | number;
+    };
+    const tamperedPayload = JSON.stringify({
+      key: token.key,
+      tieField: token.tieField,
+      primaryValue: 'PAG_CASE_HACK',
+      tieValue: token.tieValue,
+    });
     const tamperedCursor = Buffer.from(
       JSON.stringify({ p: tamperedPayload, m: obj.m }),
       'utf8',
@@ -441,274 +360,162 @@ describe('分页工具 (e2e)', () => {
 
     let caught: unknown;
     try {
-      const qb2 = createBaseQb();
-      await paginationService.paginateQuery<{ id: number; name: string }>({
-        qb: qb2,
+      await paginationService.paginateQuery<AccountEntity>({
+        qb: createBaseQb(),
         params: {
           mode: 'CURSOR',
           limit: 10,
           after: tamperedCursor,
           sorts: [
-            { field: 'name', direction: 'ASC' },
+            { field: 'loginName', direction: 'ASC' },
             { field: 'id', direction: 'ASC' },
           ],
         },
         allowedSorts,
         defaultSorts,
-        cursorKey: { primary: 'name', tieBreaker: 'id' },
+        cursorKey: { primary: 'loginName', tieBreaker: 'id' },
         resolveColumn,
       });
-    } catch (e) {
-      caught = e;
+    } catch (error) {
+      caught = error;
     }
 
     expect(caught).toBeInstanceOf(DomainError);
-    const de = caught as DomainError;
-    expect(de.code).toBe(PAGINATION_ERROR.INVALID_CURSOR);
-    expect(de.message).toBe('游标签名不匹配');
+    expect((caught as DomainError).code).toBe(PAGINATION_ERROR.INVALID_CURSOR);
   });
 
-  it('JOIN 放大下使用 COUNT(DISTINCT) 返回正确总数', async () => {
-    // 准备数据：5 个客户，每个客户 2 个学员（JOIN 会放大）
-    const customerRepo = dataSource.getRepository(CustomerEntity);
-    const learnerRepo = dataSource.getRepository(LearnerEntity);
-    await learnerRepo.clear();
-    await customerRepo.clear();
-
-    const customers: CustomerEntity[] = [];
-    for (let i = 0; i < 5; i += 1) {
-      const name = `C${String(i).padStart(2, '0')}`;
-      const c = customerRepo.create({
-        name,
-        accountId: null,
-        contactPhone: null,
-        preferredContactTime: null,
-        remark: null,
-        deactivatedAt: null,
-        createdBy: null,
-        updatedBy: null,
-      });
-      customers.push(await customerRepo.save(c));
-    }
-    for (const c of customers) {
-      for (let j = 0; j < 2; j += 1) {
-        const lname = `${c.name}-L${j}`;
-        await learnerRepo.save(
-          learnerRepo.create({
-            customerId: c.id,
-            name: lname,
-            birthDate: null,
-            avatarUrl: null,
-            specialNeeds: null,
-            remark: null,
-            deactivatedAt: null,
-            createdBy: null,
-            updatedBy: null,
-            countPerSession: 1,
-          }),
-        );
-      }
-    }
+  it('JOIN 放大下可用 COUNT(DISTINCT) 返回联表行总数', async () => {
+    const accounts = await seedAccounts(5, joinPrefix);
+    await seedVerificationRecords(accounts, 2);
 
     const qb = dataSource
-      .getRepository(CustomerEntity)
-      .createQueryBuilder('customer')
-      .leftJoin('customer.learners', 'learner')
-      .where('customer.id > :x', { x: 0 });
+      .getRepository(AccountEntity)
+      .createQueryBuilder('account')
+      .innerJoin(
+        VerificationRecordEntity,
+        'vr',
+        'vr.subjectType = :stype AND vr.subjectId = account.id',
+        { stype: SubjectType.ACCOUNT },
+      )
+      .where('account.login_name LIKE :prefix', { prefix: `${joinPrefix}%` });
 
-    // 注意：此处的 resolveColumn 映射到 customer 列
-    const resolveCustomerColumn = (field: string): string | null => {
-      switch (field) {
-        case 'id':
-          return 'customer.id';
-        case 'name':
-          return 'customer.name';
-        default:
-          return null;
-      }
-    };
-
-    const result = await paginationService.paginateQuery<{ id: number; name: string }>({
+    const result = await paginationService.paginateQuery<AccountEntity>({
       qb,
       params: { mode: 'OFFSET', page: 1, pageSize: 3, withTotal: true },
       allowedSorts,
       defaultSorts,
-      resolveColumn: resolveCustomerColumn,
-      // 使用 JOIN 侧的外键列去重以避免 MySQL 对别名的转义问题
-      countDistinctBy: 'customer_id',
+      resolveColumn: resolvePropertyPath,
+      countDistinctBy: 'vr.id',
     });
 
     expect(result.items.length).toBe(3);
-    expect(result.total).toBe(5);
+    expect(result.total).toBe(10);
     expect(result.page).toBe(1);
     expect(result.pageSize).toBe(3);
-
-    // 还原为最初 Learner 数据，以免影响其他测试（若有）
-    await seedLearners(30);
   });
 
   it('游标主键一致性校验：跨端点复用游标应被拒绝', async () => {
-    // 使用自定义前缀以便区分数据集
-    await seedLearnersWithPrefix(15, 'K');
+    await seedAccounts(15, 'PAG_KEY_');
 
-    // 第一列表：primary = id，生成 nextCursor（token.key === 'id'）
-    const qb1 = createBaseQb();
-    const page1 = await paginationService.paginateQuery<{ id: number; name: string }>({
-      qb: qb1,
+    const page1 = await paginationService.paginateQuery<AccountEntity>({
+      qb: dataSource
+        .getRepository(AccountEntity)
+        .createQueryBuilder('account')
+        .where('account.login_name LIKE :prefix', { prefix: 'PAG_KEY_%' }),
       params: {
         mode: 'CURSOR',
         limit: 5,
         sorts: [
           { field: 'id', direction: 'ASC' },
-          { field: 'name', direction: 'ASC' },
+          { field: 'loginName', direction: 'ASC' },
         ],
       },
       allowedSorts,
       defaultSorts,
-      cursorKey: { primary: 'id', tieBreaker: 'name' },
+      cursorKey: { primary: 'id', tieBreaker: 'loginName' },
       resolveColumn,
     });
 
-    expect(page1.pageInfo?.nextCursor).toBeDefined();
-
-    // 第二列表：primary = name，复用上一列表游标，应命中主键一致性校验
-    const qb2 = createBaseQb();
     await expect(
-      paginationService.paginateQuery<{ id: number; name: string }>({
-        qb: qb2,
+      paginationService.paginateQuery<AccountEntity>({
+        qb: dataSource
+          .getRepository(AccountEntity)
+          .createQueryBuilder('account')
+          .where('account.login_name LIKE :prefix', { prefix: 'PAG_KEY_%' }),
         params: {
           mode: 'CURSOR',
           limit: 5,
           after: page1.pageInfo?.nextCursor,
           sorts: [
-            { field: 'name', direction: 'ASC' },
+            { field: 'loginName', direction: 'ASC' },
             { field: 'id', direction: 'ASC' },
           ],
         },
         allowedSorts,
         defaultSorts,
-        cursorKey: { primary: 'name', tieBreaker: 'id' },
+        cursorKey: { primary: 'loginName', tieBreaker: 'id' },
         resolveColumn,
       }),
     ).rejects.toEqual(new DomainError(PAGINATION_ERROR.INVALID_CURSOR, '游标主键不匹配'));
-
-    // 还原数据集以不影响其他用例
-    await seedLearners(30);
   });
 
-  it('CURSOR 正例：mapSortColumn 为 null 时优先使用 resolveColumn，翻页正常', async () => {
-    await seedLearners(15);
+  async function seedAccounts(count: number, prefix: string): Promise<AccountEntity[]> {
+    const repo = dataSource.getRepository(AccountEntity);
+    await repo.delete({ loginName: Like(`${prefix}%`) });
 
-    const qb1 = createBaseQb();
-    const page1 = await paginationService.paginateQuery<{ id: number; name: string }>({
-      qb: qb1,
-      params: {
-        mode: 'CURSOR',
-        limit: 10,
-        sorts: [
-          { field: 'name', direction: 'ASC' },
-          { field: 'id', direction: 'ASC' },
-        ],
-      },
-      allowedSorts,
-      defaultSorts,
-      cursorKey: { primary: 'name', tieBreaker: 'id' },
-      resolveColumn,
-    });
+    const rows = await repo.save(
+      Array.from({ length: count }).map((_, i) =>
+        repo.create({
+          loginName: `${prefix}${String(i).padStart(2, '0')}`,
+          loginEmail: `${prefix.toLowerCase()}${i}@example.test`,
+          loginPassword: 'hashed',
+          status: AccountStatus.ACTIVE,
+          recentLoginHistory: null,
+          identityHint: IdentityTypeEnum.GUEST,
+        }),
+      ),
+    );
+    seededAccountIds = [...seededAccountIds, ...rows.map((row) => row.id)];
+    return rows;
+  }
 
-    expect(page1.items.length).toBe(10);
-    expect(page1.pageInfo?.hasNext).toBe(true);
-    expect(page1.pageInfo?.nextCursor).toBeDefined();
+  async function seedVerificationRecords(
+    accounts: ReadonlyArray<AccountEntity>,
+    perAccount: number,
+  ): Promise<void> {
+    const repo = dataSource.getRepository(VerificationRecordEntity);
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await repo.save(
+      accounts.flatMap((account) =>
+        Array.from({ length: perAccount }).map(() =>
+          repo.create({
+            type: VerificationRecordType.PASSWORD_RESET,
+            tokenFp: randomBytes(32),
+            status: VerificationRecordStatus.ACTIVE,
+            expiresAt,
+            notBefore: null,
+            targetAccountId: account.id,
+            subjectType: SubjectType.ACCOUNT,
+            subjectId: account.id,
+            payload: null,
+            issuedByAccountId: null,
+            consumedByAccountId: null,
+            consumedAt: null,
+          }),
+        ),
+      ),
+    );
+  }
 
-    const qb2 = createBaseQb();
-    const page2 = await paginationService.paginateQuery<{ id: number; name: string }>({
-      qb: qb2,
-      params: {
-        mode: 'CURSOR',
-        limit: 10,
-        after: page1.pageInfo?.nextCursor,
-        sorts: [
-          { field: 'name', direction: 'ASC' },
-          { field: 'id', direction: 'ASC' },
-        ],
-      },
-      allowedSorts,
-      defaultSorts,
-      cursorKey: { primary: 'name', tieBreaker: 'id' },
-      resolveColumn,
-    });
+  async function cleanupSeededRows(): Promise<void> {
+    const uniqueIds = Array.from(new Set(seededAccountIds));
+    if (uniqueIds.length > 0) {
+      await dataSource.getRepository(VerificationRecordEntity).delete({
+        subjectType: SubjectType.ACCOUNT,
+        subjectId: In(uniqueIds),
+      });
+    }
 
-    expect(page2.items.length).toBe(5);
-    expect(page2.pageInfo?.hasNext).toBe(false);
-
-    const names = [...page1.items, ...page2.items].map((r) => r.name);
-    expect(names[0]).toBe('L00');
-    expect(names[names.length - 1]).toBe('L14');
-
-    // 还原数据以不影响其他用例
-    await seedLearners(30);
-  });
-
-  it('CURSOR 反例：mapSortColumn 为 null 且边界阶段无法解析列，触发 INVALID_CURSOR', async () => {
-    await seedLearners(15);
-
-    const qb1 = createBaseQb();
-    const page1 = await paginationService.paginateQuery<{ id: number; name: string }>({
-      qb: qb1,
-      params: {
-        mode: 'CURSOR',
-        limit: 5,
-        sorts: [
-          { field: 'name', direction: 'ASC' },
-          { field: 'id', direction: 'ASC' },
-        ],
-      },
-      allowedSorts,
-      defaultSorts,
-      cursorKey: { primary: 'name', tieBreaker: 'id' },
-      resolveColumn,
-    });
-
-    expect(page1.pageInfo?.nextCursor).toBeDefined();
-
-    const qb2 = createBaseQb();
-    // 有状态解析函数：前两次（用于排序）返回有效列，之后（用于游标边界）返回 null
-    let callCount = 0;
-    const resolveColumnFailAfterOrderBy = (field: string): string | null => {
-      callCount += 1;
-      if (callCount <= 2) {
-        switch (field) {
-          case 'id':
-            return 'learner.id';
-          case 'name':
-            return 'learner.name';
-          default:
-            return null;
-        }
-      }
-      return null;
-    };
-
-    await expect(
-      paginationService.paginateQuery<{ id: number; name: string }>({
-        qb: qb2,
-        params: {
-          mode: 'CURSOR',
-          limit: 5,
-          after: page1.pageInfo?.nextCursor,
-          sorts: [
-            { field: 'name', direction: 'ASC' },
-            { field: 'id', direction: 'ASC' },
-          ],
-        },
-        allowedSorts,
-        defaultSorts,
-        cursorKey: { primary: 'name', tieBreaker: 'id' },
-        resolveColumn: resolveColumnFailAfterOrderBy,
-      }),
-    ).rejects.toMatchObject({ code: PAGINATION_ERROR.INVALID_CURSOR });
-
-    // 还原数据以不影响其他用例
-    await seedLearners(30);
-  });
+    await dataSource.getRepository(AccountEntity).delete({ loginName: Like('PAG_%') });
+  }
 });

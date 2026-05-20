@@ -6,21 +6,10 @@ import { AccountStatus } from '../models/account.types';
  * 注册类型枚举
  */
 export enum RegisterTypeEnum {
-  /** 学生 */
-  STUDENT = 'STUDENT',
-  /** 教职工 */
+  /** 工作人员 */
   STAFF = 'STAFF',
   /** 注册用户 */
   REGISTRANT = 'REGISTRANT',
-  // 以下是设计用户，但无法在注册时直接认定
-  // /** 管理用户 */
-  // MANAGER = 'MANAGER',
-  // /** 客户 */
-  // CUSTOMER = 'CUSTOMER',
-  // /** 学员 */
-  // LEARNER = 'LEARNER',
-  // /** 教练 */
-  // COACH = 'COACH',
 }
 
 export interface RegisterInputModel {

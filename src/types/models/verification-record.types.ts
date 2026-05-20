@@ -2,25 +2,15 @@
 
 /**
  * 验证记录类型枚举
- * 邀请/验证/绑定/一次性动作；细分邮箱链接 vs 验证码
+ * 通用验证/一次性动作；细分邮箱链接 vs 验证码
  */
 export enum VerificationRecordType {
-  /** 邀请教练 */
-  INVITE_COACH = 'INVITE_COACH',
-  /** 邀请管理员 */
-  INVITE_MANAGER = 'INVITE_MANAGER',
-  /** 邀请学员 */
-  // INVITE_LEARNER = 'INVITE_LEARNER',
   /** 邮箱验证链接 */
   EMAIL_VERIFY_LINK = 'EMAIL_VERIFY_LINK',
   /** 邮箱验证码 */
   EMAIL_VERIFY_CODE = 'EMAIL_VERIFY_CODE',
   /** 密码重置 */
   PASSWORD_RESET = 'PASSWORD_RESET',
-  /** 魔法链接 */
-  // MAGIC_LINK = 'MAGIC_LINK',
-  /** 微信小程序绑定 */
-  // WEAPP_BIND = 'WEAPP_BIND',
   /** 短信验证码 */
   SMS_VERIFY_CODE = 'SMS_VERIFY_CODE',
 }
@@ -55,14 +45,6 @@ export enum VerificationRecordStatus {
 export enum SubjectType {
   /** 账户 */
   ACCOUNT = 'ACCOUNT',
-  /** 学员 */
-  LEARNER = 'LEARNER',
-  /** 客户 */
-  CUSTOMER = 'CUSTOMER',
-  /** 教练 */
-  COACH = 'COACH',
-  /** 管理员 */
-  MANAGER = 'MANAGER',
 }
 
 /**

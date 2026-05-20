@@ -131,20 +131,6 @@ export const ASYNC_TASK_RECORD_ERROR = {
 } as const;
 Object.freeze(ASYNC_TASK_RECORD_ERROR);
 
-// 学员管理相关错误码
-export const LEARNER_ERROR = {
-  LEARNER_NOT_FOUND: 'LEARNER_NOT_FOUND',
-  LEARNER_DUPLICATED: 'LEARNER_DUPLICATED',
-  LEARNER_ACCESS_DENIED: 'LEARNER_ACCESS_DENIED',
-  LEARNER_VALIDATION_FAILED: 'LEARNER_VALIDATION_FAILED',
-  LEARNER_CREATION_FAILED: 'LEARNER_CREATION_FAILED',
-  LEARNER_UPDATE_FAILED: 'LEARNER_UPDATE_FAILED',
-  LEARNER_DELETE_FAILED: 'LEARNER_DELETE_FAILED',
-  LEARNER_ALREADY_DELETED: 'LEARNER_ALREADY_DELETED',
-  LEARNER_CUSTOMER_MISMATCH: 'LEARNER_CUSTOMER_MISMATCH',
-} as const;
-Object.freeze(LEARNER_ERROR);
-
 export const TIME_ERROR = {
   INVALID_TIME_INPUT: 'TIME_INVALID_TIME_INPUT',
   INVALID_SYSTEM_EVENT_TIME: 'TIME_INVALID_SYSTEM_EVENT_TIME',
@@ -176,7 +162,6 @@ export type VerificationRecordErrorCode =
   (typeof VERIFICATION_RECORD_ERROR)[keyof typeof VERIFICATION_RECORD_ERROR];
 export type AsyncTaskRecordErrorCode =
   (typeof ASYNC_TASK_RECORD_ERROR)[keyof typeof ASYNC_TASK_RECORD_ERROR];
-export type LearnerErrorCode = (typeof LEARNER_ERROR)[keyof typeof LEARNER_ERROR];
 export type TimeErrorCode = (typeof TIME_ERROR)[keyof typeof TIME_ERROR];
 export type InputNormalizeErrorCode =
   (typeof INPUT_NORMALIZE_ERROR)[keyof typeof INPUT_NORMALIZE_ERROR];
@@ -199,7 +184,6 @@ export type DomainErrorCode =
   | PermissionErrorCode
   | VerificationRecordErrorCode
   | AsyncTaskRecordErrorCode
-  | LearnerErrorCode
   | TimeErrorCode
   | InputNormalizeErrorCode
   | PaginationErrorCode;

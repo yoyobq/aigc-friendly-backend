@@ -28,18 +28,11 @@ describe('Register (e2e)', () => {
       nickname: '测试用户',
       type: RegisterTypeEnum.REGISTRANT,
     },
-    validStudent: {
-      loginName: 'teststudent',
-      loginEmail: 'teststudent@example.com',
-      loginPassword: 'StudentPass123!',
-      nickname: '测试学生',
-      type: RegisterTypeEnum.STUDENT,
-    },
     validStaff: {
       loginName: 'teststaff',
       loginEmail: 'teststaff@example.com',
       loginPassword: 'StaffPass123!',
-      nickname: '测试教职工',
+      nickname: '测试工作人员',
       type: RegisterTypeEnum.STAFF,
     },
     duplicateLoginName: {
@@ -118,7 +111,7 @@ describe('Register (e2e)', () => {
       loginEmail: 'invalidtype@example.com',
       loginPassword: 'TestPass123!',
       nickname: '无效类型用户',
-      type: 'INVALID_TYPE' as any, // 无效的注册类型
+      type: 'INVALID_TYPE', // 无效的注册类型
     },
   };
 
@@ -246,7 +239,7 @@ describe('Register (e2e)', () => {
   /**
    * 执行 GraphQL 注册请求
    */
-  const performRegister = async (input: any) => {
+  const performRegister = async (input: Record<string, unknown>) => {
     const response = await request(app.getHttpServer())
       .post('/graphql')
       .send({

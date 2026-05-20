@@ -457,6 +457,41 @@
 
 ### P6：数据库、migration 与测试收敛
 
+当前产出：
+
+- 已删除 `src/modules/account/identities/school/*`、`src/modules/account/identities/training/*` 以及旧
+  `Coach/Customer/Learner/Manager` QueryService、profile provider、provider token。
+- `VerificationRecordType` 已收敛为
+  `EMAIL_VERIFY_LINK / EMAIL_VERIFY_CODE / PASSWORD_RESET / SMS_VERIFY_CODE`，
+  `SubjectType` 已收敛为 `ACCOUNT`。
+- first-release migration 注释与 enum 已改为通用账号、用户状态和验证记录语义；空库 baseline 不再创建培训班
+  invite enum 或 subject type。
+- GraphQL enum 注册与 schema init 已移除 learner/customer/coach/manager 排序 enum。
+- `RegisterTypeEnum` 已移除 `STUDENT`，保留 `STAFF / REGISTRANT`。
+- 测试 fixture 已改为只创建 `AccountEntity` / `UserInfoEntity`；旧 `manager/coach/customer/learner`
+  仅作为迁移期 fixture key，实际 role 映射到 `STAFF / GUEST`。
+- 已删除旧 identity-management、learner pagination、training invite verification 的 e2e；pagination/search/sort
+  已改为通用 account 查询测试；worker email 测试已移除 coach/manager invite 邮件流。
+- 已通过：
+  - `npm run typecheck`
+  - `npx eslint "{src,apps,libs,test}/**/*.ts" --cache --cache-location .eslintcache`
+  - `npm run migration:drill:empty-db`，通过
+    `MIGRATION_DRILL_DATABASE=edu_platform_test` 使用预置测试库做空库迁移演练。
+  - `npm run test:e2e:file -- 01-auth/auth.e2e-spec.ts`
+  - `npm run test:e2e:file -- 01-auth/auth-identity.e2e-spec.ts`
+  - `npm run test:e2e:file -- 02-register/register.e2e-spec.ts`
+  - `npm run test:e2e:file -- 05-verification-record/verification-record-invite.e2e-spec.ts`
+  - `npm run test:e2e:file -- 05-verification-record/verification-record-types.e2e-spec.ts`
+  - `npm run test:e2e:file -- 07-pagination-sort-search/pagination.e2e-spec.ts`
+  - `npm run test:e2e:file -- 07-pagination-sort-search/search.e2e-spec.ts`
+  - `npm run test:e2e:file -- 07-pagination-sort-search/sort.e2e-spec.ts`
+  - `npm run test:e2e:file -- 08-qm-worker/email-queue-consume.e2e-spec.ts`
+- 已扫描确认 `src` / `test` 中不再存在 training identity 实现 import、旧 training entity、旧 invite enum、
+  旧 subject enum、`RegisterTypeEnum.STUDENT`、旧 learner/customer/coach/manager sort field、旧 learner error
+  code 等强残留。
+- `99-third-party-live-smoke/weapp-qrcode-real.e2e-spec.ts` 已改为 `PASSWORD_RESET / ACCOUNT` 语义，但真实第三方
+  smoke 因微信 `access_token` 获取失败未通过；该文件仍按 P0 决策归类为外部服务 smoke，不作为本次必过门槛。
+
 目标：让最小 skeleton 能在移除培训班语义后通过基础验证。
 
 范围：

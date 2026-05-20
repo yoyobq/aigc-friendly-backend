@@ -39,7 +39,7 @@ export class UpdateUserInfoInput {
   @IsOptional()
   gender?: Gender;
 
-  @Field(() => UserState, { nullable: true, description: '账户状态（仅 manager 可修改）' })
+  @Field(() => UserState, { nullable: true, description: '账户状态（仅管理员或工作人员可修改）' })
   @IsOptional()
   @IsEnum(UserState)
   userState?: UserState;

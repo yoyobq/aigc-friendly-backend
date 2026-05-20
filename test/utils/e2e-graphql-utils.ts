@@ -1,9 +1,6 @@
 // 文件位置：test/utils/e2e-graphql-utils.ts
 import { INestApplication } from '@nestjs/common';
 import { AccountEntity } from '@src/modules/account/base/entities/account.entity';
-import { CoachEntity } from '@src/modules/account/identities/training/coach/account-coach.entity';
-import { LearnerEntity } from '@src/modules/account/identities/training/learner/account-learner.entity';
-import { ManagerEntity } from '@src/modules/account/identities/training/manager/account-manager.entity';
 import { AudienceTypeEnum, LoginTypeEnum } from '@app-types/models/account.types';
 import request from 'supertest';
 import { DataSource } from 'typeorm';
@@ -86,45 +83,6 @@ export async function getAccountIdByLoginName(ds: DataSource, loginName: string)
   const repo = ds.getRepository(AccountEntity);
   const found = await repo.findOne({ where: { loginName } });
   if (!found) throw new Error(`未找到账号：${loginName}`);
-  return found.id;
-}
-
-/**
- * 获取经理身份 ID（通过账号 ID 查库）
- * @param ds TypeORM 数据源
- * @param accountId 账号 ID
- * @returns 经理 ID
- */
-export async function getManagerIdByAccountId(ds: DataSource, accountId: number): Promise<number> {
-  const repo = ds.getRepository(ManagerEntity);
-  const found = await repo.findOne({ where: { accountId } });
-  if (!found) throw new Error(`未找到 Manager 身份：accountId=${accountId}`);
-  return found.id;
-}
-
-/**
- * 获取教练身份 ID（通过账号 ID 查库）
- * @param ds TypeORM 数据源
- * @param accountId 账号 ID
- * @returns 教练 ID
- */
-export async function getCoachIdByAccountId(ds: DataSource, accountId: number): Promise<number> {
-  const repo = ds.getRepository(CoachEntity);
-  const found = await repo.findOne({ where: { accountId } });
-  if (!found) throw new Error(`未找到 Coach 身份：accountId=${accountId}`);
-  return found.id;
-}
-
-/**
- * 获取学员身份 ID（通过账号 ID 查库）
- * @param ds TypeORM 数据源
- * @param accountId 账号 ID
- * @returns 学员 ID
- */
-export async function getLearnerIdByAccountId(ds: DataSource, accountId: number): Promise<number> {
-  const repo = ds.getRepository(LearnerEntity);
-  const found = await repo.findOne({ where: { accountId } });
-  if (!found) throw new Error(`未找到 Learner 身份：accountId=${accountId}`);
   return found.id;
 }
 

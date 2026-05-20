@@ -20,12 +20,7 @@ import {
 import { RegisterTypeEnum } from '@app-types/services/register.types';
 import { registerEnumType } from '@nestjs/graphql';
 import { GqlPaginationMode, GqlSortDirection } from '@src/adapters/api/graphql/pagination.enums';
-import {
-  CoachSortField,
-  CustomerSortField,
-  LearnerSortField,
-  OrderDirection,
-} from '@app-types/common/sort.types';
+import { OrderDirection } from '@app-types/common/sort.types';
 
 export function registerEnums(): void {
   registerEnumType(AccountStatus, { name: 'AccountStatus' });
@@ -42,9 +37,6 @@ export function registerEnums(): void {
   registerEnumType(VerificationRecordStatus, { name: 'VerificationRecordStatus' });
   registerEnumType(VerificationRecordType, { name: 'VerificationRecordType' });
   registerEnumType(CreatableVerificationRecordType, { name: 'CreatableVerificationRecordType' });
-  registerEnumType(LearnerSortField, { name: 'LearnerSortField' });
-  registerEnumType(CustomerSortField, { name: 'CustomerSortField' });
-  registerEnumType(CoachSortField, { name: 'CoachSortField' });
   registerEnumType(OrderDirection, { name: 'OrderDirection' });
   registerEnumType(GqlPaginationMode, { name: 'PaginationMode' });
   registerEnumType(GqlSortDirection, { name: 'SortDirection' });

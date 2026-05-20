@@ -88,8 +88,7 @@ export class UserInfoEntity {
     type: 'enum',
     enum: UserState,
     default: UserState.PENDING,
-    comment:
-      '账户统一状态：ACTIVE=在读/在职，INACTIVE=离校/离职，SUSPENDED=暂离（休学/病休），PENDING=待完善',
+    comment: '账户统一状态：ACTIVE=可用，INACTIVE=停用，SUSPENDED=暂停，PENDING=待完善',
   })
   userState!: UserState;
 

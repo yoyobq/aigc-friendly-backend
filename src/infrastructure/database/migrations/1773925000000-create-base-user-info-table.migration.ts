@@ -22,7 +22,7 @@ export class CreateBaseUserInfoTable1773925000000 implements MigrationInterface 
         \`meta_digest\` varchar(1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '私有数据加密字段',
         \`notify_count\` int DEFAULT '0' COMMENT '通知数',
         \`unread_count\` int DEFAULT '0' COMMENT '未读通知数',
-        \`user_state\` enum('ACTIVE','INACTIVE','SUSPENDED','PENDING') CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT 'PENDING' COMMENT '账户统一状态：ACTIVE=在读/在职，INACTIVE=离校/离职，SUSPENDED=暂离（休学/病休），PENDING=待完善',
+        \`user_state\` enum('ACTIVE','INACTIVE','SUSPENDED','PENDING') CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT 'PENDING' COMMENT '账户统一状态：ACTIVE=可用，INACTIVE=停用，SUSPENDED=暂停，PENDING=待完善',
         \`created_at\` timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间（系统事件时间）',
         \`updated_at\` timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间（系统事件时间）',
         PRIMARY KEY (\`id\`),

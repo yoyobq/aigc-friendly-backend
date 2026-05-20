@@ -4,13 +4,8 @@ import { Gender, UserState } from '@app-types/models/user-info.types';
 import { AccountEntity } from '@src/modules/account/base/entities/account.entity';
 import { UserInfoEntity } from '@src/modules/account/base/entities/user-info.entity';
 import { AccountService } from '@src/modules/account/base/services/account.service';
-import { StaffEntity } from '@src/modules/account/identities/school/staff/account-staff.entity';
-import { CoachEntity } from '@src/modules/account/identities/training/coach/account-coach.entity';
-import { CustomerEntity } from '@src/modules/account/identities/training/customer/account-customer.entity';
-import { LearnerEntity } from '@src/modules/account/identities/training/learner/account-learner.entity';
-import { ManagerEntity } from '@src/modules/account/identities/training/manager/account-manager.entity';
 import { CreateAccountUsecase } from '@usecases/account/create-account.usecase';
-import { DataSource, EntityTarget, ObjectLiteral } from 'typeorm';
+import { DataSource } from 'typeorm';
 
 export interface TestAccountConfig {
   loginName: string;
@@ -19,12 +14,12 @@ export interface TestAccountConfig {
   status: AccountStatus;
   accessGroup: IdentityTypeEnum[];
   identityType: IdentityTypeEnum;
-  customerProfile?: {
-    contactPhone: string;
-    preferredContactTime: string;
-  };
 }
 
+/**
+ * 旧测试中仍存在 manager/coach/customer/learner key 名称。
+ * 这里仅保留为 fixture alias，实际只创建通用账号与 user_info。
+ */
 export const testAccountsConfig: Record<string, TestAccountConfig> = {
   staff: {
     loginName: 'teststaff',
@@ -103,35 +98,17 @@ export const testAccountsConfig: Record<string, TestAccountConfig> = {
 
 /**
  * 清理所有与测试账号相关的数据
- * （按外键方向：先已注册的 legacy 身份表 → user_info → account）
+ * （按外键方向：先 user_info → account）
  */
 export const cleanupTestAccounts = async (dataSource: DataSource): Promise<void> => {
-  await deleteIfMetadataRegistered(dataSource, StaffEntity);
-  await deleteIfMetadataRegistered(dataSource, LearnerEntity);
-  await deleteIfMetadataRegistered(dataSource, CustomerEntity);
-  await deleteIfMetadataRegistered(dataSource, ManagerEntity);
-  await deleteIfMetadataRegistered(dataSource, CoachEntity);
-  await deleteIfMetadataRegistered(dataSource, UserInfoEntity);
-  await deleteIfMetadataRegistered(dataSource, AccountEntity);
+  await dataSource.createQueryBuilder().delete().from(UserInfoEntity).execute();
+  await dataSource.createQueryBuilder().delete().from(AccountEntity).execute();
 };
-
-const deleteIfMetadataRegistered = async <T extends ObjectLiteral>(
-  dataSource: DataSource,
-  target: EntityTarget<T>,
-): Promise<void> => {
-  if (!dataSource.hasMetadata(target)) return;
-  await dataSource.createQueryBuilder().delete().from(target).execute();
-};
-
-const hasEntityMetadata = <T extends ObjectLiteral>(
-  dataSource: DataSource,
-  target: EntityTarget<T>,
-): boolean => dataSource.hasMetadata(target);
 
 /**
  * 造数入口（优先用 Usecase；无 Usecase 时走 repo 回落）
  * - 不写 metaDigest，交由系统内部一致性逻辑生成
- * - 对仍覆盖旧身份 API 的测试账号补齐对应身份表
+ * - 只创建通用账号与 user_info，不创建业务身份 profile
  */
 export const seedTestAccounts = async (opts: {
   dataSource: DataSource;
@@ -141,279 +118,11 @@ export const seedTestAccounts = async (opts: {
 }): Promise<void> => {
   const { dataSource, createAccountUsecase, includeKeys } = opts;
   const list = includeKeys ?? Object.keys(testAccountsConfig);
-  // 用于存储创建的账号ID，方便后续补充身份表
-  const createdMap = new Map<string, number>();
 
-  // 第一步：创建所有账号
   await Promise.all(
     list.map(async (key) => {
       const cfg = testAccountsConfig[key];
-      const result = await createAccountCore(dataSource, createAccountUsecase || null, cfg);
-      createdMap.set(key, result.accountId);
-    }),
-  );
-
-  // 第二步：创建身份记录
-  for (const key of list) {
-    const cfg = testAccountsConfig[key];
-    const accountId = createdMap.get(key);
-    if (!accountId) continue;
-
-    await createIdentityForAccount(dataSource, {
-      key,
-      cfg,
-      accountId,
-      createAccountUsecase: createAccountUsecase || null,
-      createdMap,
-    });
-  }
-};
-
-/**
- * 为账号创建对应的身份记录
- */
-const createIdentityForAccount = async (
-  dataSource: DataSource,
-  params: {
-    key: string;
-    cfg: TestAccountConfig;
-    accountId: number;
-    createAccountUsecase: CreateAccountUsecase | null;
-    createdMap: Map<string, number>;
-  },
-): Promise<void> => {
-  const { key, cfg, accountId, createAccountUsecase, createdMap } = params;
-
-  switch (key) {
-    case 'staff':
-      await createStaffIdentity(dataSource, cfg, accountId);
-      return;
-    case 'manager':
-      await createManagerIdentity(dataSource, cfg, accountId);
-      return;
-    case 'coach':
-      await createCoachIdentity(dataSource, cfg, accountId);
-      return;
-    case 'customer':
-      await createCustomerIdentity(dataSource, cfg, accountId);
-      return;
-    case 'learner':
-      await createLearnerIdentity({
-        dataSource,
-        cfg,
-        accountId,
-        createAccountUsecase,
-        createdMap,
-      });
-      return;
-    case 'coachCustomer':
-      await createCoachIdentity(dataSource, cfg, accountId);
-      await createCustomerIdentity(dataSource, cfg, accountId);
-      return;
-    default:
-      return;
-  }
-};
-
-/**
- * 创建 Staff 身份
- */
-const createStaffIdentity = async (
-  dataSource: DataSource,
-  cfg: TestAccountConfig,
-  accountId: number,
-): Promise<void> => {
-  if (!hasEntityMetadata(dataSource, StaffEntity)) return;
-  const repo = dataSource.getRepository(StaffEntity);
-  const exists = await repo.findOne({ where: { accountId } });
-  if (!exists) {
-    // StaffEntity.id 是 varchar(8)，GraphQL 会通过 parseStaffId 转为 number
-    // 这里采用一个简单的纯数字字符串，符合 parseStaffId 要求
-    const staffId = '10000001';
-    await repo.save(
-      repo.create({
-        id: staffId,
-        accountId,
-        name: `${cfg.loginName}_staff_name`,
-        departmentId: 101,
-        remark: `测试用 staff 身份记录 - ${cfg.loginName}`,
-        jobTitle: '教师',
-      }),
-    );
-  }
-};
-
-/**
- * 创建 Manager 身份
- */
-const createManagerIdentity = async (
-  dataSource: DataSource,
-  cfg: TestAccountConfig,
-  accountId: number,
-): Promise<void> => {
-  if (!hasEntityMetadata(dataSource, ManagerEntity)) return;
-  const repo = dataSource.getRepository(ManagerEntity);
-  const exists = await repo.findOne({ where: { accountId } });
-  if (!exists) {
-    await repo.save(
-      repo.create({
-        accountId,
-        name: `${cfg.loginName}_manager_name`,
-        deactivatedAt: null,
-        remark: `测试用 manager 身份记录 - ${cfg.loginName}`,
-        createdBy: null,
-        updatedBy: null,
-      }),
-    );
-  }
-};
-
-/**
- * 创建 Coach 身份
- */
-const createCoachIdentity = async (
-  dataSource: DataSource,
-  cfg: TestAccountConfig,
-  accountId: number,
-): Promise<void> => {
-  if (!hasEntityMetadata(dataSource, CoachEntity)) return;
-  const repo = dataSource.getRepository(CoachEntity);
-  const exists = await repo.findOne({ where: { accountId } });
-  if (!exists) {
-    await repo.save(
-      repo.create({
-        accountId,
-        name: `${cfg.loginName}_coach_name`,
-        level: 1,
-        description: `测试用 coach 描述 - ${cfg.loginName}`,
-        avatarUrl: null,
-        specialty: '篮球',
-        deactivatedAt: null,
-        remark: `测试用 coach 身份记录 - ${cfg.loginName}`,
-        createdBy: null,
-        updatedBy: null,
-      }),
-    );
-  }
-};
-
-/**
- * 创建 Customer 身份
- */
-const createCustomerIdentity = async (
-  dataSource: DataSource,
-  cfg: TestAccountConfig,
-  accountId: number,
-): Promise<void> => {
-  if (!hasEntityMetadata(dataSource, CustomerEntity)) return;
-  const repo = dataSource.getRepository(CustomerEntity);
-  const exists = await repo.findOne({ where: { accountId } });
-  if (!exists) {
-    const p = cfg.customerProfile ?? {
-      contactPhone: '13800138000',
-      preferredContactTime: '09:00-18:00',
-    };
-    await repo.save(
-      repo.create({
-        accountId,
-        name: `${cfg.loginName}_customer_name`,
-        contactPhone: p.contactPhone,
-        preferredContactTime: p.preferredContactTime,
-        deactivatedAt: null,
-        remark: `测试用 customer 身份记录 - ${cfg.loginName}`,
-        createdBy: null,
-        updatedBy: null,
-      }),
-    );
-  }
-};
-
-/**
- * 创建 Learner 身份
- */
-const createLearnerIdentity = async (params: {
-  dataSource: DataSource;
-  cfg: TestAccountConfig;
-  accountId: number;
-  createAccountUsecase: CreateAccountUsecase | null;
-  createdMap: Map<string, number>;
-}): Promise<void> => {
-  const { dataSource, cfg, accountId, createAccountUsecase, createdMap } = params;
-  if (
-    !hasEntityMetadata(dataSource, LearnerEntity) ||
-    !hasEntityMetadata(dataSource, CustomerEntity)
-  ) {
-    return;
-  }
-  const learnerRepo = dataSource.getRepository(LearnerEntity);
-  const learnerExists = await learnerRepo.findOne({ where: { accountId } });
-
-  if (learnerExists) return;
-
-  // 确保存在一个 Customer 供关联
-  const customerRepo = dataSource.getRepository(CustomerEntity);
-  let customer = await customerRepo.findOne({ where: { id: 1 } });
-
-  if (!customer) {
-    // 若 DB 尚无 customer，则用预设的 customer 自动补一份
-    customer = await ensureCustomerExists(dataSource, createAccountUsecase, createdMap);
-  }
-
-  // 创建 Learner 身份
-  await learnerRepo.save(
-    learnerRepo.create({
-      accountId,
-      customerId: customer.id,
-      name: `${cfg.loginName}_learner_name`,
-      gender: Gender.SECRET,
-      birthDate: null,
-      avatarUrl: null,
-      specialNeeds: '测试用特殊需求',
-      countPerSession: 1,
-      deactivatedAt: null,
-      remark: `测试用 learner 身份记录 - ${cfg.loginName}`,
-      createdBy: null,
-      updatedBy: null,
-    }),
-  );
-};
-
-/**
- * 确保存在 Customer 记录
- */
-const ensureCustomerExists = async (
-  dataSource: DataSource,
-  createAccountUsecase: CreateAccountUsecase | null,
-  _createdMap: Map<string, number>,
-): Promise<CustomerEntity> => {
-  const customerCfg = testAccountsConfig.customer;
-  const customerRepo = dataSource.getRepository(CustomerEntity);
-
-  // 1) 账号+user_info
-  const existedAccount = await dataSource
-    .getRepository(AccountEntity)
-    .findOne({ where: { loginName: customerCfg.loginName } });
-
-  const customerAccountId =
-    existedAccount?.id ??
-    (await createAccountCore(dataSource, createAccountUsecase, customerCfg)).accountId;
-
-  // 2) Customer 身份
-  const p = customerCfg.customerProfile ?? {
-    contactPhone: '13800138000',
-    preferredContactTime: '09:00-18:00',
-  };
-
-  return customerRepo.save(
-    customerRepo.create({
-      accountId: customerAccountId,
-      name: `${customerCfg.loginName}_customer_name`,
-      contactPhone: p.contactPhone,
-      preferredContactTime: p.preferredContactTime,
-      deactivatedAt: null,
-      remark: `测试用 customer 身份记录 - ${customerCfg.loginName}`,
-      createdBy: null,
-      updatedBy: null,
+      await createAccountCore(dataSource, createAccountUsecase || null, cfg);
     }),
   );
 };

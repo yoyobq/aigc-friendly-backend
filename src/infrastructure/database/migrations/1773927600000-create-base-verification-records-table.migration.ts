@@ -7,13 +7,13 @@ export class CreateBaseVerificationRecordsTable1773927600000 implements Migratio
     await queryRunner.query(`
       CREATE TABLE \`base_verification_records\` (
         \`id\` int NOT NULL AUTO_INCREMENT COMMENT '验证记录主键 ID',
-        \`type\` enum('INVITE_COACH','INVITE_MANAGER','INVITE_LEARNER','EMAIL_VERIFY_LINK','EMAIL_VERIFY_CODE','PASSWORD_RESET','MAGIC_LINK','WEAPP_BIND','SMS_VERIFY_CODE') NOT NULL COMMENT '记录类型：邀请/验证/绑定/一次性动作；细分邮箱链接 vs 验证码',
+        \`type\` enum('EMAIL_VERIFY_LINK','EMAIL_VERIFY_CODE','PASSWORD_RESET','SMS_VERIFY_CODE') NOT NULL COMMENT '记录类型：通用验证/一次性动作；细分邮箱链接 vs 验证码',
         \`token_fp\` binary(32) NOT NULL COMMENT '令牌指纹(SHA-256)，不存明文 token',
         \`status\` enum('ACTIVE','CONSUMED','REVOKED','EXPIRED') NOT NULL DEFAULT 'ACTIVE' COMMENT '状态机：一票一次',
         \`expires_at\` datetime NOT NULL COMMENT '过期时间(短TTL)',
         \`not_before\` datetime DEFAULT NULL COMMENT '生效时间(可选)',
         \`target_account_id\` int DEFAULT NULL COMMENT '目标账号(可选；限制记录只能被该账号消费)',
-        \`subject_type\` enum('ACCOUNT','LEARNER','CUSTOMER','COACH','MANAGER') DEFAULT NULL COMMENT '主体类型',
+        \`subject_type\` enum('ACCOUNT') DEFAULT NULL COMMENT '主体类型',
         \`subject_id\` int DEFAULT NULL COMMENT '主体 ID',
         \`payload\` json DEFAULT NULL COMMENT '载荷数据(JSON)',
         \`issued_by_account_id\` int DEFAULT NULL COMMENT '签发者账号 ID',
@@ -26,7 +26,7 @@ export class CreateBaseVerificationRecordsTable1773927600000 implements Migratio
         KEY \`idx_type_status_exp\` (\`type\`,\`status\`,\`expires_at\`),
         KEY \`idx_target\` (\`target_account_id\`),
         KEY \`idx_subject\` (\`subject_type\`,\`subject_id\`)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='统一验证/邀请记录：仅用于跨主体/跨端/可撤销动作；Customer 内部 1→N 不使用';
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='统一验证记录：仅用于跨主体/跨端/可撤销动作';
     `);
   }
 

@@ -78,13 +78,11 @@ function getMyAccountId(app: INestApplication, bearer: string): number {
  */
 async function createVerificationRecord(
   app: INestApplication,
-  type: 'INVITE_COACH' | 'INVITE_MANAGER',
+  type: 'PASSWORD_RESET',
   payload: Record<string, unknown>,
   bearer: string,
   options: {
     targetAccountId: number;
-    subjectType: 'COACH' | 'MANAGER';
-    subjectId: number;
     returnToken?: boolean;
   },
 ) {
@@ -110,8 +108,8 @@ async function createVerificationRecord(
         payload,
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         targetAccountId: options.targetAccountId,
-        subjectType: options.subjectType,
-        subjectId: options.subjectId,
+        subjectType: 'ACCOUNT',
+        subjectId: options.targetAccountId,
         returnToken: options.returnToken ?? true,
       },
     },
@@ -154,8 +152,8 @@ describe('WeApp 二维码 Smoke（真实第三方）', () => {
   let app: INestApplication;
   let dataSource: DataSource;
   let createAccountUsecase: CreateAccountUsecase;
-  let managerAccessToken: string;
-  let learnerAccountId: number;
+  let staffAccessToken: string;
+  let guestAccountId: number;
 
   const audience = (process.env.WEAPP_QRCODE_SMOKE_AUDIENCE ?? 'SSTSWEAPP').trim();
 
@@ -175,18 +173,18 @@ describe('WeApp 二维码 Smoke（真实第三方）', () => {
     await cleanupTestAccounts(dataSource);
     await seedTestAccounts({ dataSource, createAccountUsecase });
 
-    managerAccessToken = await getAccessToken(
+    staffAccessToken = await getAccessToken(
       app,
-      testAccountsConfig.manager.loginName,
-      testAccountsConfig.manager.loginPassword,
+      testAccountsConfig.staff.loginName,
+      testAccountsConfig.staff.loginPassword,
     );
 
-    const learnerAccessToken = await getAccessToken(
+    const guestAccessToken = await getAccessToken(
       app,
-      testAccountsConfig.learner.loginName,
-      testAccountsConfig.learner.loginPassword,
+      testAccountsConfig.guest.loginName,
+      testAccountsConfig.guest.loginPassword,
     );
-    learnerAccountId = getMyAccountId(app, learnerAccessToken);
+    guestAccountId = getMyAccountId(app, guestAccessToken);
   }, 60000);
 
   afterAll(async () => {
@@ -213,64 +211,18 @@ describe('WeApp 二维码 Smoke（真实第三方）', () => {
     expect(result.imageBase64.length).toBeGreaterThan(0);
   }, 90000);
 
-  it('应该为 INVITE_COACH 记录生成二维码', async () => {
+  it('应该为 PASSWORD_RESET 记录生成二维码', async () => {
     const createResp = await createVerificationRecord(
       app,
-      'INVITE_COACH',
+      'PASSWORD_RESET',
       {
-        title: '邀请教练二维码',
-        inviteUrl: 'https://example.com/invite-coach',
-        email: 'coach-qrcode@example.com',
-        coachName: '二维码教练',
+        title: '密码重置二维码',
+        resetUrl: 'https://example.com/reset-password',
+        email: 'reset-qrcode@example.com',
       },
-      managerAccessToken,
+      staffAccessToken,
       {
-        targetAccountId: learnerAccountId,
-        subjectType: 'COACH',
-        subjectId: 1,
-        returnToken: true,
-      },
-    );
-
-    if (createResp.body.errors) {
-      throw new Error(`GraphQL 错误: ${JSON.stringify(createResp.body.errors)}`);
-    }
-
-    const token = createResp.body.data.createVerificationRecord.token as string;
-    expect(typeof token).toBe('string');
-    expect(token.length).toBeGreaterThan(0);
-
-    const qrcodeResp = await generateWeappQrcode(app, {
-      audience,
-      scene: token,
-      encodeBase64: true,
-    });
-
-    if (qrcodeResp.body.errors) {
-      throw new Error(`GraphQL 错误: ${JSON.stringify(qrcodeResp.body.errors)}`);
-    }
-
-    const qrcodeResult = qrcodeResp.body.data.generateWeappQrcode;
-    expect(['image/png', 'image/jpeg']).toContain(qrcodeResult.contentType);
-    expect(typeof qrcodeResult.imageBase64).toBe('string');
-    expect(qrcodeResult.imageBase64.length).toBeGreaterThan(0);
-  }, 90000);
-
-  it('应该为 INVITE_MANAGER 记录生成二维码', async () => {
-    const createResp = await createVerificationRecord(
-      app,
-      'INVITE_MANAGER',
-      {
-        title: '邀请管理员二维码',
-        inviteUrl: 'https://example.com/invite-manager',
-        email: 'manager-qrcode@example.com',
-        managerName: '二维码管理员',
-      },
-      managerAccessToken,
-      {
-        targetAccountId: learnerAccountId,
-        subjectType: 'MANAGER',
-        subjectId: 1,
+        targetAccountId: guestAccountId,
         returnToken: true,
       },
     );

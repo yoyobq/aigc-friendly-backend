@@ -15,9 +15,9 @@ import {
 } from 'typeorm';
 
 /**
- * 统一验证/邀请记录实体
+ * 统一验证记录实体
  * 对应数据库表：base_verification_records
- * 仅用于跨主体/跨端/可撤销动作；Customer 内部 1→N 不使用
+ * 仅用于跨主体/跨端/可撤销动作
  */
 @Entity('base_verification_records')
 @Index('uk_token_fp', ['tokenFp'], { unique: true })
@@ -34,14 +34,13 @@ export class VerificationRecordEntity {
 
   /**
    * 记录类型
-   * 枚举类型：邀请/验证/绑定/一次性动作；细分邮箱链接 vs 验证码
-   * 包括：INVITE_COACH/INVITE_MANAGER/EMAIL_VERIFY_LINK 等
+   * 枚举类型：通用验证/一次性动作；细分邮箱链接 vs 验证码
    */
   @Column({
     type: 'enum',
     enum: VerificationRecordType,
     nullable: false,
-    comment: '记录类型：邀请/验证/绑定/一次性动作；细分邮箱链接 vs 验证码',
+    comment: '记录类型：通用验证/一次性动作；细分邮箱链接 vs 验证码',
   })
   type!: VerificationRecordType;
 
@@ -111,7 +110,7 @@ export class VerificationRecordEntity {
 
   /**
    * 主体类型
-   * 枚举类型：ACCOUNT/LEARNER/CUSTOMER/COACH/MANAGER
+   * 枚举类型：ACCOUNT
    * 可为空，用于标识验证记录关联的主体类型
    */
   @Column({
