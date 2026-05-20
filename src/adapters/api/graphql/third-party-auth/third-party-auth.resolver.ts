@@ -2,25 +2,14 @@
 
 import { JwtPayload } from '@app-types/jwt.types';
 import {
-  EmploymentStatus,
-  IdentityTypeEnum,
   ThirdPartyLoginProviderEnum,
   ThirdPartyProviderEnum,
 } from '@app-types/models/account.types';
 import { LoginResultModel, UserInfoView } from '@app-types/models/auth.types';
 import { GeographicInfo } from '@app-types/models/user-info.types';
-import { parseStaffId } from '@core/account/identity/parse-staff-id';
 import { DomainError, PERMISSION_ERROR } from '@core/common/errors/domain-error';
 import { UseGuards } from '@nestjs/common';
 import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
-import {
-  CoachIdentityEntity,
-  CustomerIdentityEntity,
-  LearnerIdentityEntity,
-  ManagerIdentityEntity,
-  StaffIdentityEntity,
-} from '@src/adapters/api/graphql/account/dto/identity/identity-entity.types';
-import { IdentityUnionType } from '@src/adapters/api/graphql/account/dto/identity/identity-union.type';
 import { LoginResult } from '@src/adapters/api/graphql/account/dto/login-result.dto';
 import { UserInfoDTO } from '@src/adapters/api/graphql/account/dto/user-info.dto';
 import { currentUser } from '@src/adapters/api/graphql/decorators/current-user.decorator';
@@ -49,11 +38,6 @@ import {
   GetWeappPhoneUsecase,
 } from '@usecases/third-party-accounts/get-weapp-phone.usecase';
 import { UnbindThirdPartyAccountUsecase } from '@usecases/third-party-accounts/unbind-third-party-account.usecase';
-import { CoachType } from '../account/dto/identity/coach.dto';
-import { CustomerType } from '../account/dto/identity/customer.dto';
-import { LearnerType } from '../account/dto/identity/learner.dto';
-import { ManagerIdentityGraphType } from '../account/dto/identity/manager.dto';
-import { StaffType } from '../account/dto/identity/staff.dto';
 
 /**
  * 第三方认证 GraphQL 解析器
@@ -87,22 +71,15 @@ export class ThirdPartyAuthResolver {
 
     const result: LoginResultModel = await this.loginWithThirdPartyUsecase.execute(params);
 
-    // 身份信息转换（与密码登录保持一致）
-    let identity: IdentityUnionType | null = null;
-    if (result.identity && this.isValidIdentityEntity(result.identity)) {
-      identity = this.convertIdentityForGraphQL(result.identity, result.role);
-    }
-
     // 获取用户信息（与密码登录保持一致，包含安全验证）
     const userInfo = await this.getUserInfoForGraphQL(result.accountId);
 
-    // 用例结果 -> GraphQL DTO 的薄映射（补齐 userInfo 与 identity 转换）
+    // 用例结果 -> GraphQL DTO 的薄映射（补齐 userInfo）
     return {
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
       accountId: result.accountId,
       role: result.role,
-      identity,
       userInfo,
     };
   }
@@ -244,20 +221,6 @@ export class ThirdPartyAuthResolver {
   }
 
   /**
-   * 验证身份实体是否有效
-   */
-  private isValidIdentityEntity(
-    obj: unknown,
-  ): obj is
-    | ManagerIdentityEntity
-    | CoachIdentityEntity
-    | StaffIdentityEntity
-    | CustomerIdentityEntity
-    | LearnerIdentityEntity {
-    return obj !== null && typeof obj === 'object' && 'id' in obj && 'accountId' in obj;
-  }
-
-  /**
    * 获取用于 GraphQL 响应的用户信息
    * 使用现有的安全验证流程，确保 accessGroup 和 metaDigest 已完成比对
    */
@@ -313,118 +276,5 @@ export class ThirdPartyAuthResolver {
     if (geographic.province) parts.push(geographic.province);
     if (geographic.city) parts.push(geographic.city);
     return parts.length > 0 ? parts.join(', ') : null;
-  }
-
-  /**
-   * 将身份信息转换为 GraphQL 格式（与密码登录保持一致）
-   */
-  private convertIdentityForGraphQL(
-    identity:
-      | ManagerIdentityEntity
-      | CoachIdentityEntity
-      | StaffIdentityEntity
-      | CustomerIdentityEntity
-      | LearnerIdentityEntity,
-    role: IdentityTypeEnum,
-  ): IdentityUnionType {
-    switch (role) {
-      case IdentityTypeEnum.STAFF:
-        return this.mapStaffIdentity(identity as StaffIdentityEntity);
-      default:
-        throw new DomainError(PERMISSION_ERROR.ACCESS_DENIED, `不支持的身份类型: ${role}`);
-    }
-  }
-
-  private mapManagerIdentity(manager: ManagerIdentityEntity): ManagerIdentityGraphType {
-    return {
-      id: manager.id,
-      accountId: manager.accountId,
-      name: manager.name,
-      departmentId: null,
-      remark: manager.remark,
-      jobTitle: null,
-      phone: null,
-      employmentStatus: EmploymentStatus.ACTIVE,
-      userState: null,
-      createdAt: manager.createdAt,
-      updatedAt: manager.updatedAt,
-      deactivatedAt: manager.deactivatedAt,
-      loginHistory: null,
-      // 供 IdentityUnion 解析类型使用的标志字段（与密码登录保持一致）
-      managerId: manager.id,
-    } as ManagerIdentityGraphType;
-  }
-
-  private mapCoachIdentity(coach: CoachIdentityEntity): CoachType {
-    return {
-      id: coach.id,
-      accountId: coach.accountId,
-      name: coach.name,
-      departmentId: null,
-      phone: null,
-      remark: coach.remark,
-      jobTitle: null,
-      employmentStatus: EmploymentStatus.ACTIVE,
-      createdAt: coach.createdAt,
-      updatedAt: coach.updatedAt,
-      coachId: coach.id,
-      level: coach.level,
-      description: coach.description,
-      avatarUrl: coach.avatarUrl,
-      specialty: coach.specialty,
-      deactivatedAt: coach.deactivatedAt,
-      userState: null,
-      loginHistory: null,
-    } as CoachType;
-  }
-
-  private mapStaffIdentity(staff: StaffIdentityEntity): StaffType {
-    return {
-      id: parseStaffId({ id: staff.id as unknown as number | string }),
-      accountId: staff.accountId,
-      name: staff.name,
-      departmentId: staff.departmentId,
-      remark: staff.remark,
-      jobTitle: staff.jobTitle,
-      employmentStatus: staff.employmentStatus,
-      createdAt: staff.createdAt,
-      updatedAt: staff.updatedAt,
-      jobId: parseStaffId({ id: staff.id as unknown as number | string }),
-    } as StaffType;
-  }
-
-  private mapCustomerIdentity(customer: CustomerIdentityEntity): CustomerType {
-    return {
-      id: customer.id,
-      accountId: customer.accountId,
-      name: customer.name,
-      contactPhone: customer.contactPhone,
-      preferredContactTime: customer.preferredContactTime,
-      remark: customer.remark,
-      userState: null,
-      loginHistory: null,
-      createdAt: customer.createdAt,
-      updatedAt: customer.updatedAt,
-      deactivatedAt: customer.deactivatedAt,
-      customerId: customer.id,
-    } as CustomerType;
-  }
-
-  private mapLearnerIdentity(learner: LearnerIdentityEntity): LearnerType {
-    return {
-      id: learner.id,
-      accountId: learner.accountId,
-      customerId: learner.customerId,
-      name: learner.name,
-      gender: learner.gender,
-      birthDate: learner.birthDate,
-      avatarUrl: learner.avatarUrl,
-      specialNeeds: learner.specialNeeds,
-      countPerSession: learner.countPerSession,
-      remark: learner.remark,
-      createdAt: learner.createdAt,
-      updatedAt: learner.updatedAt,
-      deactivatedAt: learner.deactivatedAt,
-    } as LearnerType;
   }
 }

@@ -2,7 +2,6 @@
 
 import { IdentityTypeEnum } from '@app-types/models/account.types';
 import { Field, Int, ObjectType } from '@nestjs/graphql';
-import { IdentityUnion, IdentityUnionType } from './identity/identity-union.type';
 import { UserInfoDTO } from './user-info.dto';
 
 /**
@@ -21,9 +20,6 @@ export class LoginResult {
 
   @Field(() => IdentityTypeEnum, { description: '用户默认角色' })
   role!: IdentityTypeEnum;
-
-  @Field(() => IdentityUnion, { nullable: true, description: '当前身份信息' })
-  identity?: IdentityUnionType | null; // 明确支持 null
 
   @Field(() => UserInfoDTO, { nullable: true, description: '用户信息' })
   userInfo?: UserInfoDTO | null;

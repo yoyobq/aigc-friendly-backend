@@ -3,7 +3,7 @@
 /**
  * 为每个身份定义“唯一的 Provider token”
  * - 各身份模块用这里对应的 token 注册自己的 provider
- * - legacy identity-management 仍保留这些 token，P5 删除培训身份包时一并清理
+ * - legacy identity packages are kept only until the final baseline cleanup
  * - 用 Symbol 避免命名冲突
  */
 export const PROFILE_PROVIDER_TOKEN = {

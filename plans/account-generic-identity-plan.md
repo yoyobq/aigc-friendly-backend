@@ -420,6 +420,25 @@
 
 ### P5：培训班身份 API 与 usecase 移除
 
+当前产出：
+
+- `GraphQLAdapterModule` 已移除 `IdentityManagementUsecasesModule` 以及
+  `IdentityManagementResolver / LearnerResolver / CustomerResolver / CoachResolver / ManagerResolver`。
+- 已删除 `src/adapters/api/graphql/identity-management/*`。
+- 已删除 `src/usecases/identity-management/*` 和 legacy `src/modules/identity-management/*`。
+- 登录结果 `LoginResult` 已移除 `identity: IdentityUnion` 字段。
+- 已删除 `src/adapters/api/graphql/account/dto/identity/*` 中的
+  `CoachType / CustomerType / LearnerType / ManagerType / StaffType / IdentityUnion` 等 profile DTO。
+- `AuthResolver` 和 `ThirdPartyAuthResolver` 不再装配或映射 identity profile，只返回 token、accountId、role 和 userInfo。
+- 已删除 `test/06-identity-management/*` 旧培训班身份管理 e2e。
+- `auth.e2e-spec.ts` 和 `auth-identity.e2e-spec.ts` 已改为不查询登录 identity 字段。
+- 当前保留到 P6 处理的残留：pagination/search 中 learner 相关测试和 training entity/service baseline。
+- 已通过：
+  - `npm run typecheck`
+  - `npx eslint "{src,apps,libs,test}/**/*.ts" --cache --cache-location .eslintcache`
+  - `npm run test:e2e:file -- 01-auth/auth.e2e-spec.ts`
+  - `npm run test:e2e:file -- 01-auth/auth-identity.e2e-spec.ts`
+
 目标：移除暴露培训班身份管理语义的 API 和 usecase。
 
 范围：

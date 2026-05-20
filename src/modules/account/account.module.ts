@@ -4,7 +4,6 @@
  * ------------------------------------------------------------
  * - base 永远启用
  * - 不再通过账号 base 装配业务 identity 包
- * - legacy identity-management 若仍需培训身份服务，由其自身模块显式装配
  */
 
 import { DynamicModule, Module } from '@nestjs/common';

@@ -261,35 +261,6 @@ describe('Auth (e2e)', () => {
                 createdAt
                 updatedAt
               }
-              identity {
-                ... on StaffType {
-                  staffId: id
-                  name
-                  remark
-                  jobTitle
-                  departmentId
-                  employmentStatus
-                }
-                ... on CoachType {
-                  coachId: id
-                  name
-                  remark
-                  employmentStatus
-                }
-                ... on ManagerType {
-                  managerId: id
-                  name
-                  remark
-                  employmentStatus
-                }
-                ... on CustomerType {
-                  customerId: id
-                  name
-                  contactPhone
-                  preferredContactTime
-                  remark
-                }
-              }
             }
           }
         `,
@@ -345,35 +316,6 @@ describe('Auth (e2e)', () => {
                 userState
                 createdAt
                 updatedAt
-              }
-              identity {
-                ... on StaffType {
-                  staffId: id
-                  name
-                  remark
-                  jobTitle
-                  departmentId
-                  employmentStatus
-                }
-                ... on CoachType {
-                  coachId: id
-                  name
-                  remark
-                  employmentStatus
-                }
-                ... on ManagerType {
-                  managerId: id
-                  name
-                  remark
-                  employmentStatus
-                }
-                ... on CustomerType {
-                  customerId: id
-                  name
-                  contactPhone
-                  preferredContactTime
-                  remark
-                }
               }
             }
           }
@@ -497,8 +439,6 @@ describe('Auth (e2e)', () => {
       expect(data?.thirdPartyLogin.role).toBe(activeUser.identityType);
       expect(typeof data?.thirdPartyLogin.accessToken).toBe('string');
       expect(typeof data?.thirdPartyLogin.refreshToken).toBe('string');
-      // REGISTRANT 没有具体身份类型，identity 应为 null
-      expect(data?.thirdPartyLogin.identity).toBeNull();
     });
 
     it('未绑定的 WeApp 第三方登录应返回未绑定错误', async () => {

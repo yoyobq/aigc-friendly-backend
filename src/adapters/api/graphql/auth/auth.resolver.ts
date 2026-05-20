@@ -1,26 +1,10 @@
 // src/adapters/api/graphql/auth/auth.resolver.ts
 
-import { EmploymentStatus, IdentityTypeEnum } from '@app-types/models/account.types';
 import { AuthLoginModel, LoginResultModel, UserInfoView } from '@app-types/models/auth.types';
 import { GeographicInfo } from '@app-types/models/user-info.types';
-import { parseStaffId } from '@core/account/identity/parse-staff-id';
-import { DomainError, PERMISSION_ERROR } from '@core/common/errors/domain-error';
 import { Args, Mutation, Resolver } from '@nestjs/graphql';
 import { CompleteUserData, FetchUserInfoUsecase } from '@usecases/account/fetch-user-info.usecase';
 import { LoginWithPasswordUsecase } from '@usecases/auth/login-with-password.usecase';
-import { CoachType } from '../account/dto/identity/coach.dto';
-import {
-  CoachIdentityEntity,
-  CustomerIdentityEntity,
-  LearnerIdentityEntity,
-  ManagerIdentityEntity,
-  StaffIdentityEntity,
-} from '../account/dto/identity/identity-entity.types';
-import { CustomerType } from '../account/dto/identity/customer.dto';
-import { IdentityUnionType } from '../account/dto/identity/identity-union.type';
-import { LearnerType } from '../account/dto/identity/learner.dto';
-import { ManagerIdentityGraphType } from '../account/dto/identity/manager.dto';
-import { StaffType } from '../account/dto/identity/staff.dto';
 import { LoginResult } from '../account/dto/login-result.dto';
 import { UserInfoDTO } from '../account/dto/user-info.dto';
 import { AuthLoginInput } from './dto/auth-login.input';
@@ -49,12 +33,6 @@ export class AuthResolver {
     // 调用 usecase
     const result: LoginResultModel = await this.loginWithPasswordUsecase.execute(authLoginModel);
 
-    // 处理身份信息转换
-    let identity: IdentityUnionType | null = null;
-    if (result.identity && this.isValidIdentityEntity(result.identity)) {
-      identity = this.convertIdentityForGraphQL(result.identity, result.role);
-    }
-
     // 获取用户信息
     const userInfo = await this.getUserInfoForGraphQL(result.accountId);
 
@@ -64,25 +42,10 @@ export class AuthResolver {
       refreshToken: result.refreshToken,
       accountId: result.accountId,
       role: result.role,
-      identity,
       userInfo,
     };
 
     return loginResult;
-  }
-
-  /**
-   * 验证身份实体是否有效
-   */
-  private isValidIdentityEntity(
-    obj: unknown,
-  ): obj is
-    | ManagerIdentityEntity
-    | CoachIdentityEntity
-    | StaffIdentityEntity
-    | CustomerIdentityEntity
-    | LearnerIdentityEntity {
-    return obj !== null && typeof obj === 'object' && 'id' in obj && 'accountId' in obj;
   }
 
   /**
@@ -149,146 +112,5 @@ export class AuthResolver {
     if (geographic.city) parts.push(geographic.city);
 
     return parts.length > 0 ? parts.join(', ') : null;
-  }
-
-  /**
-   * 将身份信息转换为 GraphQL 格式
-   * @param identity 身份实体
-   * @param role 角色类型
-   * @returns 转换后的身份信息
-   */
-  private convertIdentityForGraphQL(
-    identity:
-      | ManagerIdentityEntity
-      | CoachIdentityEntity
-      | StaffIdentityEntity
-      | CustomerIdentityEntity
-      | LearnerIdentityEntity,
-    role: IdentityTypeEnum,
-  ): IdentityUnionType {
-    switch (role) {
-      case IdentityTypeEnum.STAFF:
-        return this.mapStaffIdentity(identity as StaffIdentityEntity);
-      default:
-        throw new DomainError(PERMISSION_ERROR.ACCESS_DENIED, `不支持的身份类型: ${role}`);
-    }
-  }
-
-  /**
-   * 映射 Manager 身份为 GraphQL DTO
-   * @param manager Manager 实体
-   * @returns ManagerType DTO
-   */
-  private mapManagerIdentity(manager: ManagerIdentityEntity): ManagerIdentityGraphType {
-    return {
-      id: manager.id,
-      accountId: manager.accountId,
-      name: manager.name,
-      departmentId: null,
-      remark: manager.remark,
-      jobTitle: null,
-      phone: null,
-      employmentStatus: EmploymentStatus.ACTIVE,
-      userState: null,
-      createdAt: manager.createdAt,
-      updatedAt: manager.updatedAt,
-      deactivatedAt: manager.deactivatedAt,
-      loginHistory: null,
-      // 供 IdentityUnion 解析类型使用的标志字段
-      managerId: manager.id,
-    } as ManagerIdentityGraphType;
-  }
-
-  /**
-   * 映射 Coach 身份为 GraphQL DTO
-   * @param coach Coach 实体
-   * @returns CoachType DTO
-   */
-  private mapCoachIdentity(coach: CoachIdentityEntity): CoachType {
-    return {
-      id: coach.id,
-      accountId: coach.accountId,
-      name: coach.name,
-      departmentId: null,
-      phone: null,
-      remark: coach.remark,
-      jobTitle: null,
-      employmentStatus: EmploymentStatus.ACTIVE,
-      createdAt: coach.createdAt,
-      updatedAt: coach.updatedAt,
-      coachId: coach.id,
-      level: coach.level,
-      description: coach.description,
-      avatarUrl: coach.avatarUrl,
-      specialty: coach.specialty,
-      deactivatedAt: coach.deactivatedAt,
-      userState: null,
-      loginHistory: null,
-    } as CoachType;
-  }
-
-  /**
-   * 映射 Staff 身份为 GraphQL DTO
-   * @param staff Staff 实体
-   * @returns StaffType DTO
-   */
-  private mapStaffIdentity(staff: StaffIdentityEntity): StaffType {
-    return {
-      id: parseStaffId({ id: staff.id as unknown as number | string }),
-      accountId: staff.accountId,
-      name: staff.name,
-      departmentId: staff.departmentId,
-      remark: staff.remark,
-      jobTitle: staff.jobTitle,
-      employmentStatus: staff.employmentStatus,
-      createdAt: staff.createdAt,
-      updatedAt: staff.updatedAt,
-      jobId: parseStaffId({ id: staff.id as unknown as number | string }),
-    } as StaffType;
-  }
-
-  /**
-   * 映射 Customer 身份为 GraphQL DTO
-   * @param customer Customer 实体
-   * @returns CustomerType DTO
-   */
-  private mapCustomerIdentity(customer: CustomerIdentityEntity): CustomerType {
-    return {
-      id: customer.id,
-      accountId: customer.accountId,
-      name: customer.name,
-      contactPhone: customer.contactPhone,
-      preferredContactTime: customer.preferredContactTime,
-      remark: customer.remark,
-      userState: null,
-      loginHistory: null,
-      createdAt: customer.createdAt,
-      updatedAt: customer.updatedAt,
-      deactivatedAt: customer.deactivatedAt,
-      customerId: customer.id,
-    } as CustomerType;
-  }
-
-  /**
-   * 映射 Learner 身份为 GraphQL DTO
-   * @param learner Learner 实体
-   * @returns LearnerType DTO
-   */
-  private mapLearnerIdentity(learner: LearnerIdentityEntity): LearnerType {
-    return {
-      id: learner.id,
-      accountId: learner.accountId,
-      customerId: learner.customerId,
-      name: learner.name,
-      gender: learner.gender,
-      birthDate: learner.birthDate,
-      avatarUrl: learner.avatarUrl,
-      specialNeeds: learner.specialNeeds,
-      countPerSession: learner.countPerSession,
-      remark: learner.remark,
-      createdAt: learner.createdAt,
-      updatedAt: learner.updatedAt,
-      deactivatedAt: learner.deactivatedAt,
-    } as LearnerType;
   }
 }

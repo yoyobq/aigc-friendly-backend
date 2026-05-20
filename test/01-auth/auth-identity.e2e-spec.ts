@@ -15,7 +15,7 @@ import { CreateAccountUsecase } from '@src/usecases/account/create-account.useca
 import { cleanupTestAccounts, seedTestAccounts, testAccountsConfig } from '../utils/test-accounts';
 
 /**
- * Auth 身份测试 E2E 测试 - 专门测试 Coach、Customer、Manager 和 Learner 身份
+ * Auth 旧身份角色映射 E2E 测试
  */
 describe('Auth Identity (e2e)', () => {
   let app: INestApplication<App>;
@@ -298,47 +298,6 @@ describe('Auth Identity (e2e)', () => {
                 createdAt
                 updatedAt
               }
-              identity {
-                ... on StaffType {
-                  staffId: id
-                  name
-                  remark
-                  jobTitle
-                  departmentId
-                  employmentStatus
-                }
-                ... on CoachType {
-                  coachId: id
-                  name
-                  remark
-                  employmentStatus
-                }
-                ... on ManagerType {
-                  managerId: id
-                  name
-                  remark
-                  employmentStatus
-                }
-                ... on CustomerType {
-                  customerId: id
-                  name
-                  contactPhone
-                  preferredContactTime
-                  remark
-                }
-                ... on LearnerType {
-                  learnerId: id
-                  accountId
-                  learnerCustomerId: customerId
-                  name
-                  gender
-                  birthDate
-                  avatarUrl
-                  specialNeeds
-                  countPerSession
-                  remark
-                }
-              }
             }
           }
         `,
@@ -377,13 +336,6 @@ describe('Auth Identity (e2e)', () => {
       expect(payload?.accessGroup).toContain(IdentityTypeEnum.STAFF);
     });
 
-    it('不应返回 Coach 身份信息', async () => {
-      const response = await performLogin(coach.loginName, coach.loginPassword);
-
-      const { data } = response.body;
-      expect(data?.login.identity).toBeNull();
-    });
-
     it('应该正确返回 Coach 用户信息', async () => {
       const response = await performLogin(coach.loginName, coach.loginPassword);
 
@@ -394,71 +346,7 @@ describe('Auth Identity (e2e)', () => {
       expect(data?.login.userInfo.accessGroup).toContain(IdentityTypeEnum.STAFF);
       expect(data?.login.userInfo.userState).toBe(UserState.ACTIVE);
     });
-
-    it('即使存在 Coach 身份记录也不暴露登录身份', async () => {
-      const response = await performLogin(coach.loginName, coach.loginPassword);
-
-      const { data } = response.body;
-      expect(data?.login.identity).toBeNull();
-    });
   });
-
-  // describe('Staff 身份完整测试', () => {
-  //   it('应该支持 Staff 用户登录成功', async () => {
-  //     const response = await performLogin(staff.loginName, staff.loginPassword);
-
-  //     const { data } = response.body;
-  //     expect(data?.login.accountId).toBeDefined();
-  //     expect(data?.login.accessToken).toBeDefined();
-  //     expect(data?.login.refreshToken).toBeDefined();
-  //     expect(data?.login.role).toBe(IdentityTypeEnum.STAFF);
-  //     expect(typeof data?.login.accessToken).toBe('string');
-  //     expect(typeof data?.login.refreshToken).toBe('string');
-  //   });
-
-  //   it('应该正确返回 Staff 身份信息', async () => {
-  //     const response = await performLogin(staff.loginName, staff.loginPassword);
-
-  //     const { data } = response.body;
-  //     expect(data?.login.identity).toBeDefined();
-  //     expect(data?.login.identity.staffId).toBeDefined();
-  //     expect(data?.login.identity.name).toContain('staff_name');
-  //     expect(data?.login.identity.remark).toContain('测试用 staff 身份记录');
-  //     expect(data?.login.identity.jobTitle).toBe('教师');
-  //     expect(data?.login.identity.employmentStatus).toBeDefined();
-  //     // GraphQL schema 中 StaffType.id 是 Int，parseStaffId 将 varchar 工号解析为数字
-  //     expect(typeof data?.login.identity.staffId).toBe('number');
-  //   });
-
-  //   it('应该正确返回 Staff 用户信息', async () => {
-  //     const response = await performLogin(staff.loginName, staff.loginPassword);
-
-  //     const { data } = response.body;
-  //     expect(data?.login.userInfo).toBeDefined();
-  //     expect(data?.login.userInfo.nickname).toBeDefined();
-  //     expect(data?.login.userInfo.email).toBe(staff.loginEmail);
-  //     expect(data?.login.userInfo.accessGroup).toContain(IdentityTypeEnum.STAFF);
-  //     expect(data?.login.userInfo.userState).toBe(UserState.ACTIVE);
-  //   });
-
-  //   it('应该验证 Staff 身份记录与数据库一致', async () => {
-  //     const response = await performLogin(staff.loginName, staff.loginPassword);
-
-  //     const { data } = response.body;
-  //     const staffRepository = dataSource.getRepository(StaffEntity);
-  //     const staffEntity = await staffRepository.findOne({
-  //       where: { accountId: parseInt(data?.login.accountId) },
-  //     });
-
-  //     expect(staffEntity).toBeDefined();
-  //     // staffEntity.id 是 varchar 工号，GraphQL 返回的是解析后的数字 staffId
-  //     expect(data?.login.identity.staffId).toBe(parseInt(staffEntity!.id));
-  //     expect(data?.login.identity.name).toBe(staffEntity?.name);
-  //     expect(data?.login.identity.remark).toBe(staffEntity?.remark);
-  //     expect(data?.login.identity.departmentId).toBe(staffEntity?.departmentId);
-  //     expect(data?.login.identity.jobTitle).toBe(staffEntity?.jobTitle);
-  //   });
-  // });
 
   describe('Customer 身份完整测试', () => {
     it('应该支持 Customer 用户登录成功', async () => {
@@ -477,13 +365,6 @@ describe('Auth Identity (e2e)', () => {
       expect(payload?.accessGroup).toContain(IdentityTypeEnum.GUEST);
     });
 
-    it('不应返回 Customer 身份信息', async () => {
-      const response = await performLogin(customer.loginName, customer.loginPassword);
-
-      const { data } = response.body;
-      expect(data?.login.identity).toBeNull();
-    });
-
     it('应该正确返回 Customer 用户信息', async () => {
       const response = await performLogin(customer.loginName, customer.loginPassword);
 
@@ -493,13 +374,6 @@ describe('Auth Identity (e2e)', () => {
       expect(data?.login.userInfo.email).toBe(customer.loginEmail);
       expect(data?.login.userInfo.accessGroup).toContain(IdentityTypeEnum.GUEST);
       expect(data?.login.userInfo.userState).toBe(UserState.ACTIVE);
-    });
-
-    it('即使存在 Customer 身份记录也不暴露登录身份', async () => {
-      const response = await performLogin(customer.loginName, customer.loginPassword);
-
-      const { data } = response.body;
-      expect(data?.login.identity).toBeNull();
     });
   });
 
@@ -520,13 +394,6 @@ describe('Auth Identity (e2e)', () => {
       expect(payload?.accessGroup).toContain(IdentityTypeEnum.STAFF);
     });
 
-    it('不应返回 Manager 身份信息', async () => {
-      const response = await performLogin(manager.loginName, manager.loginPassword);
-
-      const { data } = response.body;
-      expect(data?.login.identity).toBeNull();
-    });
-
     it('应该正确返回 Manager 用户信息', async () => {
       const response = await performLogin(manager.loginName, manager.loginPassword);
 
@@ -536,13 +403,6 @@ describe('Auth Identity (e2e)', () => {
       expect(data?.login.userInfo.email).toBe(manager.loginEmail);
       expect(data?.login.userInfo.accessGroup).toContain(IdentityTypeEnum.STAFF);
       expect(data?.login.userInfo.userState).toBe(UserState.ACTIVE);
-    });
-
-    it('即使存在 Manager 身份记录也不暴露登录身份', async () => {
-      const response = await performLogin(manager.loginName, manager.loginPassword);
-
-      const { data } = response.body;
-      expect(data?.login.identity).toBeNull();
     });
   });
 
@@ -563,13 +423,6 @@ describe('Auth Identity (e2e)', () => {
       expect(payload?.accessGroup).toContain(IdentityTypeEnum.GUEST);
     });
 
-    it('不应返回 Learner 身份信息', async () => {
-      const response = await performLogin(learner.loginName, learner.loginPassword);
-
-      const { data } = response.body;
-      expect(data?.login.identity).toBeNull();
-    });
-
     it('应该正确返回 Learner 用户信息', async () => {
       const response = await performLogin(learner.loginName, learner.loginPassword);
 
@@ -579,13 +432,6 @@ describe('Auth Identity (e2e)', () => {
       expect(data?.login.userInfo.email).toBe(learner.loginEmail);
       expect(data?.login.userInfo.accessGroup).toContain(IdentityTypeEnum.GUEST);
       expect(data?.login.userInfo.userState).toBe(UserState.ACTIVE);
-    });
-
-    it('即使存在 Learner 身份记录也不暴露登录身份', async () => {
-      const response = await performLogin(learner.loginName, learner.loginPassword);
-
-      const { data } = response.body;
-      expect(data?.login.identity).toBeNull();
     });
   });
 
