@@ -53,3 +53,4 @@
 ## 当前计划
 
 - [account-generic-identity-plan.md](./account-generic-identity-plan.md)
+- [account-generic-identity-p0-inventory.md](./account-generic-identity-p0-inventory.md)

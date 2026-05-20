@@ -240,9 +240,15 @@
 
 ### P0：规则与影响面确认
 
+当前产出：
+
+- [account-generic-identity-p0-inventory.md](./account-generic-identity-p0-inventory.md)
+
 产出物：
 
 - 当前项目 `docs/` 与新项目治理规则差异清单。
+- 新项目 `AGENTS.md` 与当前项目 agent context 差异清单。
+- 判断当前项目是否可直接落根目录 `AGENTS.md`，以及落地前必须补齐或改写的 docs 引用。
 - 培训班语义引用清单。
 - `IdentityTypeEnum`、GraphQL enum、resolver、usecase、entity、migration、test 的影响面清单。
 - 确认 P0 前已确认决策与代码现状的差距。
