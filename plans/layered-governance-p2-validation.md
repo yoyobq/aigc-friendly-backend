@@ -19,7 +19,6 @@ P2 已完成，日期：2026-05-21。
   - `AccountTransactionManager`
   - `VerificationRecordTransactionManager`
   - `AsyncTaskRecordTransactionManager`
-  - `src/types/errors/exception-payload.types.ts` 对 core error code 的依赖
 - `no-cross-domain-modules-imports` 暂不迁入 ESLint error。
   旧项目当前存在真实跨模块依赖，需要 P3a 先盘点，再分批修。
 - 新项目更细的 `modules-contracts` / `modules-types` / `modules-internal` boundaries modeling
@@ -55,15 +54,10 @@ P2 已完成，日期：2026-05-21。
 rg -n "from ['\"](@src/|src/)?core/|from ['\"]@core/|import\\(['\"](@src/|src/)?core/|require\\(['\"](@src/|src/)?core/" src/types -g '*.ts'
 ```
 
-结果：
+P3b 第一批已处理：
 
-- `src/types/errors/exception-payload.types.ts` 仍依赖 `@core/common/errors`。
-
-处理：
-
-- 当前作为 legacy 白名单保留。
-- P3a 需要判断 error response payload 类型是否继续留在 `src/types`，或把 `DomainErrorCode`
-  的稳定 contract 上收到 types。
+- `src/types/errors/exception-payload.types.ts` 不再依赖 `@core/common/errors`。
+- `local-architecture/no-types-to-core-imports` 已移除该文件的 legacy allowlist。
 
 ### Boundary Port / Transaction Alias
 
@@ -143,13 +137,19 @@ rg -n "from ['\"].*(\\.service|/services/|@modules/|@src/modules/)" src/modules 
 
 - `permission.query.service.ts` 依赖 `AccountService`
 - `verification-record.query.service.ts` / `consumable.query.service.ts` 依赖 `verification-read.service`
-- `async-task-record.query.service.ts` 依赖 `AsyncTaskRecordService`
-- `account.query.service.ts` 依赖 `AccountService`
 
 处理：
 
 - 进入 P3a inventory。
 - P3b 再按同域 read repository / QueryService / stable View 拆分。
+- P3b 第二批已将 `async-task-record.query.service.ts` 改为同域 repository 读侧实现，不再依赖
+  `AsyncTaskRecordService`。
+- P3b 第三批已将 `account.query.service.ts` 改为同域 repository 读侧实现，不再依赖
+  `AccountService` / `AccountTransactionManager`。
+- P3b 第四批已将 `ThirdPartyAuthEntity` 迁回 `third-party-auth` 模块，并移除对 account entity
+  的 ORM relation。
+- P3b 复核确认 `verification-read.service` 当前无写入、无事务入口，属于同域 read implementation；
+  后续可作为命名或扫描降噪处理。
 
 ## 验证结果
 

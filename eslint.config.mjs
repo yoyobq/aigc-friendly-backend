@@ -40,10 +40,6 @@ const LEGACY_TRANSACTION_MANAGER_ALIASES = new Set([
   `${path.join(MODULES_ROOT, 'verification-record', 'verification-record.service.ts')}#VerificationRecordTransactionManager`,
   `${path.join(MODULES_ROOT, 'async-task-record', 'async-task-record.service.ts')}#AsyncTaskRecordTransactionManager`,
 ]);
-const LEGACY_TYPES_TO_CORE_FILES = new Set([
-  path.join(TYPES_ROOT, 'errors', 'exception-payload.types.ts'),
-]);
-
 function isPathInside(targetPath, rootPath) {
   const relative = path.relative(rootPath, targetPath);
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
@@ -368,7 +364,6 @@ const localArchitecturePlugin = {
       meta: { type: 'problem', schema: [] },
       create(context) {
         if (!isPathInside(context.filename, TYPES_ROOT)) return {};
-        if (LEGACY_TYPES_TO_CORE_FILES.has(context.filename)) return {};
         function checkImport(node, specifier, targetPath) {
           if (!isPathInside(targetPath, CORE_ROOT)) return;
           context.report({

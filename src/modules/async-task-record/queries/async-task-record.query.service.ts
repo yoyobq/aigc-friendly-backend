@@ -1,7 +1,8 @@
 // src/modules/async-task-record/queries/async-task-record.query.service.ts
 import { Injectable } from '@nestjs/common';
-import { AsyncTaskRecordStatus } from '../async-task-record.entity';
-import { AsyncTaskRecordService } from '../async-task-record.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { type FindOptionsWhere, In, IsNull, Repository } from 'typeorm';
+import { AsyncTaskRecordEntity, type AsyncTaskRecordStatus } from '../async-task-record.entity';
 import {
   AsyncTaskRecordView,
   FindAsyncTaskRecordByQueueJobInput,
@@ -11,34 +12,79 @@ import {
 
 @Injectable()
 export class AsyncTaskRecordQueryService {
-  constructor(private readonly asyncTaskRecordService: AsyncTaskRecordService) {}
+  constructor(
+    @InjectRepository(AsyncTaskRecordEntity)
+    private readonly asyncTaskRecordRepository: Repository<AsyncTaskRecordEntity>,
+  ) {}
 
   async findById(input: { readonly id: number }): Promise<AsyncTaskRecordView | null> {
-    return await this.asyncTaskRecordService.findById({ id: input.id });
+    const entity = await this.asyncTaskRecordRepository.findOne({ where: { id: input.id } });
+    return entity ? this.toView(entity) : null;
   }
 
   async findByQueueJob(input: {
     readonly where: FindAsyncTaskRecordByQueueJobInput;
   }): Promise<AsyncTaskRecordView | null> {
-    return await this.asyncTaskRecordService.findByQueueJob({ where: input.where });
+    const entity = await this.asyncTaskRecordRepository.findOne({ where: input.where });
+    return entity ? this.toView(entity) : null;
   }
 
   async listByTraceId(input: {
     readonly where: ListAsyncTaskRecordsByTraceInput;
   }): Promise<AsyncTaskRecordView[]> {
-    return await this.asyncTaskRecordService.listByTraceId({ where: input.where });
+    const where: FindOptionsWhere<AsyncTaskRecordEntity> = {
+      traceId: input.where.traceId,
+    };
+    if (input.where.queueName !== undefined) {
+      where.queueName = input.where.queueName;
+    }
+    if (input.where.bizTypes && input.where.bizTypes.length > 0) {
+      where.bizType = In([...input.where.bizTypes]);
+    }
+    const entities = await this.asyncTaskRecordRepository.find({
+      where,
+      order: { id: 'DESC' },
+      take: input.where.limit,
+    });
+    return entities.map((entity) => this.toView(entity));
   }
 
   async listByBizTarget(input: {
     readonly where: ListAsyncTaskRecordsByBizTargetInput;
   }): Promise<AsyncTaskRecordView[]> {
-    return await this.asyncTaskRecordService.listByBizTarget({ where: input.where });
+    const where: FindOptionsWhere<AsyncTaskRecordEntity> = {
+      bizType: input.where.bizType,
+      bizKey: input.where.bizKey,
+    };
+    if (input.where.queueName !== undefined) {
+      where.queueName = input.where.queueName;
+    }
+
+    if (input.where.bizSubKey !== undefined) {
+      where.bizSubKey = input.where.bizSubKey === null ? IsNull() : input.where.bizSubKey;
+    }
+
+    if (input.where.statuses && input.where.statuses.length > 0) {
+      where.status = In([...input.where.statuses]);
+    }
+
+    const entities = await this.asyncTaskRecordRepository.find({
+      where,
+      order: { id: 'DESC' },
+      take: input.where.limit,
+    });
+    return entities.map((entity) => this.toView(entity));
   }
 
   async countByStatus(input: {
     readonly statuses: ReadonlyArray<AsyncTaskRecordStatus>;
   }): Promise<number> {
-    return await this.asyncTaskRecordService.countByStatus({ statuses: input.statuses });
+    if (input.statuses.length === 0) {
+      return 0;
+    }
+    return await this.asyncTaskRecordRepository.count({
+      where: { status: In([...input.statuses]) },
+    });
   }
 
   async hasActiveTaskByBizTarget(input: {
@@ -46,7 +92,7 @@ export class AsyncTaskRecordQueryService {
     readonly bizKey: string;
     readonly bizSubKey?: string | null;
   }): Promise<boolean> {
-    const records = await this.asyncTaskRecordService.listByBizTarget({
+    const records = await this.listByBizTarget({
       where: {
         bizType: input.bizType,
         bizKey: input.bizKey,
@@ -56,5 +102,32 @@ export class AsyncTaskRecordQueryService {
       },
     });
     return records.length > 0;
+  }
+
+  private toView(entity: AsyncTaskRecordEntity): AsyncTaskRecordView {
+    return {
+      id: entity.id,
+      queueName: entity.queueName,
+      jobName: entity.jobName,
+      jobId: entity.jobId,
+      traceId: entity.traceId,
+      actorAccountId: entity.actorAccountId,
+      actorActiveRole: entity.actorActiveRole,
+      bizType: entity.bizType,
+      bizKey: entity.bizKey,
+      bizSubKey: entity.bizSubKey,
+      source: entity.source,
+      reason: entity.reason,
+      occurredAt: entity.occurredAt,
+      dedupKey: entity.dedupKey,
+      status: entity.status,
+      attemptCount: entity.attemptCount,
+      maxAttempts: entity.maxAttempts,
+      enqueuedAt: entity.enqueuedAt,
+      startedAt: entity.startedAt,
+      finishedAt: entity.finishedAt,
+      createdAt: entity.createdAt,
+      updatedAt: entity.updatedAt,
+    };
   }
 }

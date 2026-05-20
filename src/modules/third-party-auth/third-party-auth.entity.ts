@@ -1,17 +1,13 @@
-// src/modules/account/base/entities/third-party-auth.entity.ts
-// src/modules/account/entities/third-party-auth.entity.ts
+// src/modules/third-party-auth/third-party-auth.entity.ts
 import { ThirdPartyProviderEnum } from '@app-types/models/account.types';
 import {
   Column,
   CreateDateColumn,
   Entity,
-  JoinColumn,
-  ManyToOne,
   PrimaryGeneratedColumn,
   Unique,
   UpdateDateColumn,
 } from 'typeorm';
-import { AccountEntity } from './account.entity';
 
 /**
  * 第三方登录绑定实体类
@@ -58,13 +54,6 @@ export class ThirdPartyAuthEntity {
     comment: '短期使用的 access_token，仅调试用途',
   })
   accessToken!: string | null;
-
-  /**
-   * 关联的账号实体
-   */
-  @ManyToOne(() => AccountEntity, { createForeignKeyConstraints: false })
-  @JoinColumn({ name: 'account_id' })
-  account!: AccountEntity;
 
   @CreateDateColumn({
     name: 'created_at',

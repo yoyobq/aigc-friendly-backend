@@ -2,8 +2,8 @@
 import { ThirdPartyAuthView } from '@app-types/models/third-party-auth.types';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ThirdPartyAuthEntity } from '@src/modules/account/base/entities/third-party-auth.entity';
 import { Repository } from 'typeorm';
+import { ThirdPartyAuthEntity } from '../third-party-auth.entity';
 
 @Injectable()
 export class ThirdPartyAuthQueryService {

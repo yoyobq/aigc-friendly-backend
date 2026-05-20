@@ -3,7 +3,6 @@
 
 import { IdentityTypeEnum } from '@app-types/models/account.types';
 import { Gender, UserState, type GeographicInfo } from '@app-types/models/user-info.types';
-import { Field, ID } from '@nestjs/graphql';
 import { EncryptedField } from '@src/infrastructure/field-encryption/field-encryption.decorator';
 import {
   Column,
@@ -18,7 +17,6 @@ import { AccountEntity } from './account.entity';
 
 @Entity('base_user_info')
 export class UserInfoEntity {
-  @Field(() => ID)
   @PrimaryGeneratedColumn({ type: 'int', comment: '主键' })
   id!: number;
 

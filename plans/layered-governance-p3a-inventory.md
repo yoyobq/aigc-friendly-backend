@@ -39,9 +39,18 @@ P3b 应按本 inventory 分批修复。
 - transaction boundary legacy。
 - business modules 跨域依赖。
 - QueryService 依赖混合读写 service 或跨域 entity。
-- ORM Entity 混入 GraphQL decorator。
-- `src/types` 依赖 core。
 - legacy `*.ports.ts` 命名。
+
+P3b 已处理：
+
+- `src/types/errors/exception-payload.types.ts` 不再依赖 core。
+- `src/modules/account/base/entities/user-info.entity.ts` 已移除 GraphQL decorator。
+- `src/modules/async-task-record/queries/async-task-record.query.service.ts` 不再依赖混合读写
+  `AsyncTaskRecordService`，读侧已改为同域 repository 实现。
+- `src/modules/account/queries/account.query.service.ts` 不再依赖混合读写 `AccountService`
+  或 `AccountTransactionManager`，读侧已改为同域 repository 实现。
+- `ThirdPartyAuthEntity` 已从 `account/base/entities` 迁回 `third-party-auth` 模块，
+  并移除对 `AccountEntity` 的 ORM relation，保留 `accountId` 字段契约。
 
 ## P1 级问题：应优先修复
 
@@ -75,7 +84,6 @@ P3b 应按本 inventory 分批修复。
 - `src/usecases/verification-record/consume-verification-record.usecase.ts`
 - `src/usecases/verification/password/reset-password.usecase.ts`
 - `src/usecases/verification/types/consume.types.ts`
-- `src/modules/account/queries/account.query.service.ts`
 
 建议修复：
 
@@ -104,19 +112,18 @@ rg -n "from ['\"](@src/modules/|@modules/|src/modules/)" src/modules -g '*.ts'
 - `src/modules/auth/strategies/jwt.strategy.ts` 依赖 `AccountService`。
 - `src/modules/auth/queries/permission.query.service.ts` 依赖 `AccountService`。
 - `src/modules/register/register.module.ts` 依赖 `AccountInstallerModule` 与 `ThirdPartyAuthModule`。
-- `src/modules/third-party-auth/*` 依赖 account entity。
 - `src/modules/verification-record/verification-record.module.ts` 依赖 `AccountInstallerModule`。
 
 可接受项：
 
 - business modules 依赖 `src/modules/common/*` 属于允许方向。
+- `src/modules/third-party-auth/*` 对 account entity 的依赖已在 P3b 第四批修复。
 
 建议修复：
 
 - 跨域读取上提到 usecase。
 - 需要稳定读模型时，由被读域提供 QueryService / stable View。
 - module assembly 不应把业务域模块直接串成隐式依赖网。
-- `third-party-auth` 依赖 account entity 需要优先拆成 account-side QueryService / contract / usecase 编排。
 
 ### 3. QueryService 依赖混合读写 service 或跨域 entity
 
@@ -134,18 +141,23 @@ rg -n "from ['\"].*(\\.service|/services/|@modules/|@src/modules/)" src/modules 
 问题：
 
 - `src/modules/account/queries/account.query.service.ts`
-  - 依赖 `AccountService`
-  - 依赖 `AccountTransactionManager`
+  - 状态：P3b 第三批已修复。
+  - 原问题：依赖混合读写 `AccountService` 与 `AccountTransactionManager`。
 - `src/modules/auth/queries/permission.query.service.ts`
   - 依赖 `AccountService`
 - `src/modules/third-party-auth/queries/third-party-auth.query.service.ts`
-  - 依赖 account entity
+  - 状态：P3b 第四批已修复。
+  - 原问题：依赖 account 内部 entity。
 - `src/modules/verification-record/queries/verification-record.query.service.ts`
-  - 依赖 `verification-read.service`
+  - 状态：P3b 复核后暂不作为 P1 阻塞。
+  - 说明：`VerificationReadService` 当前无写入、无事务入口，是同域 read implementation；
+    后续可作为命名/扫描降噪收口。
 - `src/modules/verification-record/queries/consumable.query.service.ts`
-  - 依赖 `verification-read.service`
+  - 状态：P3b 复核后暂不作为 P1 阻塞。
+  - 说明同上。
 - `src/modules/async-task-record/queries/async-task-record.query.service.ts`
-  - 依赖 `AsyncTaskRecordService`
+  - 状态：P3b 第二批已修复。
+  - 原问题：依赖混合读写 `AsyncTaskRecordService`。
 
 建议修复：
 
@@ -155,6 +167,8 @@ rg -n "from ['\"].*(\\.service|/services/|@modules/|@src/modules/)" src/modules 
 - 事务内只读参数使用 transaction context，不复用 service transaction alias。
 
 ### 4. ORM Entity 混入 GraphQL decorator
+
+状态：P3b 第一批已修复。
 
 规则：
 
@@ -167,7 +181,7 @@ rg -n "from ['\"].*(\\.service|/services/|@modules/|@src/modules/)" src/modules 
 rg -n "@(ObjectType|Field|InputType|ArgsType|InterfaceType)|@ApiProperty|@nestjs/graphql|@nestjs/swagger|class-validator|class-transformer" src/modules src/core src/infrastructure -g '*entity.ts' -g '*.entity.ts'
 ```
 
-问题：
+原问题：
 
 - `src/modules/account/base/entities/user-info.entity.ts`
   - import `@nestjs/graphql`
@@ -181,12 +195,14 @@ rg -n "@(ObjectType|Field|InputType|ArgsType|InterfaceType)|@ApiProperty|@nestjs
 
 ### 5. `src/types` 依赖 core
 
+状态：P3b 第一批已修复。
+
 规则：
 
 - `docs/common/type.rules.md`
 - `docs/common/eslint-architecture-rules.md`
 
-问题：
+原问题：
 
 - `src/types/errors/exception-payload.types.ts`
   - import `DomainErrorCode` from `@core/common/errors`
@@ -303,12 +319,10 @@ P2 ESLint 已覆盖。
 
 ## P3b 建议批次
 
-1. `type/error` 小切口：
-   修 `src/types/errors/exception-payload.types.ts` 对 core 的依赖。
-2. `entity purity` 小切口：
-   迁出 `user-info.entity.ts` 的 GraphQL decorator。
+1. `type/error` 小切口：已完成。
+2. `entity purity` 小切口：已完成。
 3. `queryservice read split`：
-   先拆 account / async-task-record / verification-record QueryService 对混合 service 的依赖。
+   account / async-task-record / third-party-auth 已完成；auth 属于跨域依赖，应单独批次处理。
 4. `modules cross-domain`：
    处理 auth / register / third-party-auth / verification-record 对 account 或其他业务模块的直接依赖。
 5. `transaction boundary`：

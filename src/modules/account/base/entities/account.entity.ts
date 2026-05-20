@@ -9,7 +9,6 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-// import { ThirdPartyAuthEntity } from './third-party-auth.entity'; // 暂时注释掉第三方认证实体导入
 import { UserInfoEntity } from './user-info.entity';
 
 @Entity('base_user_accounts')
@@ -67,16 +66,6 @@ export class AccountEntity {
    */
   @OneToOne(() => UserInfoEntity, (userInfo) => userInfo.account)
   userInfo?: UserInfoEntity;
-
-  /**
-   * 第三方登录绑定关联
-   * 一对多关系
-   * 暂时注释掉，因为 ThirdPartyAuthModule 被屏蔽
-   */
-  // @OneToMany(() => ThirdPartyAuthEntity, (thirdPartyAuth) => thirdPartyAuth.account, {
-  //   eager: false,
-  // })
-  // thirdPartyAuths?: ThirdPartyAuthEntity[];
 
   @CreateDateColumn({
     name: 'created_at',

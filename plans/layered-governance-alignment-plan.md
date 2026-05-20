@@ -286,6 +286,45 @@ P0 决策闸口：
 
 ### P3b：代码分层违规分批修复
 
+当前产出：
+
+- 第一批已完成：
+  - `src/types/errors/exception-payload.types.ts` 移除对 core 的依赖，`ExceptionPayload.errorCode`
+    使用协议层稳定 `string`。
+  - `src/modules/account/base/entities/user-info.entity.ts` 移除 GraphQL `Field / ID` 装饰器与
+    `@nestjs/graphql` import。
+  - `eslint.config.mjs` 移除 `exception-payload.types.ts` 的 types-to-core legacy 白名单。
+- 第二批已完成：
+  - `src/modules/async-task-record/queries/async-task-record.query.service.ts` 从依赖混合读写
+    `AsyncTaskRecordService` 改为同域 repository 读侧实现。
+  - 行为保持原有 `findById`、`findByQueueJob`、`listByTraceId`、`listByBizTarget`、
+    `countByStatus` 与 `hasActiveTaskByBizTarget` 的查询条件、排序、limit 和 view 映射。
+- 第三批已完成：
+  - `src/modules/account/queries/account.query.service.ts` 从依赖混合读写 `AccountService`
+    和 `AccountTransactionManager` 改为同域 repository 读侧实现。
+  - 行为保持原有账户详情权限判断、账户 view 映射、userInfo 严格读取与可见资料裁剪。
+  - account 写 service 的 transaction legacy 未在本批次扩大处理，仍留给 transaction boundary
+    专项批次。
+- 第四批已完成：
+  - `ThirdPartyAuthEntity` 从 `src/modules/account/base/entities` 迁回
+    `src/modules/third-party-auth`。
+  - `ThirdPartyAuthEntity` 移除对 `AccountEntity` 的 ORM relation，只保留 `accountId`
+    字段契约；表名、字段、索引和迁移语义不变。
+  - third-party-auth module / service / QueryService 不再依赖 account 内部 entity。
+
+验证：
+
+- types -> core 扫描无匹配。
+- ORM Entity adapter decorator 扫描无匹配。
+- QueryService mixed service 扫描不再包含 `async-task-record.query.service.ts` 与
+  `account.query.service.ts`。
+- third-party-auth entity 搜索仅命中 `src/modules/third-party-auth/**` 与测试引用。
+- `npm run typecheck` 通过。
+- `npx eslint "{src,apps,libs,test}/**/*.ts" --cache --cache-location .eslintcache` 通过。
+- `npm run test:e2e:file -- 01-auth/auth.e2e-spec.ts` 通过。
+- `npm run migration:drill:empty-db` 已尝试；当前 E2E DB 用户缺少 `CREATE/DROP DATABASE`
+  权限，脚本要求授予权限或设置 `MIGRATION_DRILL_DATABASE` 指向预置空库后再验证。
+
 目标：按 P3a inventory 分批修复旧项目实际代码里的分层违规。
 
 建议批次：

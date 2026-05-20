@@ -57,8 +57,7 @@ performs an automatic `--fix` pass.
 
 - `local-architecture/no-types-to-core-imports`
   Blocks `src/types/**` from importing `src/core/**`.
-  Current `src/types/errors/exception-payload.types.ts` is allowlisted as legacy debt until error
-  response type placement is cleaned up.
+  There is no current allowlist for this rule.
 
 - `no-restricted-imports`
   Blocks direct `src/types/**`, `@src/types/**`, and `**/src/types/**` imports.

@@ -8,14 +8,21 @@ import { canViewUserInfo } from '@core/account/policy/user-info-visibility.polic
 import { ACCOUNT_ERROR } from '@core/common/errors';
 import { DomainError, PERMISSION_ERROR } from '@core/common/errors/domain-error';
 import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { AccountEntity } from '../base/entities/account.entity';
-import { AccountService, type AccountTransactionManager } from '../base/services/account.service';
+import { UserInfoEntity } from '../base/entities/user-info.entity';
 
 export type VisibleDetailMode = 'BASIC' | 'FULL';
 
 @Injectable()
 export class AccountQueryService {
-  constructor(private readonly accountService: AccountService) {}
+  constructor(
+    @InjectRepository(AccountEntity)
+    private readonly accountRepository: Repository<AccountEntity>,
+    @InjectRepository(UserInfoEntity)
+    private readonly userInfoRepository: Repository<UserInfoEntity>,
+  ) {}
 
   async getAccountById(params: {
     session: UsecaseSession;
@@ -32,11 +39,25 @@ export class AccountQueryService {
       throw new DomainError(PERMISSION_ERROR.ACCESS_DENIED, '无权限查看该账户信息');
     }
 
-    return this.accountService.getAccountById(targetAccountId);
+    const account = await this.accountRepository.findOne({ where: { id: targetAccountId } });
+    if (!account) {
+      throw new DomainError(ACCOUNT_ERROR.ACCOUNT_NOT_FOUND, '账户不存在');
+    }
+
+    return this.toUserAccountView(account);
   }
 
   toUserAccountView(account: AccountEntity): UserAccountView {
-    return this.accountService.toUserAccountView(account);
+    return {
+      id: account.id,
+      loginName: account.loginName,
+      loginEmail: account.loginEmail,
+      status: account.status,
+      identityHint: account.identityHint,
+      recentLoginHistory: account.recentLoginHistory || null,
+      createdAt: account.createdAt,
+      updatedAt: account.updatedAt,
+    };
   }
 
   async getVisibleUserInfo(params: {
@@ -64,11 +85,7 @@ export class AccountQueryService {
     return view;
   }
 
-  async getUserInfoViewStrict(params: {
-    accountId: number;
-    accessGroup?: IdentityTypeEnum[];
-    manager?: AccountTransactionManager;
-  }): Promise<
+  async getUserInfoViewStrict(params: { accountId: number }): Promise<
     UserInfoView & {
       nickname: string;
       userState: UserState;
@@ -80,7 +97,7 @@ export class AccountQueryService {
   > {
     const { accountId } = params;
 
-    const base = await this.accountService.findUserInfoByAccountId(accountId, params.manager);
+    const base = await this.findUserInfoByAccountId(accountId);
     if (!base) {
       throw new DomainError(
         ACCOUNT_ERROR.USER_INFO_NOT_FOUND,
@@ -116,7 +133,7 @@ export class AccountQueryService {
   }
 
   private buildUserInfoView(
-    base: Awaited<ReturnType<AccountService['findUserInfoByAccountId']>>,
+    base: UserInfoEntity,
     accountId: number,
     accessGroup: IdentityTypeEnum[],
   ): UserInfoView {
@@ -130,42 +147,47 @@ export class AccountQueryService {
     };
   }
 
-  private buildBasicFields(base: Awaited<ReturnType<AccountService['findUserInfoByAccountId']>>) {
+  private buildBasicFields(base: UserInfoEntity) {
     return {
-      nickname: base?.nickname ?? '',
-      gender: base?.gender ?? Gender.SECRET,
-      birthDate: base?.birthDate ?? null,
-      avatarUrl: base?.avatarUrl ?? null,
-      signature: base?.signature ?? null,
+      nickname: base.nickname ?? '',
+      gender: base.gender ?? Gender.SECRET,
+      birthDate: base.birthDate ?? null,
+      avatarUrl: base.avatarUrl ?? null,
+      signature: base.signature ?? null,
     };
   }
 
-  private buildContactFields(base: Awaited<ReturnType<AccountService['findUserInfoByAccountId']>>) {
+  private buildContactFields(base: UserInfoEntity) {
     return {
-      email: base?.email ?? null,
-      address: base?.address ?? null,
-      phone: base?.phone ?? null,
+      email: base.email ?? null,
+      address: base.address ?? null,
+      phone: base.phone ?? null,
     };
   }
 
-  private buildExtendedFields(
-    base: Awaited<ReturnType<AccountService['findUserInfoByAccountId']>>,
-  ) {
+  private buildExtendedFields(base: UserInfoEntity) {
     return {
-      tags: this.normalizeTags(base?.tags),
-      geographic: base?.geographic ?? null,
-      metaDigest: base?.metaDigest ?? null,
+      tags: this.normalizeTags(base.tags),
+      geographic: base.geographic ?? null,
+      metaDigest: base.metaDigest ?? null,
     };
   }
 
-  private buildSystemFields(base: Awaited<ReturnType<AccountService['findUserInfoByAccountId']>>) {
+  private buildSystemFields(base: UserInfoEntity) {
     return {
-      notifyCount: base?.notifyCount ?? 0,
-      unreadCount: base?.unreadCount ?? 0,
-      userState: base?.userState ?? UserState.PENDING,
-      createdAt: base?.createdAt ?? new Date(),
-      updatedAt: base?.updatedAt ?? new Date(),
+      notifyCount: base.notifyCount ?? 0,
+      unreadCount: base.unreadCount ?? 0,
+      userState: base.userState ?? UserState.PENDING,
+      createdAt: base.createdAt ?? new Date(),
+      updatedAt: base.updatedAt ?? new Date(),
     };
+  }
+
+  private async findUserInfoByAccountId(accountId: number): Promise<UserInfoEntity | null> {
+    return await this.userInfoRepository.findOne({
+      where: { accountId },
+      relations: ['account'],
+    });
   }
 
   private normalizeTags(tags: unknown): string[] | null {

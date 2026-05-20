@@ -4,13 +4,12 @@ import { Module, Provider } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
-import { ThirdPartyAuthEntity } from '@src/modules/account/base/entities/third-party-auth.entity';
-
 import { ThirdPartyProviderEnum } from '@app-types/models/account.types';
 import { ThirdPartyProvider } from './interfaces/third-party-provider.interface';
 import { WeAppProvider } from './providers/weapp.provider';
 import { WechatProvider } from './providers/wechat.provider';
 import { ThirdPartyAuthQueryService } from './queries/third-party-auth.query.service';
+import { ThirdPartyAuthEntity } from './third-party-auth.entity';
 import { PROVIDER_MAP, ThirdPartyAuthService } from './third-party-auth.service';
 
 /**

@@ -10,10 +10,10 @@ import {
 import { DomainError, THIRDPARTY_ERROR } from '@core/common/errors/domain-error';
 import { Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ThirdPartyAuthEntity } from '@src/modules/account/base/entities/third-party-auth.entity';
 import { Repository } from 'typeorm';
 import { ThirdPartyProvider } from './interfaces/third-party-provider.interface';
 import { WeAppProvider } from './providers/weapp.provider';
+import { ThirdPartyAuthEntity } from './third-party-auth.entity';
 
 /** 第三方认证提供者映射的依赖注入标识 */
 export const PROVIDER_MAP = Symbol('THIRD_PARTY_PROVIDER_MAP');
