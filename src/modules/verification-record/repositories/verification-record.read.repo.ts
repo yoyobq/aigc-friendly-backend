@@ -2,7 +2,10 @@
 
 import { AudienceTypeEnum } from '@app-types/models/account.types';
 import type { PersistenceTransactionContext } from '@app-types/common/transaction.types';
-import { VerificationRecordStatus } from '@app-types/models/verification-record.types';
+import {
+  VerificationRecordStatus,
+  VerificationRecordType,
+} from '@app-types/models/verification-record.types';
 import { DomainError, VERIFICATION_RECORD_ERROR } from '@core/common/errors/domain-error';
 import { normalizeEmail, normalizePhone } from '@core/common/normalize/normalize.helper';
 import { Injectable } from '@nestjs/common';
@@ -39,10 +42,7 @@ export class VerificationRecordReadRepository {
     transactionContext?: PersistenceTransactionContext,
   ): Promise<VerificationRecordEntity | null> {
     try {
-      const manager = transactionContext ? getTypeOrmEntityManager(transactionContext) : undefined;
-      const repository = manager
-        ? manager.getRepository(VerificationRecordEntity)
-        : this.repository;
+      const repository = this.getRepository(transactionContext);
       return await repository.findOne({
         where: {
           tokenFp,
@@ -60,6 +60,79 @@ export class VerificationRecordReadRepository {
         error,
       );
     }
+  }
+
+  async tokenFingerprintExists(
+    tokenFp: Buffer,
+    transactionContext?: PersistenceTransactionContext,
+  ): Promise<boolean> {
+    const repository = this.getRepository(transactionContext);
+    const count = await repository.count({ where: { tokenFp } });
+    return count > 0;
+  }
+
+  async findActiveConsumableRecord(params: {
+    where: { id?: number; tokenFp?: Buffer };
+    forAccountId?: number;
+    expectedType?: VerificationRecordType;
+    ignoreTargetRestriction?: boolean;
+    now?: Date;
+    transactionContext?: PersistenceTransactionContext;
+  }): Promise<VerificationRecordEntity | null> {
+    const { where, forAccountId, expectedType, ignoreTargetRestriction, transactionContext } =
+      params;
+    const now = params.now ?? new Date();
+    const repository = this.getRepository(transactionContext);
+
+    const queryBuilder = repository
+      .createQueryBuilder('record')
+      .where('record.status = :activeStatus', {
+        activeStatus: VerificationRecordStatus.ACTIVE,
+      })
+      .andWhere('record.expiresAt > :now', { now })
+      .andWhere('(record.notBefore IS NULL OR record.notBefore <= :now)', { now });
+
+    if (where.id !== undefined) {
+      queryBuilder.andWhere('record.id = :recordId', { recordId: where.id });
+    }
+    if (where.tokenFp !== undefined) {
+      queryBuilder.andWhere('record.tokenFp = :tokenFp', { tokenFp: where.tokenFp });
+    }
+
+    const hasForAccountId = forAccountId !== undefined;
+    const shouldIgnoreTargetRestriction =
+      ignoreTargetRestriction === true ||
+      (!hasForAccountId && expectedType === VerificationRecordType.PASSWORD_RESET);
+    if (!shouldIgnoreTargetRestriction) {
+      if (hasForAccountId) {
+        queryBuilder.andWhere(
+          '(record.targetAccountId IS NULL OR record.targetAccountId = :forAccountId)',
+          {
+            forAccountId,
+          },
+        );
+      } else {
+        queryBuilder.andWhere('record.targetAccountId IS NULL');
+      }
+    }
+
+    if (expectedType) {
+      queryBuilder.andWhere('record.type = :expectedType', { expectedType });
+    }
+
+    return await queryBuilder.getOne();
+  }
+
+  async getTargetAccountIdByRecordId(params: {
+    recordId: number;
+    transactionContext?: PersistenceTransactionContext;
+  }): Promise<number | null> {
+    const repository = this.getRepository(params.transactionContext);
+    const record = await repository.findOne({
+      where: { id: params.recordId },
+      select: ['id', 'targetAccountId'],
+    });
+    return record?.targetAccountId ?? null;
   }
 
   /**
@@ -235,5 +308,12 @@ export class VerificationRecordReadRepository {
    */
   private has(value: unknown): boolean {
     return value !== undefined && value !== null;
+  }
+
+  private getRepository(
+    transactionContext?: PersistenceTransactionContext,
+  ): Repository<VerificationRecordEntity> {
+    const manager = transactionContext ? getTypeOrmEntityManager(transactionContext) : undefined;
+    return manager ? manager.getRepository(VerificationRecordEntity) : this.repository;
   }
 }

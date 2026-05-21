@@ -15,6 +15,13 @@ export interface AccountSnapshot {
   readonly updatedAt: Date;
 }
 
+export interface AccountCredentialSnapshot {
+  readonly id: number;
+  readonly status: AccountStatus;
+  readonly loginPassword: string;
+  readonly createdAt: Date;
+}
+
 export interface AccountSecurityUserInfoSnapshot {
   readonly accessGroup: IdentityTypeEnum[] | null;
   readonly metaDigest: IdentityTypeEnum[] | null;

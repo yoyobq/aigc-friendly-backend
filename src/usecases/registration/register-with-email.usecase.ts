@@ -127,7 +127,7 @@ export class RegisterWithEmailUsecase {
     loginName?: string | null;
     loginEmail: string;
   }): Promise<void> {
-    const exists = await this.accountService.checkAccountExists({
+    const exists = await this.accountQueryService.checkAccountExists({
       loginName,
       loginEmail,
     });
@@ -159,7 +159,7 @@ export class RegisterWithEmailUsecase {
       fallbackOptions: [loginName ?? undefined, loginEmail.split('@')[0]],
     });
 
-    const finalNickname = await this.accountService.pickAvailableNickname({
+    const finalNickname = await this.accountQueryService.pickAvailableNickname({
       providedNickname: nicknameCandidates.providedNickname,
       fallbackOptions: nicknameCandidates.fallbackOptions,
     });
@@ -267,7 +267,10 @@ export class RegisterWithEmailUsecase {
       });
       await this.accountService.saveUserInfo({ userInfo, transactionContext });
 
-      return this.accountQueryService.toUserAccountView(savedAccount);
+      return await this.accountQueryService.getUserAccountViewById({
+        accountId: savedAccount.id,
+        transactionContext,
+      });
     });
   }
 }

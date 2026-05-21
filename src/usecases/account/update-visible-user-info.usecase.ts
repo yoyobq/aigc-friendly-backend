@@ -11,6 +11,7 @@ import {
   AccountService,
   type UserInfoUpdateData,
 } from '@src/modules/account/base/services/account.service';
+import { AccountQueryService } from '@src/modules/account/queries/account.query.service';
 import {
   TRANSACTION_RUNNER,
   type TransactionRunner,
@@ -63,6 +64,7 @@ export interface UpdateVisibleUserInfoResult {
 export class UpdateVisibleUserInfoUsecase {
   constructor(
     private readonly accountService: AccountService,
+    private readonly accountQueryService: AccountQueryService,
     private readonly fetchUserInfoUsecase: FetchUserInfoUsecase,
     @Inject(TRANSACTION_RUNNER)
     private readonly transactionRunner: TransactionRunner,
@@ -358,7 +360,7 @@ export class UpdateVisibleUserInfoUsecase {
   ): Promise<string> {
     const val = normalizeVisibleNicknameInput(value);
     if (val !== current.nickname) {
-      const exists = await this.accountService.checkNicknameExists(val);
+      const exists = await this.accountQueryService.checkNicknameExists(val);
       if (exists) throw new DomainError(ACCOUNT_ERROR.NICKNAME_TAKEN, '昵称已被占用');
     }
     return val;

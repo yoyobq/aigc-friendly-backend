@@ -1,6 +1,10 @@
 // src/modules/account/queries/account.query.service.ts
 import type { PersistenceTransactionContext } from '@app-types/common/transaction.types';
-import { IdentityTypeEnum, UserAccountView } from '@app-types/models/account.types';
+import {
+  IdentityTypeEnum,
+  ThirdPartyProviderEnum,
+  UserAccountView,
+} from '@app-types/models/account.types';
 import { UserInfoView } from '@app-types/models/auth.types';
 import { Gender, UserState } from '@app-types/models/user-info.types';
 import { UsecaseSession } from '@app-types/auth/session.types';
@@ -8,11 +12,16 @@ import { hasRole } from '@core/account/policy/role-access.policy';
 import { canViewUserInfo } from '@core/account/policy/user-info-visibility.policy';
 import { ACCOUNT_ERROR } from '@core/common/errors';
 import { DomainError, PERMISSION_ERROR } from '@core/common/errors/domain-error';
+import { normalizeEmail } from '@core/common/normalize/normalize.helper';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { getTypeOrmEntityManager } from '@src/infrastructure/database/transaction/typeorm-persistence-transaction-context';
 import { Repository } from 'typeorm';
-import type { AccountLoginBootstrapSnapshot, AccountSnapshot } from '../account.types';
+import type {
+  AccountCredentialSnapshot,
+  AccountLoginBootstrapSnapshot,
+  AccountSnapshot,
+} from '../account.types';
 import { AccountEntity } from '../base/entities/account.entity';
 import { UserInfoEntity } from '../base/entities/user-info.entity';
 
@@ -57,6 +66,99 @@ export class AccountQueryService {
     const accountRepository = this.getAccountRepository(params.transactionContext);
     const account = await accountRepository.findOne({ where: { id: params.accountId } });
     return account ? this.toUserAccountView(account) : null;
+  }
+
+  async getUserAccountViewById(params: {
+    accountId: number;
+    transactionContext?: PersistenceTransactionContext;
+  }): Promise<UserAccountView> {
+    const account = await this.findAccountSnapshotById(params);
+    if (!account) {
+      throw new DomainError(ACCOUNT_ERROR.ACCOUNT_NOT_FOUND, '账户不存在');
+    }
+    return account;
+  }
+
+  async findCredentialByLoginName(params: {
+    loginName: string;
+  }): Promise<AccountCredentialSnapshot | null> {
+    const normalizedLoginName = normalizeEmail(params.loginName);
+    const account = await this.accountRepository
+      .createQueryBuilder('account')
+      .where('account.loginName = :loginName', { loginName: params.loginName })
+      .orWhere('account.loginEmail = :loginEmail', { loginEmail: normalizedLoginName })
+      .getOne();
+    if (!account) {
+      return null;
+    }
+    return {
+      id: account.id,
+      status: account.status,
+      loginPassword: account.loginPassword,
+      createdAt: account.createdAt,
+    };
+  }
+
+  async checkAccountExists(params: {
+    loginName?: string | null;
+    loginEmail: string;
+  }): Promise<boolean> {
+    const query = this.accountRepository
+      .createQueryBuilder('account')
+      .where('account.loginEmail = :loginEmail', { loginEmail: normalizeEmail(params.loginEmail) });
+    if (params.loginName) {
+      query.orWhere('account.loginName = :loginName', { loginName: params.loginName });
+    }
+    const count = await query.getCount();
+    return count > 0;
+  }
+
+  async checkNicknameExists(nickname: string): Promise<boolean> {
+    const userInfo = await this.userInfoRepository.findOne({ where: { nickname } });
+    return !!userInfo;
+  }
+
+  async pickAvailableNickname(params: {
+    providedNickname?: string;
+    fallbackOptions?: ReadonlyArray<string>;
+    provider?: ThirdPartyProviderEnum;
+  }): Promise<string | undefined> {
+    const candidates: string[] = [];
+    if (params.providedNickname) {
+      candidates.push(params.providedNickname);
+    }
+
+    for (const option of params.fallbackOptions ?? []) {
+      const nickname = option.includes('@') ? option.split('@')[0] : option;
+      if (nickname) {
+        candidates.push(nickname);
+      }
+    }
+
+    for (const candidate of candidates) {
+      const exists = await this.checkNicknameExists(candidate);
+      if (!exists) {
+        return candidate;
+      }
+
+      const uniqueNickname = await this.generateUniqueNicknameWithSuffix(candidate);
+      if (uniqueNickname) {
+        return uniqueNickname;
+      }
+    }
+
+    if (!params.provider) {
+      return undefined;
+    }
+
+    const fallbackBase = this.getFallbackNicknameByProvider(params.provider);
+    const fallbackNickname = await this.generateUniqueNicknameWithSuffix(fallbackBase);
+    if (fallbackNickname) {
+      return fallbackNickname;
+    }
+
+    const randomSuffix = this.generateRandomString(12);
+    return `${fallbackBase}#${randomSuffix}`;
   }
 
   toUserAccountView(account: AccountEntity): UserAccountView {
@@ -275,6 +377,43 @@ export class AccountQueryService {
     return transactionContext
       ? getTypeOrmEntityManager(transactionContext).getRepository(UserInfoEntity)
       : this.userInfoRepository;
+  }
+
+  private getFallbackNicknameByProvider(provider: ThirdPartyProviderEnum): string {
+    switch (provider) {
+      case ThirdPartyProviderEnum.WEAPP:
+      case ThirdPartyProviderEnum.WECHAT:
+        return '微信用户';
+      case ThirdPartyProviderEnum.QQ:
+        return 'QQ用户';
+      case ThirdPartyProviderEnum.GOOGLE:
+        return 'Google用户';
+      case ThirdPartyProviderEnum.GITHUB:
+        return 'GitHub用户';
+      default:
+        return '用户';
+    }
+  }
+
+  private async generateUniqueNicknameWithSuffix(
+    baseNickname: string,
+  ): Promise<string | undefined> {
+    const maxAttempts = 5;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const randomSuffix = this.generateRandomString(6);
+      const uniqueNickname = `${baseNickname}#${randomSuffix}`;
+      const exists = await this.checkNicknameExists(uniqueNickname);
+      if (!exists) {
+        return uniqueNickname;
+      }
+    }
+    return undefined;
+  }
+
+  private generateRandomString(length: number): string {
+    return Math.random()
+      .toString(36)
+      .substring(2, 2 + length);
   }
 
   private normalizeTags(tags: unknown): string[] | null {

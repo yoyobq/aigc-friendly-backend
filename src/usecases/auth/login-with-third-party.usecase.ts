@@ -7,6 +7,7 @@ import { LoginResultModel } from '@app-types/models/auth.types';
 import { DomainError, THIRDPARTY_ERROR } from '@core/common/errors';
 import { normalizeRequiredText } from '@core/common/input-normalize/input-normalize.policy';
 
+import { ThirdPartyAuthQueryService } from '@modules/third-party-auth/queries/third-party-auth.query.service';
 import { ThirdPartyAuthService } from '@modules/third-party-auth/third-party-auth.service';
 import { LoginByAccountIdUsecase } from './login-by-account-id.usecase';
 
@@ -35,6 +36,7 @@ export interface ThirdPartyLoginParams {
 export class LoginWithThirdPartyUsecase {
   constructor(
     private readonly tpa: ThirdPartyAuthService,
+    private readonly thirdPartyAuthQueryService: ThirdPartyAuthQueryService,
     private readonly loginByAccountId: LoginByAccountIdUsecase,
   ) {}
 
@@ -52,7 +54,7 @@ export class LoginWithThirdPartyUsecase {
     });
 
     // 2) 查找绑定关系
-    const bound = await this.tpa.findAccountByThirdParty({
+    const bound = await this.thirdPartyAuthQueryService.findAccountByThirdParty({
       provider,
       providerUserId: session.providerUserId,
     });

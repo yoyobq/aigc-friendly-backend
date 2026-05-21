@@ -2,7 +2,7 @@
 
 import { VerificationRecordType } from '@app-types/models/verification-record.types';
 import { Injectable } from '@nestjs/common';
-import { VerificationRecordService } from '@src/modules/verification-record/verification-record.service';
+import { VerificationRecordQueryService } from '@src/modules/verification-record/queries/verification-record.query.service';
 import { VerificationFlowContext, VerificationFlowHandler } from '../types/consume.types';
 import { PasswordResetHandlerResult } from '@src/usecases/verification/password/reset-password-result.types';
 import { ResetPasswordUsecase, ResetPasswordUsecaseResult } from './reset-password.usecase';
@@ -22,7 +22,7 @@ export class ResetPasswordHandler implements VerificationFlowHandler<PasswordRes
 
   constructor(
     private readonly resetPasswordUsecase: ResetPasswordUsecase,
-    private readonly verificationRecordService: VerificationRecordService,
+    private readonly verificationRecordQueryService: VerificationRecordQueryService,
   ) {}
 
   /**
@@ -46,7 +46,7 @@ export class ResetPasswordHandler implements VerificationFlowHandler<PasswordRes
       targetAccountId = recordView.targetAccountId;
     } else {
       const recordTargetAccountId =
-        await this.verificationRecordService.getTargetAccountIdByRecordId({
+        await this.verificationRecordQueryService.getTargetAccountIdByRecordId({
           recordId: recordView.id,
           transactionContext,
         });

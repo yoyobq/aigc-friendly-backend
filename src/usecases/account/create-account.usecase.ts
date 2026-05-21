@@ -113,6 +113,9 @@ export class CreateAccountUsecase {
     });
     await this.accountService.saveUserInfo({ userInfo, transactionContext });
 
-    return this.accountQueryService.toUserAccountView(savedAccount);
+    return await this.accountQueryService.getUserAccountViewById({
+      accountId: savedAccount.id,
+      transactionContext,
+    });
   }
 }

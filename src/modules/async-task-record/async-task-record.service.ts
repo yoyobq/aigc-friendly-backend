@@ -3,15 +3,12 @@ import type { PersistenceTransactionContext } from '@app-types/common/transactio
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { getTypeOrmEntityManager } from '@src/infrastructure/database/transaction/typeorm-persistence-transaction-context';
-import { FindOptionsWhere, In, IsNull, QueryFailedError, Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 import { AsyncTaskRecordEntity } from './async-task-record.entity';
 import type {
-  AsyncTaskRecordStatus,
   AsyncTaskRecordView,
   CreateAsyncTaskRecordInput,
   FindAsyncTaskRecordByQueueJobInput,
-  ListAsyncTaskRecordsByBizTargetInput,
-  ListAsyncTaskRecordsByTraceInput,
   RecordAsyncTaskEnqueuedInput,
   RecordAsyncTaskEnqueueFailedInput,
   RecordAsyncTaskFinishedInput,
@@ -26,123 +23,13 @@ export class AsyncTaskRecordService {
     private readonly asyncTaskRecordRepository: Repository<AsyncTaskRecordEntity>,
   ) {}
 
-  async findById(input: {
-    readonly id: number;
-    readonly transactionContext?: PersistenceTransactionContext;
-  }): Promise<AsyncTaskRecordView | null> {
-    const repository = this.getRepository(input.transactionContext);
-    const entity = await repository.findOne({ where: { id: input.id } });
-    return entity ? this.toView(entity) : null;
-  }
-
-  async findByQueueJob(input: {
+  private async findByQueueJob(input: {
     readonly where: FindAsyncTaskRecordByQueueJobInput;
     readonly transactionContext?: PersistenceTransactionContext;
   }): Promise<AsyncTaskRecordView | null> {
     const repository = this.getRepository(input.transactionContext);
     const entity = await repository.findOne({ where: input.where });
     return entity ? this.toView(entity) : null;
-  }
-
-  async listByTraceId(input: {
-    readonly where: ListAsyncTaskRecordsByTraceInput;
-    readonly transactionContext?: PersistenceTransactionContext;
-  }): Promise<AsyncTaskRecordView[]> {
-    const repository = this.getRepository(input.transactionContext);
-    const where: FindOptionsWhere<AsyncTaskRecordEntity> = {
-      traceId: input.where.traceId,
-    };
-    if (input.where.queueName !== undefined) {
-      where.queueName = input.where.queueName;
-    }
-    if (input.where.bizTypes && input.where.bizTypes.length > 0) {
-      where.bizType = In([...input.where.bizTypes]);
-    }
-    const entities = await repository.find({
-      where,
-      order: { id: 'DESC' },
-      take: input.where.limit,
-    });
-    return entities.map((entity) => this.toView(entity));
-  }
-
-  async listByBizTarget(input: {
-    readonly where: ListAsyncTaskRecordsByBizTargetInput;
-    readonly transactionContext?: PersistenceTransactionContext;
-  }): Promise<AsyncTaskRecordView[]> {
-    const repository = this.getRepository(input.transactionContext);
-    const where: FindOptionsWhere<AsyncTaskRecordEntity> = {
-      bizType: input.where.bizType,
-      bizKey: input.where.bizKey,
-    };
-    if (input.where.queueName !== undefined) {
-      where.queueName = input.where.queueName;
-    }
-
-    if (input.where.bizSubKey !== undefined) {
-      where.bizSubKey = input.where.bizSubKey === null ? IsNull() : input.where.bizSubKey;
-    }
-
-    if (input.where.statuses && input.where.statuses.length > 0) {
-      where.status = In(input.where.statuses as AsyncTaskRecordStatus[]);
-    }
-
-    const entities = await repository.find({
-      where,
-      order: { id: 'DESC' },
-      take: input.where.limit,
-    });
-    return entities.map((entity) => this.toView(entity));
-  }
-
-  async findLatestByDedupKey(input: {
-    readonly where: {
-      readonly queueName: string;
-      readonly dedupKey: string;
-      readonly excludeJobIdPrefixes?: ReadonlyArray<string>;
-      readonly excludeUnstartedFailed?: boolean;
-    };
-    readonly transactionContext?: PersistenceTransactionContext;
-  }): Promise<AsyncTaskRecordView | null> {
-    const normalizedDedupKey = input.where.dedupKey.trim();
-    if (normalizedDedupKey.length === 0) {
-      return null;
-    }
-
-    const repository = this.getRepository(input.transactionContext);
-    const query = repository
-      .createQueryBuilder('record')
-      .where('record.queueName = :queueName', {
-        queueName: input.where.queueName,
-      })
-      .andWhere('record.dedupKey = :dedupKey', {
-        dedupKey: normalizedDedupKey,
-      })
-      .orderBy('record.id', 'DESC');
-
-    for (const [index, prefix] of (input.where.excludeJobIdPrefixes ?? []).entries()) {
-      query.andWhere(`record.jobId NOT LIKE :jobIdPrefix${index}`, {
-        [`jobIdPrefix${index}`]: `${prefix}%`,
-      });
-    }
-
-    if (input.where.excludeUnstartedFailed) {
-      query.andWhere("NOT (record.status = 'failed' AND record.startedAt IS NULL)");
-    }
-
-    const entity = await query.getOne();
-    return entity ? this.toView(entity) : null;
-  }
-
-  async countByStatus(input: {
-    readonly statuses: ReadonlyArray<AsyncTaskRecordStatus>;
-    readonly transactionContext?: PersistenceTransactionContext;
-  }): Promise<number> {
-    const repository = this.getRepository(input.transactionContext);
-    if (input.statuses.length === 0) {
-      return 0;
-    }
-    return await repository.count({ where: { status: In([...input.statuses]) } });
   }
 
   async createRecord(input: {

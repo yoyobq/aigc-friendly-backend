@@ -27,6 +27,60 @@ import { VerificationRecordEntity } from '../verification-record.entity';
 export class VerificationReadService {
   constructor(private readonly readRepository: VerificationRecordReadRepository) {}
 
+  async isTokenExists(
+    token: string,
+    transactionContext?: PersistenceTransactionContext,
+  ): Promise<boolean> {
+    const tokenFp = TokenFingerprintHelper.generateTokenFingerprint({ token });
+    return await this.readRepository.tokenFingerprintExists(tokenFp, transactionContext);
+  }
+
+  async findActiveConsumableByToken(params: {
+    token: string;
+    forAccountId?: number;
+    expectedType?: VerificationRecordType;
+    ignoreTargetRestriction?: boolean;
+    now?: Date;
+    transactionContext?: PersistenceTransactionContext;
+  }): Promise<VerificationRecordView | null> {
+    const tokenFp = TokenFingerprintHelper.generateTokenFingerprint({ token: params.token });
+    const record = await this.readRepository.findActiveConsumableRecord({
+      where: { tokenFp },
+      forAccountId: params.forAccountId,
+      expectedType: params.expectedType,
+      ignoreTargetRestriction: params.ignoreTargetRestriction,
+      now: params.now,
+      transactionContext: params.transactionContext,
+    });
+    return record ? this.toCleanView(record) : null;
+  }
+
+  async findActiveConsumableById(params: {
+    recordId: number;
+    forAccountId?: number;
+    expectedType?: VerificationRecordType;
+    ignoreTargetRestriction?: boolean;
+    now?: Date;
+    transactionContext?: PersistenceTransactionContext;
+  }): Promise<VerificationRecordView | null> {
+    const record = await this.readRepository.findActiveConsumableRecord({
+      where: { id: params.recordId },
+      forAccountId: params.forAccountId,
+      expectedType: params.expectedType,
+      ignoreTargetRestriction: params.ignoreTargetRestriction,
+      now: params.now,
+      transactionContext: params.transactionContext,
+    });
+    return record ? this.toCleanView(record) : null;
+  }
+
+  async getTargetAccountIdByRecordId(params: {
+    recordId: number;
+    transactionContext?: PersistenceTransactionContext;
+  }): Promise<number | null> {
+    return await this.readRepository.getTargetAccountIdByRecordId(params);
+  }
+
   /**
    * 根据 token 查找可消费的验证记录
    *

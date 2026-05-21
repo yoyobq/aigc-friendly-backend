@@ -2,7 +2,6 @@
 
 import {
   CreateVerificationRecordParams,
-  FindVerificationRecordParams,
   SubjectType,
   VerificationRecordStatus,
   VerificationRecordType,
@@ -106,135 +105,6 @@ export class VerificationRecordService {
    */
   generateTokenFingerprint(token: string): Buffer {
     return TokenFingerprintHelper.generateTokenFingerprint({ token });
-  }
-
-  /** 检查 token 是否已存在
-   * 用于创建前的重复性检查
-   * @param token 明文 token
-   * @returns 是否存在
-   */
-  async isTokenExists(token: string): Promise<boolean> {
-    try {
-      const tokenFp = this.generateTokenFingerprint(token);
-      const count = await this.verificationRecordRepository.count({
-        where: { tokenFp },
-      });
-      return count > 0;
-    } catch (error) {
-      throw new DomainError(
-        VERIFICATION_RECORD_ERROR.QUERY_FAILED,
-        '检查 token 重复性失败',
-        { error: error instanceof Error ? error.message : '未知错误' },
-        error,
-      );
-    }
-  }
-
-  /**
-   * 根据 token 查找验证记录（**不做状态/时效/权限校验**）
-   *
-   * ⚠️ 仅适用于：
-   * - 创建前的"token 重复性检查"（避免唯一键冲突）
-   * - 内部排查/追踪原始记录（诊断用途）
-   *
-   * 🚫 禁止用于：任何"可被消费"的场景（请改用对应的 Usecase 方法）
-   *
-   * 安全替代：
-   * - FindVerificationRecordUsecase.findActiveConsumableByToken()
-   * - isTokenExists(token) // 仅用于重复性检查
-   *
-   * @param token 明文 token
-   * @returns 验证记录实体或 null
-   */
-  async findByToken(token: string): Promise<VerificationRecordEntity | null> {
-    try {
-      const tokenFp = this.generateTokenFingerprint(token);
-      return await this.verificationRecordRepository.findOne({
-        where: { tokenFp },
-      });
-    } catch (error) {
-      throw new DomainError(
-        VERIFICATION_RECORD_ERROR.QUERY_FAILED,
-        '查询验证记录失败',
-        { error: error instanceof Error ? error.message : '未知错误' },
-        error,
-      );
-    }
-  }
-
-  /**
-   * 根据 ID 查找验证记录（**不做状态/时效/权限校验**）
-   *
-   * ⚠️ 仅适用于：
-   * - 内部排查/追踪原始记录（诊断用途）
-   * - 基础数据获取
-   *
-   * 🚫 禁止用于：任何"可被消费"的场景（请改用对应的 Usecase 方法）
-   *
-   * @param recordId 记录 ID
-   * @returns 验证记录实体或 null
-   */
-  async findById(recordId: number): Promise<VerificationRecordEntity | null> {
-    try {
-      return await this.verificationRecordRepository.findOne({
-        where: { id: recordId },
-      });
-    } catch (error) {
-      throw new DomainError(
-        VERIFICATION_RECORD_ERROR.QUERY_FAILED,
-        '查询验证记录失败',
-        { recordId, error: error instanceof Error ? error.message : '未知错误' },
-        error,
-      );
-    }
-  }
-
-  /**
-   * 根据条件查找验证记录（**不做状态/时效/权限校验**）
-   *
-   * ⚠️ 仅适用于：
-   * - 管理后台查询
-   * - 内部排查/追踪原始记录（诊断用途）
-   * - 基础数据获取
-   *
-   * 🚫 禁止用于：任何"可被消费"的场景（请改用对应的 Usecase 方法）
-   *
-   * @param params 查询参数
-   * @returns 验证记录实体或 null
-   */
-  async findRecord(params: FindVerificationRecordParams): Promise<VerificationRecordEntity | null> {
-    try {
-      const where: Record<string, unknown> = {};
-
-      // 构建查询条件
-      if (params.token) {
-        where.tokenFp = this.generateTokenFingerprint(params.token);
-      }
-      if (params.type !== undefined) {
-        where.type = params.type;
-      }
-      if (params.status !== undefined) {
-        where.status = params.status;
-      }
-      if (params.targetAccountId !== undefined) {
-        where.targetAccountId = params.targetAccountId;
-      }
-      if (params.subjectType !== undefined) {
-        where.subjectType = params.subjectType;
-      }
-      if (params.subjectId !== undefined) {
-        where.subjectId = params.subjectId;
-      }
-
-      return await this.verificationRecordRepository.findOne({ where });
-    } catch (error) {
-      throw new DomainError(
-        VERIFICATION_RECORD_ERROR.QUERY_FAILED,
-        '查询验证记录失败',
-        { error: error instanceof Error ? error.message : '未知错误' },
-        error,
-      );
-    }
   }
 
   /**
@@ -343,55 +213,6 @@ export class VerificationRecordService {
         error,
       );
     }
-  }
-
-  async findActiveConsumableRecord(params: {
-    where: { id?: number; tokenFp?: Buffer };
-    forAccountId?: number;
-    expectedType?: VerificationRecordType;
-    ignoreTargetRestriction?: boolean;
-    now?: Date;
-  }): Promise<VerificationRecordEntity | null> {
-    const { where, forAccountId, expectedType, ignoreTargetRestriction } = params;
-    const now = params.now ?? new Date();
-
-    const queryBuilder = this.verificationRecordRepository
-      .createQueryBuilder('record')
-      .where('record.status = :activeStatus', {
-        activeStatus: VerificationRecordStatus.ACTIVE,
-      })
-      .andWhere('record.expiresAt > :now', { now })
-      .andWhere('(record.notBefore IS NULL OR record.notBefore <= :now)', { now });
-
-    if (where.id !== undefined) {
-      queryBuilder.andWhere('record.id = :recordId', { recordId: where.id });
-    }
-    if (where.tokenFp !== undefined) {
-      queryBuilder.andWhere('record.tokenFp = :tokenFp', { tokenFp: where.tokenFp });
-    }
-
-    const hasForAccountId = forAccountId !== undefined;
-    const shouldIgnoreTargetRestriction =
-      ignoreTargetRestriction === true ||
-      (!hasForAccountId && expectedType === VerificationRecordType.PASSWORD_RESET);
-    if (!shouldIgnoreTargetRestriction) {
-      if (hasForAccountId) {
-        queryBuilder.andWhere(
-          '(record.targetAccountId IS NULL OR record.targetAccountId = :forAccountId)',
-          {
-            forAccountId,
-          },
-        );
-      } else {
-        queryBuilder.andWhere('record.targetAccountId IS NULL');
-      }
-    }
-
-    if (expectedType) {
-      queryBuilder.andWhere('record.type = :expectedType', { expectedType });
-    }
-
-    return await queryBuilder.getOne();
   }
 
   async consumeRecord(params: {
@@ -521,19 +342,6 @@ export class VerificationRecordService {
       updatedRecord: updatedRecord ?? null,
       currentRecord: null,
     };
-  }
-
-  async getTargetAccountIdByRecordId(params: {
-    recordId: number;
-    transactionContext?: PersistenceTransactionContext;
-  }): Promise<number | null> {
-    const { recordId, transactionContext } = params;
-    const repository = this.getRepository(transactionContext);
-    const record = await repository.findOne({
-      where: { id: recordId },
-      select: ['id', 'targetAccountId'],
-    });
-    return record?.targetAccountId ?? null;
   }
 
   /**

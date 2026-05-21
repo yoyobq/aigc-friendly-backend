@@ -12,6 +12,7 @@ import {
   INPUT_NORMALIZE_ERROR,
   THIRDPARTY_ERROR,
 } from '@core/common/errors/domain-error';
+import { ThirdPartyAuthQueryService } from '@modules/third-party-auth/queries/third-party-auth.query.service';
 import { ThirdPartyAuthService } from '@modules/third-party-auth/third-party-auth.service';
 import { HttpException, Inject, Injectable } from '@nestjs/common';
 import { AccountService } from '@src/modules/account/base/services/account.service';
@@ -59,6 +60,7 @@ type WeappRegisterParams = Overwrite<
 export class WeappRegisterUsecase {
   constructor(
     private readonly tpa: ThirdPartyAuthService,
+    private readonly thirdPartyAuthQueryService: ThirdPartyAuthQueryService,
     private readonly accountService: AccountService,
     private readonly accountQueryService: AccountQueryService,
     private readonly logger: PinoLogger,
@@ -142,7 +144,7 @@ export class WeappRegisterUsecase {
    * 检查用户是否已绑定
    */
   private async checkNotAlreadyBound(providerUserId: string): Promise<void> {
-    const existingBinding = await this.tpa.findAccountByThirdParty({
+    const existingBinding = await this.thirdPartyAuthQueryService.findAccountByThirdParty({
       provider: ThirdPartyProviderEnum.WEAPP,
       providerUserId,
     });
@@ -154,7 +156,7 @@ export class WeappRegisterUsecase {
 
   /**
    * 准备账户数据
-   * 使用 AccountService 的 pickAvailableNickname 方法生成唯一昵称
+   * 使用 AccountQueryService 生成唯一昵称
    */
   private async prepareAccountData(params: {
     defaultNickname: string;
@@ -168,7 +170,7 @@ export class WeappRegisterUsecase {
       fallbackOptions: [],
     });
 
-    const nickname = await this.accountService.pickAvailableNickname({
+    const nickname = await this.accountQueryService.pickAvailableNickname({
       providedNickname: nicknameCandidates.providedNickname,
       fallbackOptions: nicknameCandidates.fallbackOptions,
       provider: ThirdPartyProviderEnum.WEAPP,
@@ -301,7 +303,10 @@ export class WeappRegisterUsecase {
       });
       await this.accountService.saveUserInfo({ userInfo, transactionContext });
 
-      return this.accountQueryService.toUserAccountView(savedAccount);
+      return await this.accountQueryService.getUserAccountViewById({
+        accountId: savedAccount.id,
+        transactionContext,
+      });
     });
   }
 }

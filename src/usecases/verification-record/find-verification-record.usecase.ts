@@ -7,7 +7,6 @@ import {
   VerificationRecordQueryService,
   VerificationRecordView,
 } from '@src/modules/verification-record/queries/verification-record.query.service';
-import { VerificationRecordService } from '@src/modules/verification-record/verification-record.service';
 
 /**
  * 查找验证记录用例参数
@@ -29,10 +28,7 @@ export interface FindVerificationRecordUsecaseParams {
  */
 @Injectable()
 export class FindVerificationRecordUsecase {
-  constructor(
-    private readonly verificationRecordService: VerificationRecordService,
-    private readonly verificationRecordQueryService: VerificationRecordQueryService,
-  ) {}
+  constructor(private readonly verificationRecordQueryService: VerificationRecordQueryService) {}
 
   /**
    * 根据 token 查找可消费的活跃验证记录
@@ -46,16 +42,14 @@ export class FindVerificationRecordUsecase {
     try {
       const now = new Date();
       const { token, forAccountId, expectedType, ignoreTargetRestriction } = params;
-      const tokenFp = this.verificationRecordService.generateTokenFingerprint(token);
 
-      const record = await this.verificationRecordService.findActiveConsumableRecord({
-        where: { tokenFp },
+      return await this.verificationRecordQueryService.findActiveConsumableByToken({
+        token,
         forAccountId,
         expectedType,
         ignoreTargetRestriction,
         now,
       });
-      return record ? this.verificationRecordQueryService.toCleanView(record) : null;
     } catch (error) {
       throw new DomainError(
         VERIFICATION_RECORD_ERROR.QUERY_FAILED,
@@ -84,12 +78,11 @@ export class FindVerificationRecordUsecase {
   ): Promise<VerificationRecordView | null> {
     try {
       const now = new Date();
-      const record = await this.verificationRecordService.findActiveConsumableRecord({
-        where: { id: recordId },
+      return await this.verificationRecordQueryService.findActiveConsumableById({
+        recordId,
         forAccountId,
         now,
       });
-      return record ? this.verificationRecordQueryService.toCleanView(record) : null;
     } catch (error) {
       throw new DomainError(
         VERIFICATION_RECORD_ERROR.QUERY_FAILED,

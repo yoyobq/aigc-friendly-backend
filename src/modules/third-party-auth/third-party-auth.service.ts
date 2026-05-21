@@ -149,65 +149,6 @@ export class ThirdPartyAuthService {
   }
 
   /**
-   * 根据第三方信息查找关联账户
-   * 通过第三方平台和用户 ID 查找对应的绑定记录
-   * @param params 查找参数
-   * @param params.provider 第三方平台类型
-   * @param params.providerUserId 第三方平台用户 ID
-   * @returns 第三方认证实体 (包含关联的账户信息)
-   */
-  async findAccountByThirdParty(params: {
-    provider: ThirdPartyProviderEnum;
-    providerUserId: string;
-  }): Promise<ThirdPartyAuthView | null> {
-    const { provider, providerUserId } = params;
-
-    const record = await this.thirdPartyAuthRepository.findOne({
-      where: { provider, providerUserId },
-      select: [
-        'id',
-        'accountId',
-        'provider',
-        'providerUserId',
-        'unionId',
-        'createdAt',
-        'updatedAt',
-      ],
-    });
-    return record ? this.toView(record) : null;
-  }
-
-  /**
-   * 获取用户的第三方绑定列表
-   * 查询指定用户的所有第三方平台绑定记录
-   * @param accountId 用户账户 ID
-   * @returns 第三方认证视图列表
-   */
-  async getThirdPartyAuths(accountId: number): Promise<ThirdPartyAuthView[]> {
-    const records = await this.thirdPartyAuthRepository.find({
-      where: { accountId },
-      select: [
-        'id',
-        'accountId',
-        'provider',
-        'providerUserId',
-        'unionId',
-        'createdAt',
-        'updatedAt',
-      ],
-    });
-    return records.map((record) => ({
-      id: record.id,
-      accountId: record.accountId,
-      provider: record.provider,
-      providerUserId: record.providerUserId,
-      unionId: record.unionId ?? null,
-      createdAt: record.createdAt,
-      updatedAt: record.updatedAt,
-    }));
-  }
-
-  /**
    * 注册流程中的第三方账户绑定
    * 直接接受 ThirdPartySession 数据，适用于注册场景
    * @param params 绑定参数
@@ -257,31 +198,6 @@ export class ThirdPartyAuthService {
 
     const saved = await this.thirdPartyAuthRepository.save(thirdPartyAuth);
     return this.toView(saved);
-  }
-
-  /**
-   * 根据账户 ID 和第三方平台类型查找第三方认证记录
-   * @param accountId 账户 ID
-   * @param provider 第三方平台类型
-   * @returns 第三方认证记录或 null
-   */
-  async findThirdPartyAuthByAccountId(
-    accountId: number,
-    provider: ThirdPartyProviderEnum,
-  ): Promise<ThirdPartyAuthView | null> {
-    const record = await this.thirdPartyAuthRepository.findOne({
-      where: { accountId, provider },
-      select: [
-        'id',
-        'accountId',
-        'provider',
-        'providerUserId',
-        'unionId',
-        'createdAt',
-        'updatedAt',
-      ],
-    });
-    return record ? this.toView(record) : null;
   }
 
   private toView(record: ThirdPartyAuthEntity): ThirdPartyAuthView {

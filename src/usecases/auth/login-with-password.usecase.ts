@@ -8,6 +8,7 @@ import { AUTH_ERROR, DomainError, isDomainError } from '@core/common/errors';
 import { Injectable } from '@nestjs/common';
 import { TokenHelper } from '@modules/auth/token.helper';
 import { AccountService } from '@src/modules/account/base/services/account.service';
+import { AccountQueryService } from '@src/modules/account/queries/account.query.service';
 import { PinoLogger } from 'nestjs-pino';
 import { DecideLoginRoleUsecase } from './decide-login-role.usecase';
 import { EnrichLoginWithIdentityUsecase } from './enrich-login-with-identity.usecase';
@@ -20,7 +21,7 @@ import { ExecuteLoginFlowUsecase } from './execute-login-flow.usecase';
 @Injectable()
 export class LoginWithPasswordUsecase {
   constructor(
-    private readonly accountService: AccountService,
+    private readonly accountQueryService: AccountQueryService,
     private readonly executeLoginFlowUsecase: ExecuteLoginFlowUsecase,
     private readonly decideLoginRoleUsecase: DecideLoginRoleUsecase,
     private readonly enrichLoginWithIdentityUsecase: EnrichLoginWithIdentityUsecase,
@@ -133,7 +134,7 @@ export class LoginWithPasswordUsecase {
     loginPassword,
   }: Pick<AuthLoginModel, 'loginName' | 'loginPassword'>) {
     // 查找账户（支持登录名或邮箱）
-    const account = await this.accountService.findByLoginName(loginName);
+    const account = await this.accountQueryService.findCredentialByLoginName({ loginName });
     if (!account) {
       throw new DomainError(AUTH_ERROR.ACCOUNT_NOT_FOUND, '账户不存在');
     }
