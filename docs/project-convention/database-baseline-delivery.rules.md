@@ -186,20 +186,27 @@ Source of truth: This file defines baseline delivery rules; code examples elsewh
   npm run migration:drill:empty-db
   ```
 
-  如需将结果落到指定数据库（用于首次建表），使用：
+  默认会使用当前环境中的 `DB_NAME` 作为演练库，并先清空该库再执行 baseline migrations。
+  如需覆盖目标数据库（用于首次建表），使用：
 
   ```bash
   MIGRATION_DRILL_DATABASE=<目标数据库名> MIGRATION_DRILL_ALLOW_NON_TEST_DB=true npm run migration:drill:empty-db
+  ```
+
+  如确需使用临时库进行可回收演练，且账号具备全局建库/删库权限，使用：
+
+  ```bash
+  MIGRATION_DRILL_CREATE_TEMP_DB=true npm run migration:drill:empty-db
   ```
 
   说明：
 
   - 脚本内部固定 `synchronize=false`。
   - 不会因为 e2e 环境里的 `DB_SYNCHRONIZE=true` 而改写验证语义。
-  - 未指定 `MIGRATION_DRILL_DATABASE` 时，脚本会创建临时库并在结束后清理。
-  - 该方式更适合“可回收演练”。
-  - 指定 `MIGRATION_DRILL_DATABASE` 时，脚本会先清空该库再执行 baseline migrations。
-  - 该方式适合“首次建表交付”。
+  - 未指定 `MIGRATION_DRILL_DATABASE` 时，脚本默认使用 `DB_NAME`。
+  - 目标库会被先清空再执行 baseline migrations，适合“首次建表交付”或受限权限演练。
+  - 只有显式设置 `MIGRATION_DRILL_CREATE_TEMP_DB=true` 时，脚本才会创建临时库并在结束后清理。
+  - 临时库方式更适合“可回收演练”，但要求账号具备全局 `CREATE/DROP DATABASE` 权限。
   - 若数据库名已包含 `test/drill/ci`，可不传 `MIGRATION_DRILL_ALLOW_NON_TEST_DB=true`。
 
   ## 非目标

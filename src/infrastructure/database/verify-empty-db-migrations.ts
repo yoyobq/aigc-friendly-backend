@@ -129,12 +129,27 @@ function resolveDrillDatabaseTarget(mysqlConfig: MysqlConnectionConfig): DrillDa
     };
   }
 
-  const dbPrefix = (mysqlConfig.database ?? 'worker_backend').replace(/[^a-zA-Z0-9_]/g, '_');
-  return {
-    databaseName: `${dbPrefix}_baseline_drill_${Date.now()}`,
-    shouldCreate: true,
-    shouldDrop: true,
-  };
+  if (process.env.MIGRATION_DRILL_CREATE_TEMP_DB === 'true') {
+    const dbPrefix = (mysqlConfig.database ?? 'worker_backend').replace(/[^a-zA-Z0-9_]/g, '_');
+    return {
+      databaseName: `${dbPrefix}_baseline_drill_${Date.now()}`,
+      shouldCreate: true,
+      shouldDrop: true,
+    };
+  }
+
+  const configuredAppDatabase = mysqlConfig.database?.trim();
+  if (configuredAppDatabase) {
+    return {
+      databaseName: configuredAppDatabase,
+      shouldCreate: false,
+      shouldDrop: false,
+    };
+  }
+
+  throw new Error(
+    '未指定演练数据库，请设置 DB_NAME 或 MIGRATION_DRILL_DATABASE；如确需临时建库，请设置 MIGRATION_DRILL_CREATE_TEMP_DB=true',
+  );
 }
 
 /**
