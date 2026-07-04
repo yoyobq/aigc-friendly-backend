@@ -2,10 +2,12 @@ import type {
   AiWorkflowContextView,
   CreateAiWorkflowContextInput,
 } from '@src/modules/ai-workflow-context/ai-workflow-context.types';
+export { AI_WORKFLOW_ASYNC_TASK_BIZ_TYPE } from '@src/modules/ai-workflow-context/ai-workflow-context.types';
+export {
+  AI_WORKFLOW_JOB_NAME,
+  AI_WORKFLOW_QUEUE_NAME,
+} from '@src/modules/common/ai-queue/ai-queue.constants';
 
-export const AI_WORKFLOW_QUEUE_NAME = 'ai';
-export const AI_WORKFLOW_JOB_NAME = 'workflow';
-export const AI_WORKFLOW_ASYNC_TASK_BIZ_TYPE = 'ai_workflow';
 export const AI_WORKFLOW_ADMISSION_RETRY_DELAY_MS = 30 * 1000;
 export const AI_WORKFLOW_ADMISSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 export const AI_WORKFLOW_HOUSEKEEPING_DEFAULT_BATCH_LIMIT = 50;

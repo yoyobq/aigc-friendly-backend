@@ -74,6 +74,10 @@ Source of truth: This file defines AI lifecycle audit rules; code examples elsew
 | worker 完成 | succeeded | system | worker_completed | ai_generation / ai_embedding | traceId |
 | worker 失败 | failed | system | worker_failed:<summary> | ai_generation / ai_embedding | traceId |
 | workflow admission accepted | queued | context source | enqueue_accepted | ai_workflow | traceId |
+| workflow worker 开始处理 | processing | system | worker_processing | ai_workflow | traceId |
+| workflow worker 完成 | succeeded | system | worker_completed | ai_workflow | traceId |
+| workflow worker 失败 | failed | system | worker_failed:<summary> | ai_workflow | traceId |
+| workflow worker 取消 | cancelled | system | worker_cancelled:<summary> | ai_workflow | traceId |
 | workflow terminal reconcile succeeded | succeeded | system | worker_completed | ai_workflow | traceId |
 | workflow terminal reconcile failed | failed | system | worker_failed:workflow_reconciled | ai_workflow | traceId |
 | workflow terminal reconcile cancelled | cancelled | system | worker_cancelled:workflow_reconciled | ai_workflow | traceId |
@@ -114,6 +118,22 @@ Source of truth: This file defines AI lifecycle audit rules; code examples elsew
 - terminal reconcile 不得把已有终态 AsyncTaskRecord 覆盖成另一个终态；遇到 workflow 终态与 async task
   终态不一致时，记录 mismatch 并跳过，由后续人工或专项修复处理。
 
+## Workflow worker 消费规则
+
+- workflow worker payload 只承载 `workflowId` 与 `traceId`；input/output 业务 payload 从
+  `ai_workflow_context` 读取和写回。
+- workflow worker queue/job 名称以 BullMQ runtime constants 为真源；审计记录只写入该真源派生出的
+  queue/job 名称。
+- workflow worker process 必须校验 context、`jobId` 与 `traceId` 匹配；正常链路不得从 `jobId`
+  反推 `traceId`。
+- `SUCCEEDED` workflow 可幂等接受；`FAILED` / `CANCELLED` workflow 视为不可重试终态。
+- handler 缺失、payload 缺失、context/job mismatch 属于 non-retryable worker 失败，不消耗 BullMQ
+  重试来等待代码变化。
+- transient/provider 失败保留 BullMQ retry；非最终 attempt 应释放 workflow 回 `QUEUED`，最终
+  attempt 标记 workflow `FAILED`。
+- 若 workflow 已是 `CANCELLED`，failed 事件写入 `cancelled` AsyncTaskRecord，不得再把该 job 的
+  lifecycle 审计覆盖成 `failed`。
+
 ## 降级规则
 
 - 仅允许以下三类降级：
@@ -135,7 +155,9 @@ Source of truth: This file defines AI lifecycle audit rules; code examples elsew
   - worker_processing
   - worker_completed
   - worker_cancelled:workflow_reconciled
+  - worker_cancelled:*
   - missing_payload_trace_id
+  - missing_payload_workflow_id
   - worker_event_job_missing:*
   - unsupported_ai_job:*
 

@@ -32,6 +32,8 @@ export const AI_WORKFLOW_CONTEXT_ACTIVE_STATUSES = [
 export const AI_WORKFLOW_CONTEXT_SOURCES = RECORD_SOURCES;
 export type AiWorkflowContextSource = RecordSource;
 
+export const AI_WORKFLOW_ASYNC_TASK_BIZ_TYPE = 'ai_workflow';
+
 export type AiWorkflowJsonPrimitive = string | number | boolean | null;
 export type AiWorkflowJsonObject = {
   readonly [key: string]: AiWorkflowJsonValue;

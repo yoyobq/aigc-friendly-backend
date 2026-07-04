@@ -69,6 +69,16 @@ Source of truth: This file defines QM worker integration rules; code examples el
 - housekeeping 修复已链接 Async Task Record 时，应验证记录存在且与 queue/job/trace 匹配后才跳过；
   不得仅凭本地 linkage id 判定审计链路完整。
 - housekeeping terminal reconcile 不得覆盖已有但不同的 Async Task Record 终态；这类 mismatch 应记录并跳过。
+- workflow handler 应作为带 `AiWorkflowHandlerProvider()` decorator 的 Nest provider 注册，由 worker
+  usecase registry 通过 provider discovery 收集；不得在 registry 内硬编码 handler 列表。
+- workflow queue/job 名称以 BullMQ constants 为运行时真源；业务层需要复用时，通过 queue module 的
+  常量 alias 引用，不得另起裸字符串真源。
+- workflow worker consumer 可先于默认业务 handler 接入；当 registry 中没有匹配 handler 时，应作为
+  non-retryable 失败处理并写入审计记录，不通过 BullMQ retry 等待 handler 后续上线。
+- 对外 adapter / public usecase 暴露 workflow 入队前，必须确认目标 workflowType 已有 handler
+  注册，或调用方明确接受 handler 缺失即任务失败的语义。
+- workflow handler 不直接写 AsyncTaskRecord 或 ai_provider_call_record；worker usecase 统一收敛
+  lifecycle 与 provider-call 审计写入。
 
 ## 落位规范
 

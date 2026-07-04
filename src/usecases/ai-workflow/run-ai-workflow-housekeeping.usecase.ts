@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { resolveAsyncTaskBizKey } from '@src/core/common/async-task/async-task-identifier.policy';
+import { normalizeOptionalText } from '@src/core/common/input-normalize/input-normalize.policy';
 import { AiWorkflowContextService } from '@src/modules/ai-workflow-context/ai-workflow-context.service';
 import type { AiWorkflowContextHousekeepingCandidate } from '@src/modules/ai-workflow-context/ai-workflow-context.types';
 import { AsyncTaskRecordService } from '@src/modules/async-task-record/async-task-record.service';
@@ -476,7 +477,10 @@ function sanitizeErrorMessage(error: unknown): string {
     return (error.message || error.name || 'workflow_housekeeping_error').slice(0, 256);
   }
   if (typeof error === 'string') {
-    return (error.trim() || 'workflow_housekeeping_error').slice(0, 256);
+    return (
+      normalizeOptionalText(error, 'to_undefined', { fieldName: 'workflow_housekeeping_error' }) ??
+      'workflow_housekeeping_error'
+    ).slice(0, 256);
   }
   return 'workflow_housekeeping_error';
 }

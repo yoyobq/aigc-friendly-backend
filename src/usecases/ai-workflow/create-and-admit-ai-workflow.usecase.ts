@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { resolveAsyncTaskBizKey } from '@src/core/common/async-task/async-task-identifier.policy';
+import { normalizeOptionalText } from '@src/core/common/input-normalize/input-normalize.policy';
 import { AiWorkflowContextService } from '@src/modules/ai-workflow-context/ai-workflow-context.service';
 import type {
   AiWorkflowContextMutationResult,
@@ -285,7 +286,10 @@ function sanitizeErrorMessage(error: unknown): string {
     return (error.message || error.name || 'workflow_admission_error').slice(0, 256);
   }
   if (typeof error === 'string') {
-    return (error.trim() || 'workflow_admission_error').slice(0, 256);
+    return (
+      normalizeOptionalText(error, 'to_undefined', { fieldName: 'workflow_admission_error' }) ??
+      'workflow_admission_error'
+    ).slice(0, 256);
   }
   return 'workflow_admission_error';
 }

@@ -224,7 +224,8 @@
 设计：
 
 - 新增 `AiWorkflowHandler` 接口、registry、`AiWorkflowNonRetryableError`。
-- registry 使用 Nest provider token 收集 handler，避免硬编码 handler 列表。
+- registry 使用 Nest provider discovery 收集带 `AiWorkflowHandlerProvider()` decorator 的 handler，
+  避免硬编码 handler 列表。
 - 新增 `ConsumeAiWorkflowJobUsecase`：
   - 校验 workflow context、jobId、traceId 匹配。
   - `SUCCEEDED` 幂等返回 accepted。
@@ -241,6 +242,31 @@
 - registry 和 non-retryable 单测。
 - workflow consume usecase 单测覆盖成功、终态幂等、handler 缺失、non-retryable、transient retry。
 - `npm run typecheck`。
+
+实施记录：
+
+- P4 已落 `src/usecases/ai-worker` workflow consume usecase、handler contract / registry 和
+  non-retryable error；registry 通过 Nest `DiscoveryService` 收集带 `AiWorkflowHandlerProvider()` 的
+  provider，默认可为空。
+- AI worker adapter 已支持 `workflow` job 的 process / completed / failed lifecycle；process 中的
+  workflow non-retryable error 会转换为 BullMQ `UnrecoverableError`，避免重复 retry。
+- workflow worker 正常链路只从 payload 读取 `workflowId` / `traceId`；failed 事件才允许 degraded
+  workflowId / traceId。
+- worker usecase 统一写 workflow AsyncTaskRecord 和可选 generate provider-call record；handler 不直接写审计表。
+- `CANCELLED` workflow 的 failed lifecycle 写入 `cancelled` AsyncTaskRecord，避免后续 terminal
+  reconcile 产生终态 mismatch。
+- review 已吸收：
+  - handler registry 不使用伪 multi-provider token 数组，改为 `DiscoveryService` 发现带 decorator
+    的 handler provider。
+  - workflow queue/job 名称不再新增裸字符串真源，业务层 alias 从 BullMQ runtime constants 派生。
+- P4 不包含默认业务 handler、GraphQL/API、常驻 loop、加密 payload、retention purge 或 ops 查询。
+- P4 已验证：
+  - `npx eslint src/usecases/ai-worker src/adapters/worker/ai src/modules/ai-workflow-context src/usecases/ai-workflow src/modules/common/ai-queue --max-warnings=0`
+  - `npm run typecheck`
+  - `npx tsc -p tsconfig.spec.json --noEmit --pretty false --noErrorTruncation`
+  - `npm run test:unit -- src/usecases/ai-worker src/adapters/worker/ai --runInBand`
+  - `npm run test:unit -- src/usecases/ai-workflow --runInBand`
+  - `npm run test:unit -- src/modules/common/ai-queue --runInBand`
 
 ## P5: Generic Handler / E2E / Docs
 
@@ -298,3 +324,4 @@
 - 明文 JSON payload 最大字节数固定为 1 MiB，超限时抛稳定 `DomainError`。
 - stale `QUEUED` 使用 P3 中定义的 repair 策略，不再在实现时重新选择。
 - docs 中最终沉淀的位置预计为 worker queue integration 和 AI lifecycle audit 相关文档；P5 完成时再从本 plan 抽取稳定规则。
+- workflow worker processing timeout 默认 15 分钟；P4 不新增配置模块。
