@@ -25,8 +25,7 @@ export interface CursorParams {
 }
 
 export type PaginationParams =
-  | ({ readonly mode: 'OFFSET' } & OffsetParams)
-  | ({ readonly mode: 'CURSOR' } & CursorParams);
+  ({ readonly mode: 'OFFSET' } & OffsetParams) | ({ readonly mode: 'CURSOR' } & CursorParams);
 
 export interface PageInfo {
   /**

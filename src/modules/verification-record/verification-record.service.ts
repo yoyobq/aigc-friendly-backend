@@ -16,9 +16,7 @@ import { QueryFailedError, Repository } from 'typeorm';
 import { VerificationRecordEntity } from './verification-record.entity';
 
 export type VerificationRecordConsumeTargetConstraint =
-  | { mode: 'IGNORE' }
-  | { mode: 'NULL_ONLY' }
-  | { mode: 'MATCH_OR_NULL'; accountId: number };
+  { mode: 'IGNORE' } | { mode: 'NULL_ONLY' } | { mode: 'MATCH_OR_NULL'; accountId: number };
 
 export type VerificationRecordValidationSnapshot = {
   id: number;

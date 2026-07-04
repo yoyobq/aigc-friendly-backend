@@ -100,8 +100,7 @@ export class BindThirdPartyAccountUsecase {
 
     if (error instanceof HttpException) {
       const resp = error.getResponse() as
-        | string
-        | { errorCode?: string; errorMessage?: string; message?: string };
+        string | { errorCode?: string; errorMessage?: string; message?: string };
       const responseErrorCode =
         typeof resp === 'object' && resp?.errorCode ? String(resp.errorCode) : undefined;
       const code =

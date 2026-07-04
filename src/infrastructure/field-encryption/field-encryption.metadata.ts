@@ -14,7 +14,6 @@ export const registerEncryptedField = (target: object, propertyKey: string | sym
 
 export const getEncryptedFields = (target: object): readonly (string | symbol)[] => {
   return (Reflect.getMetadata(ENCRYPTED_FIELDS_METADATA_KEY, target) ?? []) as readonly (
-    | string
-    | symbol
+    string | symbol
   )[];
 };
