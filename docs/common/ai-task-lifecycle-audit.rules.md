@@ -19,7 +19,7 @@ Source of truth: This file defines AI lifecycle audit rules; code examples elsew
 - 只做任务生命周期审计：
   - 是否成功入队
   - 是否命中已有任务
-  - worker 是否开始 / 完成 / 失败
+  - worker 是否开始 / 完成 / 失败 / 取消
   - 失败原因、发生时间、重试次数、最终失败尝试
   - 正常任务与降级任务区分
 - 明确不做：
@@ -47,6 +47,7 @@ Source of truth: This file defines AI lifecycle audit rules; code examples elsew
 - AI 正常链路 source：
   - API 入队写 user_action
   - Worker 生命周期写 system
+  - workflow admission 写入沿用 workflow context source
 - actor 边界语义：
   - actor 只在 API 入队侧写入。
   - 入队成功与入队失败路径都适用。
@@ -60,6 +61,7 @@ Source of truth: This file defines AI lifecycle audit rules; code examples elsew
 
 - generate：bizType = ai_generation
 - embed：bizType = ai_embedding
+- workflow：bizType = ai_workflow
 - 降级 worker 记录：bizType = ai_worker
 
 ## 入库映射矩阵
@@ -71,6 +73,10 @@ Source of truth: This file defines AI lifecycle audit rules; code examples elsew
 | worker 开始处理 | processing | system | worker_processing | ai_generation / ai_embedding | traceId |
 | worker 完成 | succeeded | system | worker_completed | ai_generation / ai_embedding | traceId |
 | worker 失败 | failed | system | worker_failed:<summary> | ai_generation / ai_embedding | traceId |
+| workflow admission accepted | queued | context source | enqueue_accepted | ai_workflow | traceId |
+| workflow terminal reconcile succeeded | succeeded | system | worker_completed | ai_workflow | traceId |
+| workflow terminal reconcile failed | failed | system | worker_failed:workflow_reconciled | ai_workflow | traceId |
+| workflow terminal reconcile cancelled | cancelled | system | worker_cancelled:workflow_reconciled | ai_workflow | traceId |
 | payload 缺失 traceId 降级 | failed | system | 含 missing_payload_trace_id | 原 job 对应 bizType | 降级 traceId |
 | failed 事件缺失 job | failed | system | worker_event_job_missing:* | ai_worker | fallback traceId |
 | failed 事件未知 jobName | failed | system | unsupported_ai_job:* | ai_worker | 该任务 traceId |
@@ -88,15 +94,25 @@ Source of truth: This file defines AI lifecycle audit rules; code examples elsew
 - occurredAt：当前事件发生时间。
 - enqueuedAt：任务被系统接受入队时间。
 - startedAt：worker 开始处理时间。
-- finishedAt：worker 完成或失败时间。
+- finishedAt：worker 完成、失败或取消时间。
 - 重复入队命中规则以“重复命中已有任务规则”章节为准。
 
 ## attempt 规则
 
 - queued：attemptCount = 0
 - processing：attemptCount = attemptsMade + 1
-- succeeded / failed：attemptCount = 最终执行次数。
+- succeeded / failed / cancelled：attemptCount = 最终执行次数。
 - maxAttempts：取 BullMQ job 配置值。
+
+## Workflow housekeeping 修复规则
+
+- workflow admission / housekeeping 的 bizType 固定为 `ai_workflow`，bizKey 固定为任务级 `traceId`。
+- stale queued repair 只有在已链接的 `asyncTaskRecordId` 对应记录真实存在，且 queueName、jobName、jobId、
+  traceId 与 workflow context 匹配时，才可视为已修复并跳过。
+- 已链接 async task record 缺失或标识不匹配时，应继续按缺失审计记录修复，补写或回填 AsyncTaskRecord。
+- terminal reconcile 只修复缺失或非终态 AsyncTaskRecord。
+- terminal reconcile 不得把已有终态 AsyncTaskRecord 覆盖成另一个终态；遇到 workflow 终态与 async task
+  终态不一致时，记录 mismatch 并跳过，由后续人工或专项修复处理。
 
 ## 降级规则
 
@@ -118,6 +134,7 @@ Source of truth: This file defines AI lifecycle audit rules; code examples elsew
   - enqueue_accepted
   - worker_processing
   - worker_completed
+  - worker_cancelled:workflow_reconciled
   - missing_payload_trace_id
   - worker_event_job_missing:*
   - unsupported_ai_job:*

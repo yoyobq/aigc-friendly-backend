@@ -15,6 +15,10 @@ export const ASYNC_TASK_RECORD_STATUSES = [
 ] as const;
 
 export type AsyncTaskRecordStatus = (typeof ASYNC_TASK_RECORD_STATUSES)[number];
+export type AsyncTaskRecordTerminalStatus = Extract<
+  AsyncTaskRecordStatus,
+  'succeeded' | 'failed' | 'cancelled'
+>;
 
 export interface AsyncTaskRecordView {
   readonly id: number;
@@ -128,7 +132,7 @@ export interface RecordAsyncTaskFinishedInput {
   readonly bizKey: string;
   readonly bizSubKey?: string | null;
   readonly source: AsyncTaskRecordSource;
-  readonly status: 'succeeded' | 'failed';
+  readonly status: AsyncTaskRecordTerminalStatus;
   readonly reason?: string | null;
   readonly dedupKey?: string | null;
   readonly maxAttempts?: number | null;

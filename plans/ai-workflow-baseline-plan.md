@@ -192,6 +192,28 @@
 - async task 记录遵守 AI 生命周期审计规则。
 - `npm run typecheck`。
 
+实施记录：
+
+- P3 已落 `src/usecases/ai-workflow`，包含 `CreateAndAdmitAiWorkflowUsecase`、
+  `RunAiWorkflowHousekeepingUsecase` 与 `AiWorkflowUsecasesModule`；未接 GraphQL/API、cron
+  loop 或 worker loop。
+- admission 默认沿用 `/var/www/backend_next`：retry 30s、timeout 24h；housekeeping 默认 batch
+  50、stale queued grace 60s，且不引入 config factory。
+- async task biz domain 已补 `ai_workflow`，bizKey 仍按 AI 规则使用任务级 `traceId`；terminal
+  reconcile 覆盖 `SUCCEEDED -> succeeded`、`FAILED -> failed`、`CANCELLED -> cancelled`。
+- review 已吸收：
+  - terminal reconcile 不覆盖已有但不同的终态 async task record，只记录 mismatch 并跳过。
+  - stale queued repair 会验证已链接 `asyncTaskRecordId` 对应记录真实存在且匹配 queue/job/trace 后才跳过。
+  - admission housekeeping 计数只把真实入队或终态修复记为 succeeded；继续等待记 skipped，
+    `STALE_QUEUED` 记 failed。
+- housekeeping 只做 due admission、stale queued repair 和 terminal async task reconcile；未并入 payload
+  purge、retention 或加密上下文相关能力。
+- P3 已验证：
+  - `npm run test:unit -- src/usecases/ai-workflow --runInBand`
+  - `npm run typecheck`
+  - `npx tsc -p tsconfig.spec.json --noEmit --pretty false --noErrorTruncation`
+  - `npx eslint src/usecases/ai-workflow src/modules/async-task-record src/core/common/async-task --max-warnings=0`
+
 ## P4: Worker Workflow 消费与 Handler Registry
 
 目标：

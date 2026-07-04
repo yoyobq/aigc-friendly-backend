@@ -64,6 +64,11 @@ Source of truth: This file defines QM worker integration rules; code examples el
 - 内部门面若提前存在，只能服务后续阶段的 admission / housekeeping，不得绕过 Async Task Record。
 - queue health / admission gate 只能把 Redis、BullMQ probe 或外部队列运行时异常映射为“队列不可用”。
 - 本地注册、DI wiring、queueName / jobName 不合法等确定性配置错误必须继续抛出，不得进入等待或重试语义。
+- admission / housekeeping 可在 worker consumer 接入前作为内部 usecase 存在，但不得接外部 adapter 或
+  public usecase 入口。
+- housekeeping 修复已链接 Async Task Record 时，应验证记录存在且与 queue/job/trace 匹配后才跳过；
+  不得仅凭本地 linkage id 判定审计链路完整。
+- housekeeping terminal reconcile 不得覆盖已有但不同的 Async Task Record 终态；这类 mismatch 应记录并跳过。
 
 ## 落位规范
 
