@@ -76,6 +76,13 @@
     - `docs/common/ai-task-lifecycle-audit.rules.md`
     - `docs/project-convention/ai-provider-call-persistence.rules.md`
 
+  - AI workflow context / admission / worker handler:
+    - `docs/common/queue-identifiers.rules.md`
+    - `docs/common/ai-task-lifecycle-audit.rules.md`
+    - `docs/worker/qm-worker-integration.rules.md`
+    - `docs/worker/worker-adapter.rules.md`
+    - `docs/worker/worker-usecase.rules.md`
+
   - Add a new worker queue:
     - `docs/worker/qm-worker-integration.rules.md`
     - `docs/worker/worker-adapter.rules.md`
@@ -126,7 +133,7 @@
   - `input-normalize-v1-boundaries.md`: primitive normalize boundaries
   - `time-field-design.md`: `TIMESTAMP(3)` vs `DATE` vs `DATETIME`
   - `time-normalize-v1-boundaries.md`: parse / normalize / format / guard boundaries
-  - `qm-worker-integration.rules.md`: new queue integration checklist
+  - `qm-worker-integration.rules.md`: queue integration checklist, AI workflow handler registration and generic workflow boundary
   - `worker-adapter.rules.md`: worker adapter boundary
   - `worker-usecase.rules.md`: worker usecase boundary
   - `email-worker-delivery.rules.md`: email delivery runtime boundary

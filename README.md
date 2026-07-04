@@ -136,6 +136,8 @@ adapters -> usecases -> modules -> infrastructure
 - [Queue Identifiers Rules](docs/common/queue-identifiers.rules.md)
 - [AI Task Lifecycle Audit Rules](docs/common/ai-task-lifecycle-audit.rules.md)
 - [QM Worker Integration Rules](docs/worker/qm-worker-integration.rules.md)
+- [Worker Adapter Rules](docs/worker/worker-adapter.rules.md)
+- [Worker Usecase Rules](docs/worker/worker-usecase.rules.md)
 - [Database Baseline Delivery Rules](docs/project-convention/database-baseline-delivery.rules.md)
 
 ## 功能概览
@@ -158,6 +160,7 @@ adapters -> usecases -> modules -> infrastructure
 - ✅ **Third-party Account**: 第三方身份解析、绑定、解绑与微信小程序辅助能力
 - ✅ **Verification**: 验证码生成与验证流程 (重置密码、绑定第三方身份等基础验证类型)
 - ✅ **AI Queue & Worker**: 支持 `queueAiGenerate` / `queueAiEmbed` 入队与 provider 路由消费
+- ✅ **AI Workflow Baseline**: 支持最小 workflow context、admission、worker handler registry 与 `generic_text_generate`
 - ✅ **Async Task Audit**: 支持按 `traceId` / 业务锚点 / 队列任务标识进行调试查询
 
 ## 快速开始
@@ -242,7 +245,8 @@ npm run test:e2e:core
 npm run test:e2e:worker
 
 # 指定单个 E2E 文件
-npm run test:e2e:file -- test/01-auth/auth.e2e-spec.ts
+npm run test:e2e:file -- 01-auth/auth.e2e-spec.ts
+npm run test:e2e:file -- worker 08-qm-worker/ai-workflow-generic-handler.e2e-spec.ts
 
 # 真实第三方 smoke，需要外部密钥与服务可用
 npm run test:e2e:smoke

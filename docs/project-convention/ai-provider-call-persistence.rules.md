@@ -159,6 +159,19 @@ Source of truth: This file defines provider-call record rules; code examples els
 - 不得把多次真实 provider 调用压扁成一条记录。
 - 也不得把一次 provider 调用拆成多条最终记录。
 
+## AI workflow 调用规则
+
+- AI workflow 的 `base_async_task_record.biz_type` 固定表达队列任务域，例如 `ai_workflow`；它的
+  `biz_key` 仍按任务级 `traceId` 规则写入。
+- AI workflow 写 `ai_provider_call_record` 时，`biz_type` / `biz_key` / `biz_sub_key` 必须沿用
+  workflow context 中的真实业务对象锚点，不得沿用 async task 的 `ai_workflow + traceId` 任务锚点。
+- `task_type` 表示 provider 调用类型，例如 `generate`、`embed`、`rerank`，不是 `workflowType`。
+- provider 已真实返回成功，但 handler 在 output 解析、schema 校验或后置业务规则中判定 workflow 不可重试失败时，
+  仍应记录一条 `provider_status = 'succeeded'` 的 provider-call 事实；workflow 终态可以是 `FAILED`。
+- 发生真实 provider API 请求且请求失败时，才记录 `provider_status = 'failed'` 的 provider-call。
+  provider 配置缺失、provider 不支持、本地路由 / 配置层判定的 model 不支持、
+  workflow input/schema/contract 错误等未发生真实 provider 请求的问题，默认不写 provider-call 记录。
+
 ## 非队列直调规则
 
 - 非队列直调允许 `async_task_record_id = NULL`。

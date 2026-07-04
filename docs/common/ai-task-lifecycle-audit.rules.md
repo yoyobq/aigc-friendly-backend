@@ -133,6 +133,14 @@ Source of truth: This file defines AI lifecycle audit rules; code examples elsew
   handler 不直接写 AsyncTaskRecord 或 ai_provider_call_record。
 - workflow usecase 统一负责 provider-call 审计写入；input 校验失败等 non-retryable 错误不得产生
   provider-call 记录。
+- 如果 handler 已经完成真实 provider 请求，但在解析 provider output、校验输出 schema 或后置业务规则时判定
+  workflow 不可重试失败，handler 可通过 `AiWorkflowNonRetryableError` 携带 provider-call 结果；
+  workflow usecase 必须先记录这次 provider-call 事实，再把 workflow 标记为 `FAILED`。
+- provider-call 审计描述的是真实 provider 请求事实，不描述 workflow 最终业务状态；同一次 workflow 可以出现
+  provider-call `succeeded` 但 workflow `FAILED`。
+- provider 配置缺失、provider 不支持、本地路由 / 配置层判定的 model 不支持、input schema 错误、
+  handler contract 错误等未发生真实 provider 请求的问题，默认不产生 provider-call 记录；除非 handler
+  明确携带已发生的 provider-call 结果。
 - transient/provider 失败保留 BullMQ retry；非最终 attempt 应释放 workflow 回 `QUEUED`，最终
   attempt 标记 workflow `FAILED`。
 - 若 workflow 已是 `CANCELLED`，failed 事件写入 `cancelled` AsyncTaskRecord，不得再把该 job 的

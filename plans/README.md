@@ -88,8 +88,9 @@ direction -> plan -> docs / followup -> delete
 
 ## 当前计划
 
-- [AI Workflow 基线补强计划](./ai-workflow-baseline-plan.md)
+- 当前没有活跃计划。
 
 ## 已收口背景
 
 - 已完成计划统一归档到 [docs/deprecated](../docs/deprecated/README.md)。
+- [AI Workflow 基线补强计划](../docs/deprecated/ai-workflow-baseline-plan.md) 已完成并归档。

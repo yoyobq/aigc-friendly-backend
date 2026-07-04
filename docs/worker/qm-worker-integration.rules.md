@@ -79,14 +79,19 @@ Source of truth: This file defines QM worker integration rules; code examples el
   注册，或调用方明确接受 handler 缺失即任务失败的语义。
 - workflow handler 不直接写 AsyncTaskRecord 或 ai_provider_call_record；worker usecase 统一收敛
   lifecycle 与 provider-call 审计写入。
+- workflow handler 自己定义 prompt、provider input、provider output 解析和 output payload schema；通用
+  worker 层不做业务语义翻译。
+- handler 如果已经完成真实 provider 请求，但后续解析 provider output 或校验 output schema 失败，应通过
+  non-retryable workflow error 携带 provider-call 结果，让 worker usecase 先写 provider-call 审计，再把
+  workflow 标记为失败。
 - 基线内置的 `generic_text_generate` 只提供通用文本生成 workflow handler：
   - input payload 固定为 `userPrompt`、可选 `systemPrompt` / `context` / `provider`、必填 `model`。
   - workflow context 中存在 provider / model 快照时，payload 中的 provider / model 必须与快照一致。
   - `systemPrompt`、`context` 与 `userPrompt` 组装后传给现有 generate provider。
   - 组装后的 prompt 复用现有 generate 入口的 12000 字符上限。
   - 非法 input、快照不一致或 prompt 超限属于 non-retryable workflow 失败，不调用 provider。
-- 下游项目仍负责业务 GraphQL/API 入口、业务 handler、敏感 payload 加密或外部存储、retention、
-  ops 查询与真实第三方 smoke；这些不属于基线默认能力。
+- 下游项目仍负责业务 GraphQL/API 入口、业务 handler、示例 / demo handler、敏感 payload 加密或外部存储、
+  retention、ops 查询与 workflow 真实第三方 smoke；这些不属于基线默认能力。
 
 ## 落位规范
 

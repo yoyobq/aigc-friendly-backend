@@ -21,6 +21,7 @@
 
 - 跑单文件（默认 core）：`npm run test:e2e:file -- 01-auth/auth-identity.e2e-spec.ts`
 - 跑 worker 单文件：`npm run test:e2e:file -- worker 08-qm-worker/email-queue-consume.e2e-spec.ts`
+- 跑 AI workflow worker 单文件：`npm run test:e2e:file -- worker 08-qm-worker/ai-workflow-generic-handler.e2e-spec.ts`
 - 跑 smoke 单文件：`npm run test:e2e:file -- smoke 99-third-party-live-smoke/email-delivery-real.e2e-spec.ts`
 - 跑 AI 真实链路 E2E：`RUN_REAL_AI_E2E=true AI_PROVIDER_MODE=remote NODE_ENV=e2e node ./test/run-e2e-group.js smoke 99-third-party-live-smoke/ai-qwen-generate-real.e2e-spec.ts`
 - watch 单文件：`npm run test:e2e:watch -- 01-auth/auth-identity.e2e-spec.ts`
@@ -44,6 +45,11 @@
 - 执行 weapp smoke 用例时，强制要求 `WECHAT_APP_ID` 与 `WECHAT_APP_SECRET`。
 - 邮件真实发送用例不强制要求 `E2E_EMAIL_TO`，未配置时由用例内默认值兜底。
 - AI 相关 env 仅在 `RUN_REAL_AI_E2E=true` 或 `RUN_REAL_AI_AUTH_FAIL_E2E=true` 时强制校验。
+- AI workflow 基线 E2E 属于 `worker` 分组，不依赖真实第三方 provider；下游项目若新增 workflow 真实
+  provider smoke，建议放入 `smoke` 分组，并通过显式 env 开关启用。
+- 真实 provider smoke 如果需要打印控制台摘要，只能包含 jobId / workflowId、traceId、provider、model、
+  脱敏错误摘要等排障字段；不得打印 API key、请求头、base URL、原始 provider request body、
+  input payload、output payload 或 prompt。
 
 ## 维护入口
 

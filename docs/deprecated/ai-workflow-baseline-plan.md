@@ -1,6 +1,10 @@
-<!-- 文件位置: plans/ai-workflow-baseline-plan.md -->
+<!-- 文件位置: docs/deprecated/ai-workflow-baseline-plan.md -->
 
 # AI Workflow 基线补强计划
+
+归档说明：本计划已完成。稳定实现规则以 `docs/common/ai-task-lifecycle-audit.rules.md`、
+`docs/common/queue-identifiers.rules.md`、`docs/worker/qm-worker-integration.rules.md`、
+`docs/worker/worker-adapter.rules.md` 和 `docs/worker/worker-usecase.rules.md` 为准。
 
 ## 目标
 
