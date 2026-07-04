@@ -1,8 +1,8 @@
 // 文件位置：src/usecases/third-party-accounts/generate-weapp-qrcode.usecase.ts
 import { AudienceTypeEnum } from '@app-types/models/account.types';
 import { DomainError, THIRDPARTY_ERROR } from '@core/common/errors/domain-error';
-import { WeAppProvider } from '@modules/third-party-auth/providers/weapp.provider';
-import { HttpException, Injectable } from '@nestjs/common';
+import { ThirdPartyAuthService } from '@modules/third-party-auth/third-party-auth.service';
+import { Injectable } from '@nestjs/common';
 import { PinoLogger } from 'nestjs-pino';
 
 export interface GenerateWeappQrcodeParams {
@@ -40,7 +40,7 @@ export interface GenerateWeappQrcodeResult {
 @Injectable()
 export class GenerateWeappQrcodeUsecase {
   constructor(
-    private readonly weappProvider: WeAppProvider,
+    private readonly thirdPartyAuthService: ThirdPartyAuthService,
     private readonly logger: PinoLogger,
   ) {
     this.logger.setContext(GenerateWeappQrcodeUsecase.name);
@@ -61,10 +61,8 @@ export class GenerateWeappQrcodeUsecase {
 
       const normalizedScene = this.normalizeScene(params.scene);
 
-      const accessToken = await this.getAccessToken(params.audience);
-
-      const { buffer, contentType } = await this.weappProvider.createWxaCodeUnlimit({
-        accessToken,
+      const { buffer, contentType } = await this.thirdPartyAuthService.generateWeappQrcode({
+        audience: params.audience,
         scene: normalizedScene,
         page: params.page,
         width: params.width,
@@ -91,9 +89,6 @@ export class GenerateWeappQrcodeUsecase {
 
       if (error instanceof DomainError) {
         throw error;
-      }
-      if (error instanceof HttpException) {
-        throw new DomainError(THIRDPARTY_ERROR.PROVIDER_API_ERROR, error.message);
       }
       throw new DomainError(THIRDPARTY_ERROR.UNKNOWN_ERROR, '生成二维码时发生未知错误');
     }
@@ -135,22 +130,5 @@ export class GenerateWeappQrcodeUsecase {
     // 长度安全剪裁：防止超过 32
     if (scene.length > 32) return scene.slice(0, 32);
     return scene;
-  }
-
-  /**
-   * 获取微信小程序 access_token
-   * @param audience 客户端类型
-   * @returns access_token
-   */
-  private async getAccessToken(audience: AudienceTypeEnum): Promise<string> {
-    try {
-      return await this.weappProvider.getAccessToken({ audience });
-    } catch (error) {
-      this.logger.error('获取微信小程序 access_token 失败', { error, audience });
-      if (error instanceof HttpException) {
-        throw new DomainError(THIRDPARTY_ERROR.PROVIDER_API_ERROR, error.message);
-      }
-      throw new DomainError(THIRDPARTY_ERROR.PROVIDER_API_ERROR, '获取 access_token 失败');
-    }
   }
 }

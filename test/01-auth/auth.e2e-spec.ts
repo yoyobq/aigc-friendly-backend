@@ -1,7 +1,6 @@
 // test/01-auth/auth.e2e-spec.ts
 import {
   AccountStatus,
-  AudienceTypeEnum,
   IdentityTypeEnum,
   LoginTypeEnum,
   ThirdPartyProviderEnum,
@@ -15,8 +14,12 @@ import { App } from 'supertest/types';
 import { DataSource, In } from 'typeorm';
 
 import { Gender, UserState } from '@app-types/models/user-info.types';
+import { ThirdPartySession } from '@app-types/models/third-party-auth.types';
+import {
+  THIRD_PARTY_PROVIDER_TOKENS,
+  WeAppProviderContract,
+} from '@src/modules/third-party-auth/contracts/third-party-provider.contract';
 import { ThirdPartyAuthEntity } from '@src/modules/third-party-auth/third-party-auth.entity';
-import { WeAppProvider } from '@src/modules/third-party-auth/providers/weapp.provider';
 import { CreateAccountUsecase } from '@src/usecases/account/create-account.usecase';
 import { initGraphQLSchema } from '../../src/adapters/api/graphql/schema/schema.init';
 import { cleanupTestAccounts, seedTestAccounts, testAccountsConfig } from '../utils/test-accounts';
@@ -57,18 +60,9 @@ describe('Auth (e2e)', () => {
   };
 
   // 覆写 WeAppProvider：根据 authCredential 返回不同的 openid（绑定 / 未绑定）
-  const mockWeAppProvider: Partial<WeAppProvider> & {
-    provider: ThirdPartyProviderEnum;
-    exchangeCredential: ({
-      authCredential,
-      audience,
-    }: {
-      authCredential: string;
-      audience: AudienceTypeEnum;
-    }) => Promise<any>;
-  } = {
+  const mockWeAppProvider: WeAppProviderContract = {
     provider: ThirdPartyProviderEnum.WEAPP,
-    exchangeCredential: ({ authCredential }) => {
+    exchangeCredential: ({ authCredential }): Promise<ThirdPartySession> => {
       if (authCredential === 'e2e-unbound') {
         return Promise.resolve({
           providerUserId: MOCK_WEAPP_OPENID_UNBOUND,
@@ -84,6 +78,18 @@ describe('Auth (e2e)', () => {
         sessionKeyRaw: 'mock-session-key-bound',
       });
     },
+    getAccessToken: () => Promise.resolve('mock-access-token'),
+    getPhoneNumber: () =>
+      Promise.resolve({
+        phoneNumber: '13800138000',
+        purePhoneNumber: '13800138000',
+        countryCode: '86',
+      }),
+    createWxaCodeUnlimit: () =>
+      Promise.resolve({
+        buffer: Buffer.from('mock-qrcode'),
+        contentType: 'image/png',
+      }),
   };
 
   beforeAll(async () => {
@@ -93,7 +99,7 @@ describe('Auth (e2e)', () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [ApiModule],
     })
-      .overrideProvider(WeAppProvider)
+      .overrideProvider(THIRD_PARTY_PROVIDER_TOKENS.WEAPP)
       .useValue(mockWeAppProvider)
       .compile();
 

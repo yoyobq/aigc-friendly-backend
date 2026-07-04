@@ -1,4 +1,3 @@
-// src/modules/third-party-auth/providers/weapp.provider.ts
 import { AudienceTypeEnum, ThirdPartyProviderEnum } from '@app-types/models/account.types';
 import {
   PhoneNumberResult,
@@ -8,18 +7,22 @@ import {
   WeAppGetPhoneNumberResponse,
 } from '@app-types/models/third-party-auth.types';
 import { DomainError, THIRDPARTY_ERROR } from '@core/common/errors/domain-error';
+import {
+  CreateWeAppCodeUnlimitParams,
+  WeAppProviderContract,
+  WeAppQrcodeImage,
+} from '@modules/third-party-auth/contracts/third-party-provider.contract';
 import { HttpService } from '@nestjs/axios';
 import { Inject, Injectable } from '@nestjs/common';
 import { PinoLogger } from 'nestjs-pino';
-import { ThirdPartyProvider } from '../interfaces/third-party-provider.interface';
-import { WEAPP_PROVIDER_OPTIONS, type WeAppProviderOptions } from './weapp-provider.options';
+import { WEAPP_PROVIDER_OPTIONS, type WeAppProviderOptions } from '../weapp-provider.options';
 
 /**
  * 微信小程序认证提供者
  * 实现微信小程序 js_code 换取 session_key 和 openid 的认证流程
  */
 @Injectable()
-export class WeAppProvider implements ThirdPartyProvider {
+export class WeAppHttpProvider implements WeAppProviderContract {
   readonly provider = ThirdPartyProviderEnum.WEAPP;
 
   /**
@@ -195,15 +198,7 @@ export class WeAppProvider implements ThirdPartyProvider {
    * @returns 图片 Buffer 与 content-type
    * @throws HttpException 当微信返回错误或网络异常时抛出
    */
-  async createWxaCodeUnlimit(params: {
-    accessToken: string;
-    scene: string;
-    page?: string;
-    width?: number;
-    checkPath?: boolean;
-    envVersion?: 'develop' | 'trial' | 'release';
-    isHyaline?: boolean;
-  }): Promise<{ buffer: Buffer; contentType: string }> {
+  async createWxaCodeUnlimit(params: CreateWeAppCodeUnlimitParams): Promise<WeAppQrcodeImage> {
     const url = `https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token=${params.accessToken}`;
     const body: Record<string, unknown> = {
       scene: params.scene,
@@ -335,7 +330,7 @@ export class WeAppProvider implements ThirdPartyProvider {
       this.tokenCache.set(cacheKey, { token: success.access_token, expiresAt });
 
       // console.log('微信获取 access_token 成功', data.access_token); // 暂时屏蔽 console.log
-      // this.logger.setContext(WeAppProvider.name);
+      // this.logger.setContext(WeAppHttpProvider.name);
       // this.logger.info({ accessToken: data.access_token }, '微信获取 access_token 成功'); // 避免记录敏感 token
       return success.access_token;
     } catch (error) {

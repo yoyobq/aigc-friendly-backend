@@ -11,8 +11,12 @@ import { DomainError, THIRDPARTY_ERROR } from '@core/common/errors/domain-error'
 import { Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ThirdPartyProvider } from './interfaces/third-party-provider.interface';
-import { WeAppProvider } from './providers/weapp.provider';
+import {
+  THIRD_PARTY_PROVIDER_TOKENS,
+  ThirdPartyProvider,
+  WeAppProviderContract,
+  WeAppQrcodeImage,
+} from './contracts/third-party-provider.contract';
 import { ThirdPartyAuthEntity } from './third-party-auth.entity';
 
 /** 第三方认证提供者映射的依赖注入标识 */
@@ -29,7 +33,8 @@ export class ThirdPartyAuthService {
     private readonly thirdPartyAuthRepository: Repository<ThirdPartyAuthEntity>,
     @Inject(PROVIDER_MAP)
     private readonly adapters: Map<ThirdPartyProviderEnum, ThirdPartyProvider>,
-    private readonly weappProvider: WeAppProvider,
+    @Inject(THIRD_PARTY_PROVIDER_TOKENS.WEAPP)
+    private readonly weappProvider: WeAppProviderContract,
   ) {}
 
   /**
@@ -228,6 +233,34 @@ export class ThirdPartyAuthService {
       phoneCode: params.phoneCode,
       accessToken,
       audience: params.audience,
+    });
+  }
+
+  /**
+   * 生成微信小程序二维码
+   * @param params 生成参数
+   * @returns 二维码图片数据
+   */
+  async generateWeappQrcode(params: {
+    audience: AudienceTypeEnum;
+    scene: string;
+    page?: string;
+    width?: number;
+    checkPath?: boolean;
+    envVersion?: 'develop' | 'trial' | 'release';
+    isHyaline?: boolean;
+  }): Promise<WeAppQrcodeImage> {
+    const accessToken = await this.weappProvider.getAccessToken({
+      audience: params.audience,
+    });
+    return await this.weappProvider.createWxaCodeUnlimit({
+      accessToken,
+      scene: params.scene,
+      page: params.page,
+      width: params.width,
+      checkPath: params.checkPath,
+      envVersion: params.envVersion,
+      isHyaline: params.isHyaline,
     });
   }
 }

@@ -1,8 +1,7 @@
-// src/modules/third-party-auth/providers/wechat.provider.ts
 import { AudienceTypeEnum, ThirdPartyProviderEnum } from '@app-types/models/account.types';
 import { ThirdPartySession } from '@app-types/models/third-party-auth.types';
+import { ThirdPartyProvider } from '@modules/third-party-auth/contracts/third-party-provider.contract';
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { ThirdPartyProvider } from '../interfaces/third-party-provider.interface';
 
 /**
  * 微信网页/公众号认证提供者
@@ -10,7 +9,7 @@ import { ThirdPartyProvider } from '../interfaces/third-party-provider.interface
  * TODO: 实现完整的网页/公众号 OAuth 认证流程
  */
 @Injectable()
-export class WechatProvider implements ThirdPartyProvider {
+export class WechatAuthProvider implements ThirdPartyProvider {
   readonly provider = ThirdPartyProviderEnum.WECHAT;
 
   /**
