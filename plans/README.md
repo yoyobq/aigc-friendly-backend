@@ -88,7 +88,7 @@ direction -> plan -> docs / followup -> delete
 
 ## 当前计划
 
-- 当前没有活跃计划。
+- [Capability Plugin Direction](./capability-plugin-direction.md)：能力插拔方向判断。
 
 ## 已收口背景
 
