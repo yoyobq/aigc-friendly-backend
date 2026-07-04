@@ -291,6 +291,9 @@
   - `model`
   - `providerJobId`
   - `providerRequestId`
+- `systemPrompt`、`context` 与 `userPrompt` 组装成单个 prompt 传给现有 generate provider。
+- workflow context 中存在 provider / model 快照时，payload 中的 provider / model 必须与快照一致。
+- 组装后的 prompt 复用现有 generate 入口的 12000 字符上限。
 - 不添加 GraphQL workflow demo API。
 - 不添加 text rewrite/json summary handler。
 - 更新 worker docs，明确下游项目负责：
@@ -307,10 +310,28 @@
   - non-retryable -> `FAILED` 且不重复 provider call
   - transient retry success / final failure
   - admission waiting + housekeeping retry
-- `npm run test:e2e:file -- test/08-qm-worker/<workflow e2e 文件>`
+- `npm run test:e2e:file -- worker 08-qm-worker/<workflow e2e 文件>`
 - `npm run lint`
 - `npm run typecheck`
 - 必要时 `npm run build`
+
+实施记录：
+
+- P5 已落 `generic_text_generate` 默认 handler，并注册为带 `AiWorkflowHandlerProvider()` 的 worker
+  usecase provider。
+- handler 只依赖 `AiWorkerService.generate()`；不直接依赖 infrastructure/provider，也不直接写
+  AsyncTaskRecord 或 ai_provider_call_record。
+- input payload 缺失、类型错误、空白 `userPrompt` / `model` 会转换为
+  `WORKFLOW_INPUT_PAYLOAD_INVALID` non-retryable 失败，不调用 provider。
+- provider / model 快照不一致、组装后 prompt 超过 12000 字符同样归类为
+  `WORKFLOW_INPUT_PAYLOAD_INVALID` non-retryable 失败。
+- 新增 worker e2e 覆盖 admission success、consume success、non-retryable input、transient retry
+  success / exhausted failure、admission waiting + housekeeping retry。
+- P5 仍不包含 GraphQL/API demo、text rewrite/json summary handler、真实第三方 smoke、加密 payload、
+  retention purge 或 ops 查询。
+- P5 已验证：
+  - `npm run test:unit -- src/usecases/ai-worker/generic-text-generate-workflow.handler.spec.ts --runInBand`
+  - `npm run test:e2e:file -- worker 08-qm-worker/ai-workflow-generic-handler.e2e-spec.ts`
 
 ## 提交策略
 

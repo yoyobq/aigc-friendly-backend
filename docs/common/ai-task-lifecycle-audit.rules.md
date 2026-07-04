@@ -129,6 +129,10 @@ Source of truth: This file defines AI lifecycle audit rules; code examples elsew
 - `SUCCEEDED` workflow 可幂等接受；`FAILED` / `CANCELLED` workflow 视为不可重试终态。
 - handler 缺失、payload 缺失、context/job mismatch 属于 non-retryable worker 失败，不消耗 BullMQ
   重试来等待代码变化。
+- `generic_text_generate` 等 workflow handler 只返回 output payload 与可选 provider-call 结果；
+  handler 不直接写 AsyncTaskRecord 或 ai_provider_call_record。
+- workflow usecase 统一负责 provider-call 审计写入；input 校验失败等 non-retryable 错误不得产生
+  provider-call 记录。
 - transient/provider 失败保留 BullMQ retry；非最终 attempt 应释放 workflow 回 `QUEUED`，最终
   attempt 标记 workflow `FAILED`。
 - 若 workflow 已是 `CANCELLED`，failed 事件写入 `cancelled` AsyncTaskRecord，不得再把该 job 的

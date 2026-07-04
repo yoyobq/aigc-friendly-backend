@@ -8,6 +8,7 @@ import { AiWorkerModule } from '@src/modules/common/ai-worker/ai-worker.module';
 import { AiWorkflowHandlerRegistry } from './ai-workflow-handler.registry';
 import { ConsumeAiEmbedJobUsecase, ConsumeAiGenerateJobUsecase } from './consume-ai-job.usecase';
 import { ConsumeAiWorkflowJobUsecase } from './consume-ai-workflow-job.usecase';
+import { GenericTextGenerateWorkflowHandler } from './generic-text-generate-workflow.handler';
 
 @Module({
   imports: [
@@ -22,12 +23,14 @@ import { ConsumeAiWorkflowJobUsecase } from './consume-ai-workflow-job.usecase';
     ConsumeAiEmbedJobUsecase,
     ConsumeAiWorkflowJobUsecase,
     AiWorkflowHandlerRegistry,
+    GenericTextGenerateWorkflowHandler,
   ],
   exports: [
     ConsumeAiGenerateJobUsecase,
     ConsumeAiEmbedJobUsecase,
     ConsumeAiWorkflowJobUsecase,
     AiWorkflowHandlerRegistry,
+    GenericTextGenerateWorkflowHandler,
   ],
 })
 export class AiWorkerUsecasesModule {}

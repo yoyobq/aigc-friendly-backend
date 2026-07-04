@@ -30,6 +30,7 @@ const GROUPS = {
       '08-qm-worker/ai-graphql-queue.e2e-spec.ts',
       '08-qm-worker/ai-worker-consume-persistence.e2e-spec.ts',
       '08-qm-worker/ai-worker-consume-workflow.e2e-spec.ts',
+      '08-qm-worker/ai-workflow-generic-handler.e2e-spec.ts',
     ],
     needs: {
       mysql: true,
