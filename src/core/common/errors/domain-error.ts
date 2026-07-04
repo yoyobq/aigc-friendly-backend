@@ -131,6 +131,17 @@ export const ASYNC_TASK_RECORD_ERROR = {
 } as const;
 Object.freeze(ASYNC_TASK_RECORD_ERROR);
 
+export const AI_WORKFLOW_CONTEXT_ERROR = {
+  INVALID_PARAMS: 'AI_WORKFLOW_CONTEXT_INVALID_PARAMS',
+  NOT_FOUND: 'AI_WORKFLOW_CONTEXT_NOT_FOUND',
+  CREATE_FAILED: 'AI_WORKFLOW_CONTEXT_CREATE_FAILED',
+  READ_FAILED: 'AI_WORKFLOW_CONTEXT_READ_FAILED',
+  UPDATE_FAILED: 'AI_WORKFLOW_CONTEXT_UPDATE_FAILED',
+  PAYLOAD_INVALID: 'AI_WORKFLOW_CONTEXT_PAYLOAD_INVALID',
+  PAYLOAD_TOO_LARGE: 'AI_WORKFLOW_CONTEXT_PAYLOAD_TOO_LARGE',
+} as const;
+Object.freeze(AI_WORKFLOW_CONTEXT_ERROR);
+
 export const TIME_ERROR = {
   INVALID_TIME_INPUT: 'TIME_INVALID_TIME_INPUT',
   INVALID_SYSTEM_EVENT_TIME: 'TIME_INVALID_SYSTEM_EVENT_TIME',
@@ -162,6 +173,8 @@ export type VerificationRecordErrorCode =
   (typeof VERIFICATION_RECORD_ERROR)[keyof typeof VERIFICATION_RECORD_ERROR];
 export type AsyncTaskRecordErrorCode =
   (typeof ASYNC_TASK_RECORD_ERROR)[keyof typeof ASYNC_TASK_RECORD_ERROR];
+export type AiWorkflowContextErrorCode =
+  (typeof AI_WORKFLOW_CONTEXT_ERROR)[keyof typeof AI_WORKFLOW_CONTEXT_ERROR];
 export type TimeErrorCode = (typeof TIME_ERROR)[keyof typeof TIME_ERROR];
 export type InputNormalizeErrorCode =
   (typeof INPUT_NORMALIZE_ERROR)[keyof typeof INPUT_NORMALIZE_ERROR];
@@ -184,6 +197,7 @@ export type DomainErrorCode =
   | PermissionErrorCode
   | VerificationRecordErrorCode
   | AsyncTaskRecordErrorCode
+  | AiWorkflowContextErrorCode
   | TimeErrorCode
   | InputNormalizeErrorCode
   | PaginationErrorCode;

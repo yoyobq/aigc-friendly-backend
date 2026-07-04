@@ -24,6 +24,7 @@ interface MysqlConnectionConfig {
 
 const REQUIRED_TABLES = [
   'ai_provider_call_record',
+  'ai_workflow_context',
   'base_user_account',
   'base_user_info',
   'base_async_task_record',
@@ -36,6 +37,8 @@ const REQUIRED_INDEXES: ReadonlyArray<{ table: string; index: string }> = [
   { table: 'base_third_party_auth', index: 'base_third_party_auth_provider_IDX' },
   { table: 'base_async_task_record', index: 'uk_queue_name_job_id' },
   { table: 'ai_provider_call_record', index: 'uk_ai_provider_call_trace_seq' },
+  { table: 'ai_workflow_context', index: 'uk_ai_workflow_context_type_active_dedup_hash' },
+  { table: 'ai_workflow_context', index: 'uk_ai_workflow_context_queue_job' },
   { table: 'base_verification_record', index: 'uk_token_fp' },
 ];
 

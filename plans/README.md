@@ -88,7 +88,7 @@ direction -> plan -> docs / followup -> delete
 
 ## 当前计划
 
-- 暂无。
+- [AI Workflow 基线补强计划](./ai-workflow-baseline-plan.md)
 
 ## 已收口背景
 
