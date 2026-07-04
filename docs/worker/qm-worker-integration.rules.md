@@ -57,6 +57,14 @@ Source of truth: This file defines QM worker integration rules; code examples el
    - 不重造审计与错误语义。
    - 需要例外时，必须先说明现有模式为何不适用。
 
+## 分阶段接入约束
+
+- 可以先注册 runtime job contract，再补 admission、审计和 worker consumer。
+- contract 已注册但 worker consumer 未接入时，不得暴露会真实入队该 job 的 adapter / public usecase 入口。
+- 内部门面若提前存在，只能服务后续阶段的 admission / housekeeping，不得绕过 Async Task Record。
+- queue health / admission gate 只能把 Redis、BullMQ probe 或外部队列运行时异常映射为“队列不可用”。
+- 本地注册、DI wiring、queueName / jobName 不合法等确定性配置错误必须继续抛出，不得进入等待或重试语义。
+
 ## 落位规范
 
 - 入口层（Resolver / Controller）

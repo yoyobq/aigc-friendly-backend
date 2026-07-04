@@ -13,6 +13,7 @@ export const BULLMQ_JOBS = {
   AI: {
     GENERATE: 'generate',
     EMBED: 'embed',
+    WORKFLOW: 'workflow',
   },
 } as const;
 

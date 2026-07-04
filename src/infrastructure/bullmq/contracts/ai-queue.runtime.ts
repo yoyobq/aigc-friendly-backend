@@ -62,6 +62,17 @@ export interface AiEmbedResult {
   readonly providerFinishedAt?: Date | null;
 }
 
+export interface AiWorkflowPayload {
+  readonly workflowId: string;
+  readonly traceId: string;
+}
+
+export interface AiWorkflowResult {
+  readonly accepted: boolean;
+  readonly workflowId: string;
+  readonly traceId: string;
+}
+
 const isAiProvider = (value: string): value is AiProvider => {
   return AI_PROVIDERS.some((provider) => provider === value);
 };
@@ -98,6 +109,17 @@ const isAiEmbedPayload = (payload: unknown): payload is AiEmbedPayload => {
   );
 };
 
+const isAiWorkflowPayload = (payload: unknown): payload is AiWorkflowPayload => {
+  if (!isRecord(payload)) return false;
+  const keys = Object.keys(payload);
+  return (
+    keys.length === 2 &&
+    keys.every((key) => key === 'workflowId' || key === 'traceId') &&
+    isNonEmptyString(payload.workflowId) &&
+    isNonEmptyString(payload.traceId)
+  );
+};
+
 export const AI_JOB_CONTRACT = {
   [BULLMQ_JOBS.AI.GENERATE]: {
     payload: {} as AiGeneratePayload,
@@ -108,6 +130,11 @@ export const AI_JOB_CONTRACT = {
     payload: {} as AiEmbedPayload,
     result: {} as AiEmbedResult,
     payloadValidator: isAiEmbedPayload,
+  },
+  [BULLMQ_JOBS.AI.WORKFLOW]: {
+    payload: {} as AiWorkflowPayload,
+    result: {} as AiWorkflowResult,
+    payloadValidator: isAiWorkflowPayload,
   },
 } as const;
 

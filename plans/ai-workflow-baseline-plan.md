@@ -142,6 +142,25 @@
 - AiQueueService 单测覆盖 workflow payload 和 explicit jobId 映射。
 - `npm run typecheck`。
 
+实施记录：
+
+- P2 已落 `BULLMQ_JOBS.AI.WORKFLOW` 与 AI workflow runtime contract。
+- workflow BullMQ payload 固定为 `{ workflowId, traceId }`，不携带 input/output 业务 payload。
+- `BullMqProducerGateway` 已支持 `explicitJobId`、`hasJob()`、`checkQueueAvailable()`；`explicitJobId`
+  与 `dedupKey` 互斥，queue health 使用只读 `getJob('queue-health-probe')`。
+- `AiQueueService` 已暴露 `enqueueWorkflow()`、`hasWorkflowJob()`、`checkWorkflowQueueAvailable()`；
+  Redis / probe 异常映射为 `{ available: false, reason: 'QUEUE_UNAVAILABLE' }`，本地 queue
+  未注册等 wiring 错误继续抛出。
+- `explicitJobId` 是 AI workflow admission / housekeeping 的内部例外，已同步到
+  `docs/common/queue-identifiers.rules.md`；不得从 adapter / 用户输入透传，也不适用于 generate / embed。
+- P2 未接入 worker consume、admission usecase 或 async task record，这些仍归 P3/P4；P3 若先于 P4
+  实现，不应暴露会真实入队 workflow job 的外部入口。
+- P2 已验证：
+  - `npm run test:unit -- src/infrastructure/bullmq src/modules/common/ai-queue --runInBand`
+  - `npm run typecheck`
+  - `npx tsc -p tsconfig.spec.json --noEmit --pretty false --noErrorTruncation`
+  - `npx eslint src/infrastructure/bullmq src/modules/common/ai-queue --max-warnings=0`
+
 ## P3: Admission And Lightweight Housekeeping
 
 目标：

@@ -36,6 +36,7 @@ export const BULLMQ_JOB_PAYLOAD_VALIDATORS = {
   [BULLMQ_QUEUES.AI]: {
     [BULLMQ_JOBS.AI.GENERATE]: AI_JOB_CONTRACT[BULLMQ_JOBS.AI.GENERATE].payloadValidator,
     [BULLMQ_JOBS.AI.EMBED]: AI_JOB_CONTRACT[BULLMQ_JOBS.AI.EMBED].payloadValidator,
+    [BULLMQ_JOBS.AI.WORKFLOW]: AI_JOB_CONTRACT[BULLMQ_JOBS.AI.WORKFLOW].payloadValidator,
   },
 } as const satisfies {
   readonly [Q in BullMqQueueName]: {

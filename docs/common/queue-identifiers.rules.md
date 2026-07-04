@@ -40,6 +40,9 @@ Source of truth: This file defines queue identifier rules; code examples elsewhe
 * `jobId` 是 AsyncTaskRecord 的主更新锚点之一，当前记录唯一键为 `(queueName, jobId)`。
 * 在 AI 链路中，`jobId` 的生成与合法性校验统一由 Producer 负责。
 * 上层不直接传 `jobId`。
+* 例外：AI workflow admission / housekeeping 可通过 `explicitJobId` 把 workflow context 已持有的
+  内部 jobId 交给 Producer，用于同一 workflow 队列任务的查询、重入队和修复。
+* 该例外只能来自内部 workflow 编排，不得透传 adapter / 用户输入，也不适用于 generate / embed 普通入队。
 * Producer 只接受业务层输入。
 * 例如 `dedupKey`、`traceId`、payload。
 * Producer 只产出合法 `jobId`。

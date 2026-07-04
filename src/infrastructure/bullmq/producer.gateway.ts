@@ -37,6 +37,7 @@ export interface EnqueueJobInput<Q extends BullMqQueueName, J extends BullMqJobN
   readonly jobName: J;
   readonly payload: BullMqJobPayload<Q, J>;
   readonly dedupKey?: string;
+  readonly explicitJobId?: string;
   readonly traceId?: string;
   readonly auditMeta?: BullMqEnqueueMeta;
   readonly options?: Readonly<Partial<JobsOptions>>;
@@ -76,6 +77,10 @@ export class BullMqProducerGateway {
     });
     const queue = this.getQueue({ queueName: input.queueName });
     const dedupKey = input.dedupKey?.trim() || undefined;
+    const explicitJobId = this.normalizeExplicitJobId(input.explicitJobId);
+    if (dedupKey && explicitJobId) {
+      throw new Error(`explicit_job_id_conflicts_with_dedup_key:${input.queueName}`);
+    }
     if (dedupKey) {
       const existingJob = await queue.getJob(dedupKey);
       if (existingJob) {
@@ -103,7 +108,7 @@ export class BullMqProducerGateway {
         };
       }
     }
-    const jobId = dedupKey ?? randomUUID();
+    const jobId = dedupKey ?? explicitJobId ?? randomUUID();
     const policy = BULLMQ_QUEUE_REGISTRY[input.queueName];
     const options: JobsOptions = {
       ...policy.defaultJobOptions,
@@ -127,6 +132,36 @@ export class BullMqProducerGateway {
       jobId,
       traceId,
       auditMeta: input.auditMeta,
+    };
+  }
+
+  async hasJob(input: { readonly queueName: BullMqQueueName; readonly jobId: string }): Promise<{
+    readonly queueName: BullMqQueueName;
+    readonly jobId: string;
+    readonly exists: boolean;
+  }> {
+    const jobId = input.jobId.trim();
+    if (!jobId) {
+      throw new Error(`bullmq_job_id_required:${input.queueName}`);
+    }
+    const queue = this.getQueue({ queueName: input.queueName });
+    const job = await queue.getJob(jobId);
+    return {
+      queueName: input.queueName,
+      jobId,
+      exists: job !== null && job !== undefined,
+    };
+  }
+
+  async checkQueueAvailable(input: { readonly queueName: BullMqQueueName }): Promise<{
+    readonly queueName: BullMqQueueName;
+    readonly available: true;
+  }> {
+    const queue = this.getQueue({ queueName: input.queueName });
+    await queue.getJob('queue-health-probe');
+    return {
+      queueName: input.queueName,
+      available: true,
     };
   }
 
@@ -179,6 +214,17 @@ export class BullMqProducerGateway {
     }
     const normalized = traceId.trim();
     return normalized || undefined;
+  }
+
+  private normalizeExplicitJobId(jobId?: string): string | undefined {
+    if (jobId === undefined) {
+      return undefined;
+    }
+    const normalized = jobId.trim();
+    if (!normalized) {
+      throw new Error('explicit_job_id_required');
+    }
+    return normalized;
   }
 
   private isObjectRecord(value: unknown): value is Record<string, unknown> {
