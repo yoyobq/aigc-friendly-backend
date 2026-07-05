@@ -2,9 +2,8 @@
 import { DomainError, THIRDPARTY_ERROR } from '@core/common/errors/domain-error';
 import { Inject, Injectable } from '@nestjs/common';
 import type { AiProviderClient } from '@core/ai/ai-provider.interface';
-import { LocalMockAiProvider } from '@src/infrastructure/ai/providers/local/local-mock-ai.provider';
-import { OpenAiGenerateProvider } from '@src/infrastructure/ai/providers/openai/openai-generate.provider';
-import { QwenGenerateProvider } from '@src/infrastructure/ai/providers/qwen/qwen-generate.provider';
+import { CapabilityRegistry } from '@src/infrastructure/capability/capability.registry';
+import { AI_PROVIDER_KIND } from '../../ai-capability/ai-capability.constants';
 import { AI_PROVIDER_REGISTRY_OPTIONS, type AiProviderRegistryOptions } from '../ai-worker.options';
 
 @Injectable()
@@ -12,9 +11,7 @@ export class AiProviderRegistry {
   constructor(
     @Inject(AI_PROVIDER_REGISTRY_OPTIONS)
     private readonly options: AiProviderRegistryOptions,
-    private readonly localMockProvider: LocalMockAiProvider,
-    private readonly openAiGenerateProvider: OpenAiGenerateProvider,
-    private readonly qwenGenerateProvider: QwenGenerateProvider,
+    private readonly capabilityRegistry: CapabilityRegistry,
   ) {}
 
   getGenerateProvider(name?: string): AiProviderClient {
@@ -22,7 +19,7 @@ export class AiProviderRegistry {
   }
 
   getEmbedProvider(): AiProviderClient {
-    return this.localMockProvider;
+    return this.resolveProviderByName('mock');
   }
 
   private isMockMode(): boolean {
@@ -35,20 +32,22 @@ export class AiProviderRegistry {
 
   private resolveProvider(inputProvider?: string): AiProviderClient {
     if (this.isMockMode()) {
-      return this.localMockProvider;
+      return this.resolveProviderByName('mock');
     }
     const providerName = this.resolveProviderName(inputProvider);
     if (!providerName) {
-      return this.localMockProvider;
+      return this.resolveProviderByName('mock');
     }
-    if (providerName === this.localMockProvider.name) {
-      return this.localMockProvider;
-    }
-    if (providerName === this.openAiGenerateProvider.name) {
-      return this.openAiGenerateProvider;
-    }
-    if (providerName === this.qwenGenerateProvider.name) {
-      return this.qwenGenerateProvider;
+    return this.resolveProviderByName(providerName);
+  }
+
+  private resolveProviderByName(providerName: string): AiProviderClient {
+    const provider = this.capabilityRegistry.getProviderClient<AiProviderClient>({
+      providerKind: AI_PROVIDER_KIND,
+      providerName,
+    });
+    if (provider && provider.name.trim().toLowerCase() === providerName) {
+      return provider;
     }
     throw new DomainError(
       THIRDPARTY_ERROR.PROVIDER_NOT_SUPPORTED,

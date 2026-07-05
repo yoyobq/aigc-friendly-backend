@@ -7,6 +7,7 @@ import { DomainError, THIRDPARTY_ERROR } from '@core/common/errors/domain-error'
 import { HttpService } from '@nestjs/axios';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { CapabilityProviderBindingProvider } from '@src/infrastructure/capability/capability.decorators';
 import axios from 'axios';
 import { createHash } from 'node:crypto';
 
@@ -26,6 +27,11 @@ interface OpenAiChatCompletionResponse {
 }
 
 @Injectable()
+@CapabilityProviderBindingProvider({
+  capabilityId: 'ai.openai',
+  providerKind: 'ai.provider',
+  providerName: 'openai',
+})
 export class OpenAiGenerateProvider implements AiProviderClient {
   readonly name = 'openai';
 

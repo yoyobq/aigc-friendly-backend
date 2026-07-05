@@ -6,9 +6,15 @@ import type {
   GenerateAiContentResult,
 } from '@core/ai/ai-provider.interface';
 import { Injectable } from '@nestjs/common';
+import { CapabilityProviderBindingProvider } from '@src/infrastructure/capability/capability.decorators';
 import { createHash } from 'node:crypto';
 
 @Injectable()
+@CapabilityProviderBindingProvider({
+  capabilityId: 'ai.local-mock',
+  providerKind: 'ai.provider',
+  providerName: 'mock',
+})
 export class LocalMockAiProvider implements AiProviderClient {
   readonly name = 'mock';
 

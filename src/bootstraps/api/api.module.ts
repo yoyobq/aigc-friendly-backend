@@ -1,5 +1,6 @@
 // src/bootstraps/api/api.module.ts
 import { GraphQLAdapterModule } from '@src/adapters/api/graphql/graphql-adapter.module';
+import { CapabilityModule } from '@src/infrastructure/capability/capability.module';
 import { AppConfigModule } from '@src/infrastructure/config/config.module';
 import { DatabaseModule } from '@src/infrastructure/database/database.module';
 import { TypeOrmTransactionModule } from '@src/infrastructure/database/transaction/typeorm-transaction.module';
@@ -19,6 +20,7 @@ import { ApiService } from './api.service';
 @Module({
   imports: [
     AppConfigModule,
+    CapabilityModule.forRoot({ process: 'api' }),
     LoggerModule,
     MiddlewareModule,
     DatabaseModule,

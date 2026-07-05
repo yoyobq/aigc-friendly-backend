@@ -1,21 +1,21 @@
 // src/modules/common/ai-worker/providers/ai-provider-registry.spec.ts
+import type { AiProviderClient } from '@core/ai/ai-provider.interface';
 import { DomainError, THIRDPARTY_ERROR } from '@core/common/errors/domain-error';
-import { LocalMockAiProvider } from '@src/infrastructure/ai/providers/local/local-mock-ai.provider';
-import { OpenAiGenerateProvider } from '@src/infrastructure/ai/providers/openai/openai-generate.provider';
-import { QwenGenerateProvider } from '@src/infrastructure/ai/providers/qwen/qwen-generate.provider';
+import type { CapabilityRegistry } from '@src/infrastructure/capability/capability.registry';
 import { AiProviderRegistry } from './ai-provider-registry';
 
 describe('AiProviderRegistry', () => {
   const buildRegistry = (input: { mode: string }) => {
-    const localMockProvider = { name: 'mock' } as LocalMockAiProvider;
-    const openAiGenerateProvider = { name: 'openai' } as OpenAiGenerateProvider;
-    const qwenGenerateProvider = { name: 'qwen' } as QwenGenerateProvider;
-    return new AiProviderRegistry(
-      { providerMode: input.mode },
-      localMockProvider,
-      openAiGenerateProvider,
-      qwenGenerateProvider,
-    );
+    const providers: Readonly<Record<string, AiProviderClient>> = {
+      mock: { name: 'mock' },
+      openai: { name: 'openai' },
+      qwen: { name: 'qwen' },
+    };
+    const capabilityRegistry = {
+      getProviderClient: <TClient>(lookup: { readonly providerName: string }): TClient | null =>
+        (providers[lookup.providerName] as TClient | undefined) ?? null,
+    } as unknown as CapabilityRegistry;
+    return new AiProviderRegistry({ providerMode: input.mode }, capabilityRegistry);
   };
 
   it('AI_PROVIDER_MODE 为 mock 时始终返回 mock provider', () => {
