@@ -6,6 +6,7 @@ import { CapabilityManifestProvider } from './capability.decorators';
 @CapabilityManifestProvider({
   id: 'platform.account',
   kind: 'platform',
+  displayName: 'Platform Account',
   version: '0.1.0',
   processes: ['api', 'worker'],
   runtime: {
@@ -19,6 +20,7 @@ export class PlatformAccountCapabilityDeclaration {}
 @CapabilityManifestProvider({
   id: 'platform.auth',
   kind: 'platform',
+  displayName: 'Platform Auth',
   version: '0.1.0',
   processes: ['api', 'worker'],
   runtime: {

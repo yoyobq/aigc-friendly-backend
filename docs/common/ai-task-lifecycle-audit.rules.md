@@ -48,6 +48,9 @@ Source of truth: This file defines AI lifecycle audit rules; code examples elsew
   - API 入队写 user_action
   - Worker 生命周期写 system
   - workflow admission 写入沿用 workflow context source
+- AI worker 生命周期更新已有 API queued 记录时，应把该生命周期事件的 `source` 写为 `system`，
+  并写入来自 BullMQ job 配置的 `maxAttempts`。
+  这是 AI 审计规则的显式语义，不自动改变 email 等其他队列的既有记录更新行为。
 - actor 边界语义：
   - actor 只在 API 入队侧写入。
   - 入队成功与入队失败路径都适用。

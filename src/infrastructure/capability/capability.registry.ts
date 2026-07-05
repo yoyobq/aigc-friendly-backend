@@ -5,15 +5,28 @@ import type {
   CapabilityId,
   CapabilityManifest,
   CapabilityProcess,
+  CapabilitySessionAuthorityClaimContribution,
+  CapabilitySessionPrincipalContribution,
 } from '@app-types/common/capability.types';
 import { Inject, Injectable } from '@nestjs/common';
 import { DiscoveryService } from '@nestjs/core';
 import { BULLMQ_JOB_PAYLOAD_VALIDATORS } from '@src/infrastructure/bullmq/contracts/job-contract.registry';
 import { BULLMQ_QUEUE_REGISTRY } from '@src/infrastructure/bullmq/queue-registry';
+import type {
+  CapabilitySessionAuthorityScopeAuthorizer,
+  CapabilitySessionAuthoritySummaryResolver,
+  CapabilitySessionIdentityResolver,
+} from '@src/usecases/common/ports/capability-session-context-builder.contract';
 import {
   CAPABILITY_MANIFEST_DISCOVERABLE,
   CAPABILITY_MANIFEST_METADATA_KEY,
   CAPABILITY_HEALTH_CHECK_DISCOVERABLE,
+  CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_DISCOVERABLE,
+  CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_METADATA_KEY,
+  CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_DISCOVERABLE,
+  CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_METADATA_KEY,
+  CAPABILITY_SESSION_IDENTITY_RESOLVER_DISCOVERABLE,
+  CAPABILITY_SESSION_IDENTITY_RESOLVER_METADATA_KEY,
   CAPABILITY_PROVIDER_BINDING_DISCOVERABLE,
   CAPABILITY_PROVIDER_BINDING_METADATA_KEY,
   CAPABILITY_QUEUE_BINDING_DISCOVERABLE,
@@ -22,6 +35,9 @@ import {
   type CapabilityHealthCheckMetadata,
   type CapabilityProviderBindingMetadata,
   type CapabilityQueueBindingMetadata,
+  type CapabilitySessionAuthorityScopeAuthorizerMetadata,
+  type CapabilitySessionAuthoritySummaryResolverMetadata,
+  type CapabilitySessionIdentityResolverMetadata,
 } from './capability.decorators';
 
 export const CAPABILITY_PROCESS = Symbol('CAPABILITY_PROCESS');
@@ -36,6 +52,21 @@ export interface CapabilityHealthCheckBinding {
   readonly instance: CapabilityHealthCheck;
 }
 
+export interface CapabilitySessionIdentityResolverBinding {
+  readonly metadata: CapabilitySessionIdentityResolverMetadata;
+  readonly instance: CapabilitySessionIdentityResolver;
+}
+
+export interface CapabilitySessionAuthoritySummaryResolverBinding {
+  readonly metadata: CapabilitySessionAuthoritySummaryResolverMetadata;
+  readonly instance: CapabilitySessionAuthoritySummaryResolver;
+}
+
+export interface CapabilitySessionAuthorityScopeAuthorizerBinding {
+  readonly metadata: CapabilitySessionAuthorityScopeAuthorizerMetadata;
+  readonly instance: CapabilitySessionAuthorityScopeAuthorizer;
+}
+
 export interface CapabilityBootstrapIssue {
   readonly code:
     | 'CAPABILITY_ID_INVALID'
@@ -47,7 +78,14 @@ export interface CapabilityBootstrapIssue {
     | 'CAPABILITY_QUEUE_BINDING_MISSING'
     | 'CAPABILITY_QUEUE_NOT_REGISTERED'
     | 'CAPABILITY_JOB_NOT_REGISTERED'
-    | 'CAPABILITY_HEALTH_CHECK_MISSING';
+    | 'CAPABILITY_HEALTH_CHECK_MISSING'
+    | 'CAPABILITY_SESSION_PRINCIPAL_CODE_INVALID'
+    | 'CAPABILITY_SESSION_IDENTITY_RESOLVER_MISSING'
+    | 'CAPABILITY_SESSION_AUTHORITY_CLAIM_CODE_INVALID'
+    | 'CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_MISSING'
+    | 'CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_MISSING'
+    | 'CAPABILITY_SESSION_SUBJECT_PRINCIPAL_MISSING'
+    | 'CAPABILITY_SESSION_SUBJECT_PRINCIPAL_DEPENDENCY_MISSING';
   readonly message: string;
   readonly capabilityId?: CapabilityId;
 }
@@ -62,6 +100,9 @@ interface CapabilitySnapshot {
   readonly providerBindings: readonly CapabilityProviderBinding[];
   readonly queueBindings: readonly CapabilityQueueBindingMetadata[];
   readonly healthChecks: readonly CapabilityHealthCheckBinding[];
+  readonly sessionIdentityResolvers: readonly CapabilitySessionIdentityResolverBinding[];
+  readonly sessionAuthoritySummaryResolvers: readonly CapabilitySessionAuthoritySummaryResolverBinding[];
+  readonly sessionAuthorityScopeAuthorizers: readonly CapabilitySessionAuthorityScopeAuthorizerBinding[];
 }
 
 @Injectable()
@@ -90,6 +131,60 @@ export class CapabilityRegistry {
         normalizeRequiredText(item.metadata.providerKind) === normalizedProviderKind,
     );
     return binding ? (binding.instance as TClient) : null;
+  }
+
+  getSessionIdentityResolver(input: {
+    readonly capabilityId: CapabilityId;
+    readonly resolverName: string;
+  }): CapabilitySessionIdentityResolver | null {
+    const key = buildSessionBindingKey({
+      capabilityId: input.capabilityId,
+      name: input.resolverName,
+    });
+    const binding = this.resolveSnapshot().sessionIdentityResolvers.find(
+      (item) =>
+        buildSessionBindingKey({
+          capabilityId: item.metadata.capabilityId,
+          name: item.metadata.resolverName,
+        }) === key,
+    );
+    return binding?.instance ?? null;
+  }
+
+  getSessionAuthoritySummaryResolver(input: {
+    readonly capabilityId: CapabilityId;
+    readonly resolverName: string;
+  }): CapabilitySessionAuthoritySummaryResolver | null {
+    const key = buildSessionBindingKey({
+      capabilityId: input.capabilityId,
+      name: input.resolverName,
+    });
+    const binding = this.resolveSnapshot().sessionAuthoritySummaryResolvers.find(
+      (item) =>
+        buildSessionBindingKey({
+          capabilityId: item.metadata.capabilityId,
+          name: item.metadata.resolverName,
+        }) === key,
+    );
+    return binding?.instance ?? null;
+  }
+
+  getSessionAuthorityScopeAuthorizer(input: {
+    readonly capabilityId: CapabilityId;
+    readonly authorizerName: string;
+  }): CapabilitySessionAuthorityScopeAuthorizer | null {
+    const key = buildSessionBindingKey({
+      capabilityId: input.capabilityId,
+      name: input.authorizerName,
+    });
+    const binding = this.resolveSnapshot().sessionAuthorityScopeAuthorizers.find(
+      (item) =>
+        buildSessionBindingKey({
+          capabilityId: item.metadata.capabilityId,
+          name: item.metadata.authorizerName,
+        }) === key,
+    );
+    return binding?.instance ?? null;
   }
 
   async checkHealth(): Promise<readonly CapabilityHealthReport[]> {
@@ -134,6 +229,12 @@ export class CapabilityRegistry {
         manifests: snapshot.manifests,
         healthChecks: snapshot.healthChecks,
       }),
+      ...validateSessionContributions({
+        manifests: snapshot.manifests,
+        identityResolvers: snapshot.sessionIdentityResolvers,
+        summaryResolvers: snapshot.sessionAuthoritySummaryResolvers,
+        scopeAuthorizers: snapshot.sessionAuthorityScopeAuthorizers,
+      }),
     ];
     return { process: this.currentProcess, issues };
   }
@@ -153,6 +254,9 @@ export class CapabilityRegistry {
         providerBindings: this.discoverProviderBindings(manifests),
         queueBindings: this.discoverQueueBindings(manifests),
         healthChecks: this.discoverHealthChecks(manifests),
+        sessionIdentityResolvers: this.discoverSessionIdentityResolvers(manifests),
+        sessionAuthoritySummaryResolvers: this.discoverSessionAuthoritySummaryResolvers(manifests),
+        sessionAuthorityScopeAuthorizers: this.discoverSessionAuthorityScopeAuthorizers(manifests),
       };
     }
     return this.snapshot;
@@ -228,6 +332,76 @@ export class CapabilityRegistry {
         return { metadata, instance: wrapper.instance };
       })
       .filter((binding): binding is CapabilityHealthCheckBinding => binding !== null);
+  }
+
+  private discoverSessionIdentityResolvers(
+    activeManifests: readonly CapabilityManifest[],
+  ): readonly CapabilitySessionIdentityResolverBinding[] {
+    const activeCapabilityIds = new Set(activeManifests.map((manifest) => manifest.id));
+    return this.discoveryService
+      .getProviders({ metadataKey: CAPABILITY_SESSION_IDENTITY_RESOLVER_METADATA_KEY })
+      .map((wrapper): CapabilitySessionIdentityResolverBinding | null => {
+        const metadata = this.discoveryService.getMetadataByDecorator(
+          CAPABILITY_SESSION_IDENTITY_RESOLVER_DISCOVERABLE,
+          wrapper,
+        );
+        if (!metadata || !activeCapabilityIds.has(metadata.capabilityId)) {
+          return null;
+        }
+        if (!isCapabilitySessionIdentityResolver(wrapper.instance)) {
+          return null;
+        }
+        return { metadata, instance: wrapper.instance };
+      })
+      .filter((binding): binding is CapabilitySessionIdentityResolverBinding => binding !== null);
+  }
+
+  private discoverSessionAuthoritySummaryResolvers(
+    activeManifests: readonly CapabilityManifest[],
+  ): readonly CapabilitySessionAuthoritySummaryResolverBinding[] {
+    const activeCapabilityIds = new Set(activeManifests.map((manifest) => manifest.id));
+    return this.discoveryService
+      .getProviders({ metadataKey: CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_METADATA_KEY })
+      .map((wrapper): CapabilitySessionAuthoritySummaryResolverBinding | null => {
+        const metadata = this.discoveryService.getMetadataByDecorator(
+          CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_DISCOVERABLE,
+          wrapper,
+        );
+        if (!metadata || !activeCapabilityIds.has(metadata.capabilityId)) {
+          return null;
+        }
+        if (!isCapabilitySessionAuthoritySummaryResolver(wrapper.instance)) {
+          return null;
+        }
+        return { metadata, instance: wrapper.instance };
+      })
+      .filter(
+        (binding): binding is CapabilitySessionAuthoritySummaryResolverBinding => binding !== null,
+      );
+  }
+
+  private discoverSessionAuthorityScopeAuthorizers(
+    activeManifests: readonly CapabilityManifest[],
+  ): readonly CapabilitySessionAuthorityScopeAuthorizerBinding[] {
+    const activeCapabilityIds = new Set(activeManifests.map((manifest) => manifest.id));
+    return this.discoveryService
+      .getProviders({ metadataKey: CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_METADATA_KEY })
+      .map((wrapper): CapabilitySessionAuthorityScopeAuthorizerBinding | null => {
+        const metadata = this.discoveryService.getMetadataByDecorator(
+          CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_DISCOVERABLE,
+          wrapper,
+        );
+        if (!metadata || !activeCapabilityIds.has(metadata.capabilityId)) {
+          return null;
+        }
+        if (!isCapabilitySessionAuthorityScopeAuthorizer(wrapper.instance)) {
+          return null;
+        }
+        return { metadata, instance: wrapper.instance };
+      })
+      .filter(
+        (binding): binding is CapabilitySessionAuthorityScopeAuthorizerBinding => binding !== null,
+      );
   }
 }
 
@@ -408,6 +582,275 @@ function validateHealthChecks(input: {
   return issues;
 }
 
+function validateSessionContributions(input: {
+  readonly manifests: readonly CapabilityManifest[];
+  readonly identityResolvers: readonly CapabilitySessionIdentityResolverBinding[];
+  readonly summaryResolvers: readonly CapabilitySessionAuthoritySummaryResolverBinding[];
+  readonly scopeAuthorizers: readonly CapabilitySessionAuthorityScopeAuthorizerBinding[];
+}): readonly CapabilityBootstrapIssue[] {
+  const identityResolverKeys = buildSessionIdentityResolverKeys(input.identityResolvers);
+  const summaryResolverKeys = buildSessionAuthoritySummaryResolverKeys(input.summaryResolvers);
+  const scopeAuthorizerKeys = buildSessionAuthorityScopeAuthorizerKeys(input.scopeAuthorizers);
+  const principalOwners = buildSessionPrincipalOwnerMap(input.manifests);
+  const issues: CapabilityBootstrapIssue[] = [];
+
+  for (const manifest of input.manifests) {
+    for (const principal of manifest.contributions?.session?.principals ?? []) {
+      issues.push(
+        ...validateSessionPrincipalContribution({
+          manifest,
+          principal,
+          identityResolverKeys,
+        }),
+      );
+    }
+
+    for (const claim of manifest.contributions?.session?.authorityClaims ?? []) {
+      issues.push(
+        ...validateSessionAuthorityClaimContribution({
+          manifest,
+          claim,
+          summaryResolverKeys,
+          scopeAuthorizerKeys,
+          principalOwners,
+        }),
+      );
+    }
+  }
+
+  return issues;
+}
+
+function buildSessionIdentityResolverKeys(
+  bindings: readonly CapabilitySessionIdentityResolverBinding[],
+): ReadonlySet<string> {
+  return new Set(
+    bindings.map((binding) =>
+      buildSessionBindingKey({
+        capabilityId: binding.metadata.capabilityId,
+        name: binding.metadata.resolverName,
+      }),
+    ),
+  );
+}
+
+function buildSessionAuthoritySummaryResolverKeys(
+  bindings: readonly CapabilitySessionAuthoritySummaryResolverBinding[],
+): ReadonlySet<string> {
+  return new Set(
+    bindings.map((binding) =>
+      buildSessionBindingKey({
+        capabilityId: binding.metadata.capabilityId,
+        name: binding.metadata.resolverName,
+      }),
+    ),
+  );
+}
+
+function buildSessionAuthorityScopeAuthorizerKeys(
+  bindings: readonly CapabilitySessionAuthorityScopeAuthorizerBinding[],
+): ReadonlySet<string> {
+  return new Set(
+    bindings.map((binding) =>
+      buildSessionBindingKey({
+        capabilityId: binding.metadata.capabilityId,
+        name: binding.metadata.authorizerName,
+      }),
+    ),
+  );
+}
+
+function validateSessionPrincipalContribution(input: {
+  readonly manifest: CapabilityManifest;
+  readonly principal: CapabilitySessionPrincipalContribution;
+  readonly identityResolverKeys: ReadonlySet<string>;
+}): readonly CapabilityBootstrapIssue[] {
+  const issues: CapabilityBootstrapIssue[] = [];
+  if (!input.principal.principalCode.trim()) {
+    issues.push({
+      code: 'CAPABILITY_SESSION_PRINCIPAL_CODE_INVALID',
+      capabilityId: input.manifest.id,
+      message: `capability_session_principal_code_invalid:${input.manifest.id}`,
+    });
+  }
+  if (!input.principal.identityResolver.trim()) {
+    issues.push({
+      code: 'CAPABILITY_SESSION_IDENTITY_RESOLVER_MISSING',
+      capabilityId: input.manifest.id,
+      message: `capability_session_identity_resolver_missing:${input.manifest.id}:${input.principal.principalCode}:${input.principal.identityResolver}`,
+    });
+    return issues;
+  }
+
+  const key = buildSessionBindingKey({
+    capabilityId: input.manifest.id,
+    name: input.principal.identityResolver,
+  });
+  if (input.identityResolverKeys.has(key)) {
+    return issues;
+  }
+  issues.push({
+    code: 'CAPABILITY_SESSION_IDENTITY_RESOLVER_MISSING',
+    capabilityId: input.manifest.id,
+    message: `capability_session_identity_resolver_missing:${input.manifest.id}:${input.principal.principalCode}:${input.principal.identityResolver}`,
+  });
+  return issues;
+}
+
+function validateSessionAuthorityClaimContribution(input: {
+  readonly manifest: CapabilityManifest;
+  readonly claim: CapabilitySessionAuthorityClaimContribution;
+  readonly summaryResolverKeys: ReadonlySet<string>;
+  readonly scopeAuthorizerKeys: ReadonlySet<string>;
+  readonly principalOwners: ReadonlyMap<string, CapabilityId>;
+}): readonly CapabilityBootstrapIssue[] {
+  return [
+    ...validateSessionAuthorityClaimCode(input),
+    ...validateSessionAuthoritySummaryResolver(input),
+    ...validateSessionAuthorityScopeAuthorizer(input),
+    ...validateSessionAuthoritySubjectPrincipal(input),
+  ];
+}
+
+function validateSessionAuthorityClaimCode(input: {
+  readonly manifest: CapabilityManifest;
+  readonly claim: CapabilitySessionAuthorityClaimContribution;
+}): readonly CapabilityBootstrapIssue[] {
+  if (input.claim.claimCode.trim()) {
+    return [];
+  }
+  return [
+    {
+      code: 'CAPABILITY_SESSION_AUTHORITY_CLAIM_CODE_INVALID',
+      capabilityId: input.manifest.id,
+      message: `capability_session_authority_claim_code_invalid:${input.manifest.id}`,
+    },
+  ];
+}
+
+function validateSessionAuthoritySummaryResolver(input: {
+  readonly manifest: CapabilityManifest;
+  readonly claim: CapabilitySessionAuthorityClaimContribution;
+  readonly summaryResolverKeys: ReadonlySet<string>;
+}): readonly CapabilityBootstrapIssue[] {
+  if (!input.claim.summaryResolver.trim()) {
+    return [
+      {
+        code: 'CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_MISSING',
+        capabilityId: input.manifest.id,
+        message: `capability_session_authority_summary_resolver_missing:${input.manifest.id}:${input.claim.claimCode}:${input.claim.summaryResolver}`,
+      },
+    ];
+  }
+
+  const key = buildSessionBindingKey({
+    capabilityId: input.manifest.id,
+    name: input.claim.summaryResolver,
+  });
+  if (input.summaryResolverKeys.has(key)) {
+    return [];
+  }
+  return [
+    {
+      code: 'CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_MISSING',
+      capabilityId: input.manifest.id,
+      message: `capability_session_authority_summary_resolver_missing:${input.manifest.id}:${input.claim.claimCode}:${input.claim.summaryResolver}`,
+    },
+  ];
+}
+
+function validateSessionAuthorityScopeAuthorizer(input: {
+  readonly manifest: CapabilityManifest;
+  readonly claim: CapabilitySessionAuthorityClaimContribution;
+  readonly scopeAuthorizerKeys: ReadonlySet<string>;
+}): readonly CapabilityBootstrapIssue[] {
+  if (!input.claim.scopeAuthorizer?.trim()) {
+    return [
+      {
+        code: 'CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_MISSING',
+        capabilityId: input.manifest.id,
+        message: `capability_session_authority_scope_authorizer_missing:${input.manifest.id}:${input.claim.claimCode}`,
+      },
+    ];
+  }
+
+  const key = buildSessionBindingKey({
+    capabilityId: input.manifest.id,
+    name: input.claim.scopeAuthorizer,
+  });
+  if (input.scopeAuthorizerKeys.has(key)) {
+    return [];
+  }
+  return [
+    {
+      code: 'CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_MISSING',
+      capabilityId: input.manifest.id,
+      message: `capability_session_authority_scope_authorizer_missing:${input.manifest.id}:${input.claim.claimCode}:${input.claim.scopeAuthorizer}`,
+    },
+  ];
+}
+
+function validateSessionAuthoritySubjectPrincipal(input: {
+  readonly manifest: CapabilityManifest;
+  readonly claim: CapabilitySessionAuthorityClaimContribution;
+  readonly principalOwners: ReadonlyMap<string, CapabilityId>;
+}): readonly CapabilityBootstrapIssue[] {
+  if (!input.claim.subjectPrincipalCode?.trim()) {
+    return [];
+  }
+
+  const principalOwner = input.principalOwners.get(
+    normalizeSessionCode(input.claim.subjectPrincipalCode),
+  );
+  if (!principalOwner) {
+    return [
+      {
+        code: 'CAPABILITY_SESSION_SUBJECT_PRINCIPAL_MISSING',
+        capabilityId: input.manifest.id,
+        message: `capability_session_subject_principal_missing:${input.manifest.id}:${input.claim.claimCode}:${input.claim.subjectPrincipalCode}`,
+      },
+    ];
+  }
+  if (
+    normalizeRequiredText(principalOwner) === normalizeRequiredText(input.manifest.id) ||
+    hasDeclaredCapabilityDependency({ manifest: input.manifest, capabilityId: principalOwner })
+  ) {
+    return [];
+  }
+  return [
+    {
+      code: 'CAPABILITY_SESSION_SUBJECT_PRINCIPAL_DEPENDENCY_MISSING',
+      capabilityId: input.manifest.id,
+      message: `capability_session_subject_principal_dependency_missing:${input.manifest.id}:${input.claim.claimCode}:${input.claim.subjectPrincipalCode}:${principalOwner}`,
+    },
+  ];
+}
+
+function buildSessionPrincipalOwnerMap(
+  manifests: readonly CapabilityManifest[],
+): ReadonlyMap<string, CapabilityId> {
+  const owners = new Map<string, CapabilityId>();
+  for (const manifest of manifests) {
+    for (const principal of manifest.contributions?.session?.principals ?? []) {
+      if (!principal.principalCode.trim()) {
+        continue;
+      }
+      owners.set(normalizeSessionCode(principal.principalCode), manifest.id);
+    }
+  }
+  return owners;
+}
+
+function hasDeclaredCapabilityDependency(input: {
+  readonly manifest: CapabilityManifest;
+  readonly capabilityId: CapabilityId;
+}): boolean {
+  const normalizedCapabilityId = normalizeRequiredText(input.capabilityId);
+  return (input.manifest.dependsOn ?? []).some(
+    (dependency) => normalizeRequiredText(dependency.capabilityId) === normalizedCapabilityId,
+  );
+}
+
 function detectDependencyCycles(
   manifests: readonly CapabilityManifest[],
 ): readonly CapabilityBootstrapIssue[] {
@@ -494,8 +937,53 @@ function buildQueueBindingKey(input: {
   ].join(':');
 }
 
+function buildSessionBindingKey(input: {
+  readonly capabilityId: CapabilityId;
+  readonly name: string;
+}): string {
+  return [normalizeRequiredText(input.capabilityId), normalizeRequiredText(input.name)].join(':');
+}
+
 function isValidCapabilityId(value: string): boolean {
   return /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/.test(value);
+}
+
+function isCapabilitySessionIdentityResolver(
+  value: unknown,
+): value is CapabilitySessionIdentityResolver {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as { readonly resolveIdentity?: unknown };
+  return typeof candidate.resolveIdentity === 'function';
+}
+
+function isCapabilitySessionAuthoritySummaryResolver(
+  value: unknown,
+): value is CapabilitySessionAuthoritySummaryResolver {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as { readonly resolveSummary?: unknown };
+  return typeof candidate.resolveSummary === 'function';
+}
+
+function isCapabilitySessionAuthorityScopeAuthorizer(
+  value: unknown,
+): value is CapabilitySessionAuthorityScopeAuthorizer {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as { readonly canAccessScope?: unknown };
+  return typeof candidate.canAccessScope === 'function';
+}
+
+function normalizeSessionCode(value: string): string {
+  const normalized = value.trim().toUpperCase();
+  if (!normalized) {
+    throw new Error('capability_session_code_required');
+  }
+  return normalized;
 }
 
 function normalizeRequiredText(value: string): string {

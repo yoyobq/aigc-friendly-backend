@@ -11,6 +11,7 @@ import { AI_PROVIDER_KIND, AI_QUEUE_CAPABILITY_ID } from './ai-capability.consta
 @CapabilityManifestProvider({
   id: AI_QUEUE_CAPABILITY_ID,
   kind: 'technical',
+  displayName: 'AI Queue',
   version: '0.1.0',
   processes: ['api', 'worker'],
   contributions: {
@@ -78,6 +79,7 @@ export class AiQueueWorkflowBindingDeclaration {}
 @CapabilityManifestProvider({
   id: 'ai.local-mock',
   kind: 'technical',
+  displayName: 'AI Local Mock Provider',
   version: '0.1.0',
   processes: ['worker'],
   runtime: { healthCheck: true },
@@ -91,6 +93,7 @@ export class AiLocalMockCapabilityDeclaration {}
 @CapabilityManifestProvider({
   id: 'ai.openai',
   kind: 'technical',
+  displayName: 'OpenAI Provider',
   version: '0.1.0',
   processes: ['worker'],
   runtime: { healthCheck: true },
@@ -104,6 +107,7 @@ export class AiOpenAiCapabilityDeclaration {}
 @CapabilityManifestProvider({
   id: 'ai.qwen',
   kind: 'technical',
+  displayName: 'Qwen Provider',
   version: '0.1.0',
   processes: ['worker'],
   runtime: { healthCheck: true },

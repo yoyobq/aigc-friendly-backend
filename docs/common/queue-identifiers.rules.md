@@ -28,7 +28,10 @@ Source of truth: This file defines queue identifier rules; code examples elsewhe
 * 队列幂等标识与链路追踪标识必须分离。
 * Worker 不得再通过 `jobId` 反推业务 `traceId`。
 * API 响应级标识与异步任务级标识必须分离命名。
-* 上层仅表达业务意图，BullMQ 合法性细节统一收敛到 Producer。
+* 上层仅表达业务意图，BullMQ `jobId` 合法性细节统一收敛到 Producer。
+* Adapter 可以先按 API 输入、数据库字段和 payload contract 的稳定边界拒绝明显非法的
+  `dedupKey` / `traceId`，避免先创建 Redis job 后审计落库失败。
+  这属于不可信输入校验，不代表 adapter 接管 `jobId` 生成或 BullMQ runtime 合法性判断。
 
 ## 字段职责
 
@@ -103,6 +106,8 @@ Source of truth: This file defines queue identifier rules; code examples elsewhe
 * 若未传 `traceId`，系统生成一个新的稳定 `traceId`。
 * 若未传 `dedupKey`，系统生成合法的 `jobId`。
 * 不能把 `traceId` 直接拼成非法的 BullMQ `jobId`。
+* 由调用方传入的 `dedupKey` / `traceId` 必须在入队前满足持久化边界；当前 AI GraphQL
+  入口应拒绝超过 `AsyncTaskRecord.jobId/dedupKey` 或 `traceId` 字段长度的输入。
 * 若传入 `dedupKey` 且命中已有任务，应返回已有任务的 `jobId` 与其真实 `traceId`。
 * AsyncTaskRecord 仍以 `(queueName, jobId)` 作为更新锚点。
 * `traceId` 必须可用于链路查询。

@@ -14,6 +14,10 @@ export type CapabilityEnableState = 'enabled' | 'disabled';
 
 export type CapabilityHealthStatus = 'healthy' | 'degraded' | 'unhealthy';
 
+export type CapabilityActorSource = 'anonymous' | 'account' | 'system' | 'worker';
+
+export type CapabilityEntryPoint = 'graphql-api' | 'worker';
+
 export type CapabilityErrorCode =
   | 'CAPABILITY_DISABLED'
   | 'CAPABILITY_OPERATION_DISABLED'
@@ -58,6 +62,29 @@ export interface CapabilityQueueContribution {
   readonly dedupKeyMapping?: 'jobId' | 'bullmq-dedup-option' | 'none';
 }
 
+export interface CapabilitySessionContributionManifest {
+  readonly principals?: readonly CapabilitySessionPrincipalContribution[];
+  readonly authorityClaims?: readonly CapabilitySessionAuthorityClaimContribution[];
+}
+
+export interface CapabilitySessionPrincipalContribution {
+  readonly principalCode: string;
+  readonly description?: string;
+  readonly identityResolver: string;
+  readonly sessionProjectionKey?: string;
+  readonly exposedInSessionIdentity?: boolean;
+}
+
+export interface CapabilitySessionAuthorityClaimContribution {
+  readonly claimCode: string;
+  readonly description?: string;
+  readonly subjectPrincipalCode?: string;
+  readonly summaryResolver: string;
+  readonly scopeAuthorizer?: string;
+  readonly exposedInSession?: boolean;
+  readonly sessionProjectionKey?: string;
+}
+
 export interface CapabilityRuntimeManifest {
   readonly defaultState?: CapabilityEnableState;
   readonly isReadonly?: boolean;
@@ -67,11 +94,13 @@ export interface CapabilityRuntimeManifest {
 export interface CapabilityContributionManifest {
   readonly providers?: readonly CapabilityProviderContribution[];
   readonly queues?: readonly CapabilityQueueContribution[];
+  readonly session?: CapabilitySessionContributionManifest;
 }
 
 export interface CapabilityManifest {
   readonly id: CapabilityId;
   readonly kind: CapabilityKind;
+  readonly displayName: string;
   readonly version: string;
   readonly processes: readonly CapabilityProcess[];
   readonly dependsOn?: readonly CapabilityDependency[];
@@ -93,4 +122,24 @@ export interface CapabilityHealthReport extends CapabilityHealthResult {
 
 export interface CapabilityHealthCheck {
   check(): Promise<CapabilityHealthResult>;
+}
+
+export interface CapabilityActorContext {
+  readonly accountId?: number;
+  readonly activeRole?: string | null;
+  readonly principalCodes?: readonly string[];
+  readonly authorityClaims?: readonly string[];
+  readonly accessGroup?: readonly string[];
+  readonly source: CapabilityActorSource;
+}
+
+export interface CapabilityRequestContext {
+  readonly traceId: string;
+  readonly requestId: string;
+  readonly actor: CapabilityActorContext;
+  readonly entryPoint?: CapabilityEntryPoint;
+  readonly tenantId?: string;
+  readonly locale?: string;
+  readonly ip?: string;
+  readonly userAgent?: string;
 }

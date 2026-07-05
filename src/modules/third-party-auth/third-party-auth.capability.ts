@@ -6,6 +6,7 @@ import { CapabilityManifestProvider } from '@src/infrastructure/capability/capab
 @CapabilityManifestProvider({
   id: 'third-party-auth.weapp',
   kind: 'technical',
+  displayName: 'WeApp Third-party Auth',
   version: '0.1.0',
   processes: ['api'],
   runtime: { healthCheck: true },

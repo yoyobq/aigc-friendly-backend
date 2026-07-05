@@ -16,6 +16,7 @@ import {
 @CapabilityManifestProvider({
   id: NOTIFICATION_EMAIL_CAPABILITY_ID,
   kind: 'technical',
+  displayName: 'Notification Email',
   version: '0.1.0',
   processes: ['api', 'worker'],
   contributions: {
@@ -47,6 +48,7 @@ export class NotificationEmailQueueSendBindingDeclaration {}
 @CapabilityManifestProvider({
   id: NOTIFICATION_EMAIL_SENDMAIL_CAPABILITY_ID,
   kind: 'technical',
+  displayName: 'Notification Email Sendmail Provider',
   version: '0.1.0',
   processes: ['worker'],
   dependsOn: [{ capabilityId: NOTIFICATION_EMAIL_CAPABILITY_ID, mode: 'required' }],

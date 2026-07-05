@@ -3,12 +3,19 @@ import { Injectable } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { BULLMQ_JOBS, BULLMQ_QUEUES } from '@src/infrastructure/bullmq/bullmq.constants';
 import type { CapabilityHealthCheck } from '@app-types/common/capability.types';
+import {
+  SESSION_REFERENCE_CAPABILITY_ID,
+  SESSION_REFERENCE_CAPABILITY_PROVIDERS,
+} from '../../../test/support/capability/session-reference.fixture';
 import { CapabilityBootstrapCheck } from './capability-bootstrap-check';
 import {
   CapabilityHealthCheckProvider,
   CapabilityManifestProvider,
   CapabilityProviderBindingProvider,
   CapabilityQueueBindingProvider,
+  CapabilitySessionAuthorityScopeAuthorizerProvider,
+  CapabilitySessionAuthoritySummaryResolverProvider,
+  CapabilitySessionIdentityResolverProvider,
 } from './capability.decorators';
 import { CapabilityModule } from './capability.module';
 import { CapabilityBootstrapError, CapabilityRegistry } from './capability.registry';
@@ -23,6 +30,7 @@ describe('CapabilityRegistry', () => {
     @CapabilityManifestProvider({
       id: 'test.provider',
       kind: 'technical',
+      displayName: 'Test Provider',
       version: '0.1.0',
       processes: ['worker'],
       runtime: { healthCheck: true },
@@ -58,6 +66,7 @@ describe('CapabilityRegistry', () => {
     @CapabilityManifestProvider({
       id: 'test.queue',
       kind: 'technical',
+      displayName: 'Test Queue',
       version: '0.1.0',
       processes: ['worker'],
       contributions: {
@@ -121,6 +130,7 @@ describe('CapabilityRegistry', () => {
     @CapabilityManifestProvider({
       id: 'test.worker-only',
       kind: 'technical',
+      displayName: 'Test Worker Only',
       version: '0.1.0',
       processes: ['worker'],
     })
@@ -141,6 +151,7 @@ describe('CapabilityRegistry', () => {
     @CapabilityManifestProvider({
       id: 'test.missing-provider',
       kind: 'technical',
+      displayName: 'Test Missing Provider',
       version: '0.1.0',
       processes: ['worker'],
       contributions: {
@@ -161,11 +172,73 @@ describe('CapabilityRegistry', () => {
     await module.close();
   });
 
+  it('fails validation when required capability dependencies form a cycle', async () => {
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.cycle-a',
+      kind: 'technical',
+      displayName: 'Test Cycle A',
+      version: '0.1.0',
+      processes: ['worker'],
+      dependsOn: [{ capabilityId: 'test.cycle-b', mode: 'required' }],
+    })
+    class CycleACapability {}
+
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.cycle-b',
+      kind: 'technical',
+      displayName: 'Test Cycle B',
+      version: '0.1.0',
+      processes: ['worker'],
+      dependsOn: [{ capabilityId: 'test.cycle-a', mode: 'required' }],
+    })
+    class CycleBCapability {}
+
+    const module = await buildModule([CycleACapability, CycleBCapability]);
+    const registry = module.get(CapabilityRegistry);
+
+    expect(registry.validateBootstrap().issues).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'CAPABILITY_DEPENDENCY_CYCLE' })]),
+    );
+    await module.close();
+  });
+
+  it('allows linear required capability dependencies', async () => {
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.linear-a',
+      kind: 'technical',
+      displayName: 'Test Linear A',
+      version: '0.1.0',
+      processes: ['worker'],
+      dependsOn: [{ capabilityId: 'test.linear-b', mode: 'required' }],
+    })
+    class LinearACapability {}
+
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.linear-b',
+      kind: 'technical',
+      displayName: 'Test Linear B',
+      version: '0.1.0',
+      processes: ['worker'],
+    })
+    class LinearBCapability {}
+
+    const module = await buildModule([LinearACapability, LinearBCapability]);
+    const registry = module.get(CapabilityRegistry);
+
+    expect(registry.validateBootstrap().issues).toEqual([]);
+    await module.close();
+  });
+
   it('fails validation when a declared queue job is not registered', async () => {
     @Injectable()
     @CapabilityManifestProvider({
       id: 'test.invalid-queue',
       kind: 'technical',
+      displayName: 'Test Invalid Queue',
       version: '0.1.0',
       processes: ['worker'],
       contributions: {
@@ -205,6 +278,7 @@ describe('CapabilityRegistry', () => {
     @CapabilityManifestProvider({
       id: 'test.missing-health',
       kind: 'technical',
+      displayName: 'Test Missing Health',
       version: '0.1.0',
       processes: ['worker'],
       runtime: { healthCheck: true },
@@ -220,6 +294,551 @@ describe('CapabilityRegistry', () => {
       ]),
     );
     expect(() => registry.assertBootstrapValid()).toThrow(CapabilityBootstrapError);
+    await module.close();
+  });
+
+  it('collects the reference session capability fixture through Discovery', async () => {
+    const module = await buildModule([...SESSION_REFERENCE_CAPABILITY_PROVIDERS], 'api');
+    const registry = module.get(CapabilityRegistry);
+
+    expect(registry.validateBootstrap().issues).toEqual([]);
+    expect(registry.getActiveManifests().map((manifest) => manifest.id)).toContain(
+      SESSION_REFERENCE_CAPABILITY_ID,
+    );
+    await module.close();
+  });
+
+  it('does not load the reference session fixture in default capability module wiring', async () => {
+    const module = await buildModule([], 'api');
+    const registry = module.get(CapabilityRegistry);
+
+    expect(registry.getActiveManifests().map((manifest) => manifest.id)).not.toContain(
+      SESSION_REFERENCE_CAPABILITY_ID,
+    );
+    await module.close();
+  });
+
+  it('fails validation when a declared session principal lacks identity resolver binding', async () => {
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.session-missing-identity',
+      kind: 'business',
+      displayName: 'Test Session Missing Identity',
+      version: '0.1.0',
+      processes: ['api'],
+      contributions: {
+        session: {
+          principals: [
+            {
+              principalCode: 'CLIENT',
+              identityResolver: 'missingIdentityResolver',
+            },
+          ],
+        },
+      },
+    })
+    class MissingIdentityResolverCapability {}
+
+    const module = await buildModule([MissingIdentityResolverCapability], 'api');
+    const registry = module.get(CapabilityRegistry);
+
+    expect(registry.validateBootstrap().issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'CAPABILITY_SESSION_IDENTITY_RESOLVER_MISSING' }),
+      ]),
+    );
+    await module.close();
+  });
+
+  it('fails validation when a decorated session identity resolver is not callable', async () => {
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.session-invalid-identity',
+      kind: 'business',
+      displayName: 'Test Session Invalid Identity',
+      version: '0.1.0',
+      processes: ['api'],
+      contributions: {
+        session: {
+          principals: [
+            {
+              principalCode: 'CLIENT',
+              identityResolver: 'clientIdentityResolver',
+            },
+          ],
+        },
+      },
+    })
+    class InvalidIdentityResolverCapability {}
+
+    @Injectable()
+    @CapabilitySessionIdentityResolverProvider({
+      capabilityId: 'test.session-invalid-identity',
+      resolverName: 'clientIdentityResolver',
+    })
+    class InvalidIdentityResolver {}
+
+    const module = await buildModule(
+      [InvalidIdentityResolverCapability, InvalidIdentityResolver],
+      'api',
+    );
+    const registry = module.get(CapabilityRegistry);
+
+    expect(registry.validateBootstrap().issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'CAPABILITY_SESSION_IDENTITY_RESOLVER_MISSING' }),
+      ]),
+    );
+    await module.close();
+  });
+
+  it('reports structured issues for blank session contribution fields', async () => {
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.session-blank-fields',
+      kind: 'business',
+      displayName: 'Test Session Blank Fields',
+      version: '0.1.0',
+      processes: ['api'],
+      contributions: {
+        session: {
+          principals: [
+            {
+              principalCode: '   ',
+              identityResolver: '   ',
+            },
+          ],
+          authorityClaims: [
+            {
+              claimCode: '   ',
+              subjectPrincipalCode: '   ',
+              summaryResolver: '   ',
+              scopeAuthorizer: '   ',
+            },
+          ],
+        },
+      },
+    })
+    class BlankSessionFieldsCapability {}
+
+    const module = await buildModule([BlankSessionFieldsCapability], 'api');
+    const registry = module.get(CapabilityRegistry);
+
+    expect(() => registry.validateBootstrap()).not.toThrow();
+    expect(registry.validateBootstrap().issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'CAPABILITY_SESSION_PRINCIPAL_CODE_INVALID' }),
+        expect.objectContaining({ code: 'CAPABILITY_SESSION_IDENTITY_RESOLVER_MISSING' }),
+        expect.objectContaining({ code: 'CAPABILITY_SESSION_AUTHORITY_CLAIM_CODE_INVALID' }),
+        expect.objectContaining({
+          code: 'CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_MISSING',
+        }),
+        expect.objectContaining({
+          code: 'CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_MISSING',
+        }),
+      ]),
+    );
+    await module.close();
+  });
+
+  it('fails validation when a declared authority claim lacks summary resolver or scope authorizer', async () => {
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.session-missing-authority',
+      kind: 'business',
+      displayName: 'Test Session Missing Authority',
+      version: '0.1.0',
+      processes: ['api'],
+      contributions: {
+        session: {
+          principals: [
+            {
+              principalCode: 'CLIENT',
+              identityResolver: 'clientIdentityResolver',
+            },
+          ],
+          authorityClaims: [
+            {
+              claimCode: 'RESOURCE_MANAGER',
+              subjectPrincipalCode: 'CLIENT',
+              summaryResolver: 'missingSummaryResolver',
+            },
+          ],
+        },
+      },
+    })
+    class MissingAuthorityCapability {}
+
+    @Injectable()
+    @CapabilitySessionIdentityResolverProvider({
+      capabilityId: 'test.session-missing-authority',
+      resolverName: 'clientIdentityResolver',
+    })
+    class ClientIdentityResolver {
+      resolveIdentity(): Promise<{ readonly principalCode: 'CLIENT' }> {
+        return Promise.resolve({ principalCode: 'CLIENT' });
+      }
+    }
+
+    const module = await buildModule([MissingAuthorityCapability, ClientIdentityResolver], 'api');
+    const registry = module.get(CapabilityRegistry);
+
+    expect(registry.validateBootstrap().issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_MISSING',
+        }),
+        expect.objectContaining({
+          code: 'CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_MISSING',
+        }),
+      ]),
+    );
+    await module.close();
+  });
+
+  it('fails validation when decorated authority resolver or authorizer is not callable', async () => {
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.session-invalid-authority',
+      kind: 'business',
+      displayName: 'Test Session Invalid Authority',
+      version: '0.1.0',
+      processes: ['api'],
+      contributions: {
+        session: {
+          principals: [
+            {
+              principalCode: 'CLIENT',
+              identityResolver: 'clientIdentityResolver',
+            },
+          ],
+          authorityClaims: [
+            {
+              claimCode: 'RESOURCE_MANAGER',
+              subjectPrincipalCode: 'CLIENT',
+              summaryResolver: 'resourceManagerSummaryResolver',
+              scopeAuthorizer: 'resourceManagerScopeAuthorizer',
+            },
+          ],
+        },
+      },
+    })
+    class InvalidAuthorityCapability {}
+
+    @Injectable()
+    @CapabilitySessionIdentityResolverProvider({
+      capabilityId: 'test.session-invalid-authority',
+      resolverName: 'clientIdentityResolver',
+    })
+    class ClientIdentityResolver {
+      resolveIdentity(): Promise<{ readonly principalCode: 'CLIENT' }> {
+        return Promise.resolve({ principalCode: 'CLIENT' });
+      }
+    }
+
+    @Injectable()
+    @CapabilitySessionAuthoritySummaryResolverProvider({
+      capabilityId: 'test.session-invalid-authority',
+      resolverName: 'resourceManagerSummaryResolver',
+    })
+    class InvalidSummaryResolver {}
+
+    @Injectable()
+    @CapabilitySessionAuthorityScopeAuthorizerProvider({
+      capabilityId: 'test.session-invalid-authority',
+      authorizerName: 'resourceManagerScopeAuthorizer',
+    })
+    class InvalidScopeAuthorizer {}
+
+    const module = await buildModule(
+      [
+        InvalidAuthorityCapability,
+        ClientIdentityResolver,
+        InvalidSummaryResolver,
+        InvalidScopeAuthorizer,
+      ],
+      'api',
+    );
+    const registry = module.get(CapabilityRegistry);
+
+    expect(registry.validateBootstrap().issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_MISSING',
+        }),
+        expect.objectContaining({
+          code: 'CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_MISSING',
+        }),
+      ]),
+    );
+    await module.close();
+  });
+
+  it('fails validation when an authority claim references an unknown subject principal', async () => {
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.session-missing-subject',
+      kind: 'business',
+      displayName: 'Test Session Missing Subject',
+      version: '0.1.0',
+      processes: ['api'],
+      contributions: {
+        session: {
+          authorityClaims: [
+            {
+              claimCode: 'RESOURCE_MANAGER',
+              subjectPrincipalCode: 'CLIENT',
+              summaryResolver: 'resourceManagerSummaryResolver',
+              scopeAuthorizer: 'resourceManagerScopeAuthorizer',
+            },
+          ],
+        },
+      },
+    })
+    class MissingSubjectCapability {}
+
+    @Injectable()
+    @CapabilitySessionAuthoritySummaryResolverProvider({
+      capabilityId: 'test.session-missing-subject',
+      resolverName: 'resourceManagerSummaryResolver',
+    })
+    class ResourceManagerSummaryResolver {
+      resolveSummary(): Promise<{ readonly claimCode: 'RESOURCE_MANAGER' }> {
+        return Promise.resolve({ claimCode: 'RESOURCE_MANAGER' });
+      }
+    }
+
+    @Injectable()
+    @CapabilitySessionAuthorityScopeAuthorizerProvider({
+      capabilityId: 'test.session-missing-subject',
+      authorizerName: 'resourceManagerScopeAuthorizer',
+    })
+    class ResourceManagerScopeAuthorizer {
+      canAccessScope(): Promise<{ readonly allowed: boolean }> {
+        return Promise.resolve({ allowed: true });
+      }
+    }
+
+    const module = await buildModule(
+      [MissingSubjectCapability, ResourceManagerSummaryResolver, ResourceManagerScopeAuthorizer],
+      'api',
+    );
+    const registry = module.get(CapabilityRegistry);
+
+    expect(registry.validateBootstrap().issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'CAPABILITY_SESSION_SUBJECT_PRINCIPAL_MISSING' }),
+      ]),
+    );
+    await module.close();
+  });
+
+  it('fails validation when an authority claim references another capability principal without dependsOn', async () => {
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.session-principal-owner',
+      kind: 'business',
+      displayName: 'Test Session Principal Owner',
+      version: '0.1.0',
+      processes: ['api'],
+      contributions: {
+        session: {
+          principals: [
+            {
+              principalCode: 'CLIENT',
+              identityResolver: 'clientIdentityResolver',
+            },
+          ],
+        },
+      },
+    })
+    class PrincipalOwnerCapability {}
+
+    @Injectable()
+    @CapabilitySessionIdentityResolverProvider({
+      capabilityId: 'test.session-principal-owner',
+      resolverName: 'clientIdentityResolver',
+    })
+    class ClientIdentityResolver {
+      resolveIdentity(): Promise<{ readonly principalCode: 'CLIENT' }> {
+        return Promise.resolve({ principalCode: 'CLIENT' });
+      }
+    }
+
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.session-claim-owner',
+      kind: 'business',
+      displayName: 'Test Session Claim Owner',
+      version: '0.1.0',
+      processes: ['api'],
+      contributions: {
+        session: {
+          authorityClaims: [
+            {
+              claimCode: 'RESOURCE_MANAGER',
+              subjectPrincipalCode: 'CLIENT',
+              summaryResolver: 'resourceManagerSummaryResolver',
+              scopeAuthorizer: 'resourceManagerScopeAuthorizer',
+            },
+          ],
+        },
+      },
+    })
+    class ClaimOwnerCapability {}
+
+    @Injectable()
+    @CapabilitySessionAuthoritySummaryResolverProvider({
+      capabilityId: 'test.session-claim-owner',
+      resolverName: 'resourceManagerSummaryResolver',
+    })
+    class ResourceManagerSummaryResolver {
+      resolveSummary(): Promise<{ readonly claimCode: 'RESOURCE_MANAGER' }> {
+        return Promise.resolve({ claimCode: 'RESOURCE_MANAGER' });
+      }
+    }
+
+    @Injectable()
+    @CapabilitySessionAuthorityScopeAuthorizerProvider({
+      capabilityId: 'test.session-claim-owner',
+      authorizerName: 'resourceManagerScopeAuthorizer',
+    })
+    class ResourceManagerScopeAuthorizer {
+      canAccessScope(): Promise<{ readonly allowed: boolean }> {
+        return Promise.resolve({ allowed: true });
+      }
+    }
+
+    const module = await buildModule(
+      [
+        PrincipalOwnerCapability,
+        ClientIdentityResolver,
+        ClaimOwnerCapability,
+        ResourceManagerSummaryResolver,
+        ResourceManagerScopeAuthorizer,
+      ],
+      'api',
+    );
+    const registry = module.get(CapabilityRegistry);
+
+    expect(registry.validateBootstrap().issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'CAPABILITY_SESSION_SUBJECT_PRINCIPAL_DEPENDENCY_MISSING',
+        }),
+      ]),
+    );
+    await module.close();
+  });
+
+  it('allows an authority claim to reference another capability principal when dependsOn is declared', async () => {
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.session-principal-dependency-owner',
+      kind: 'business',
+      displayName: 'Test Session Principal Dependency Owner',
+      version: '0.1.0',
+      processes: ['api'],
+      contributions: {
+        session: {
+          principals: [
+            {
+              principalCode: 'CLIENT',
+              identityResolver: 'clientIdentityResolver',
+            },
+          ],
+        },
+      },
+    })
+    class PrincipalOwnerCapability {}
+
+    @Injectable()
+    @CapabilitySessionIdentityResolverProvider({
+      capabilityId: 'test.session-principal-dependency-owner',
+      resolverName: 'clientIdentityResolver',
+    })
+    class ClientIdentityResolver {
+      resolveIdentity(): Promise<{ readonly principalCode: 'CLIENT' }> {
+        return Promise.resolve({ principalCode: 'CLIENT' });
+      }
+    }
+
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.session-claim-dependency-owner',
+      kind: 'business',
+      displayName: 'Test Session Claim Dependency Owner',
+      version: '0.1.0',
+      processes: ['api'],
+      dependsOn: [{ capabilityId: 'test.session-principal-dependency-owner', mode: 'required' }],
+      contributions: {
+        session: {
+          authorityClaims: [
+            {
+              claimCode: 'RESOURCE_MANAGER',
+              subjectPrincipalCode: 'CLIENT',
+              summaryResolver: 'resourceManagerSummaryResolver',
+              scopeAuthorizer: 'resourceManagerScopeAuthorizer',
+            },
+          ],
+        },
+      },
+    })
+    class ClaimOwnerCapability {}
+
+    @Injectable()
+    @CapabilitySessionAuthoritySummaryResolverProvider({
+      capabilityId: 'test.session-claim-dependency-owner',
+      resolverName: 'resourceManagerSummaryResolver',
+    })
+    class ResourceManagerSummaryResolver {
+      resolveSummary(): Promise<{ readonly claimCode: 'RESOURCE_MANAGER' }> {
+        return Promise.resolve({ claimCode: 'RESOURCE_MANAGER' });
+      }
+    }
+
+    @Injectable()
+    @CapabilitySessionAuthorityScopeAuthorizerProvider({
+      capabilityId: 'test.session-claim-dependency-owner',
+      authorizerName: 'resourceManagerScopeAuthorizer',
+    })
+    class ResourceManagerScopeAuthorizer {
+      canAccessScope(): Promise<{ readonly allowed: boolean }> {
+        return Promise.resolve({ allowed: true });
+      }
+    }
+
+    const module = await buildModule(
+      [
+        PrincipalOwnerCapability,
+        ClientIdentityResolver,
+        ClaimOwnerCapability,
+        ResourceManagerSummaryResolver,
+        ResourceManagerScopeAuthorizer,
+      ],
+      'api',
+    );
+    const registry = module.get(CapabilityRegistry);
+
+    expect(registry.validateBootstrap().issues).toEqual([]);
+    expect(
+      registry.getSessionIdentityResolver({
+        capabilityId: 'test.session-principal-dependency-owner',
+        resolverName: 'clientIdentityResolver',
+      }),
+    ).toBeInstanceOf(ClientIdentityResolver);
+    expect(
+      registry.getSessionAuthoritySummaryResolver({
+        capabilityId: 'test.session-claim-dependency-owner',
+        resolverName: 'resourceManagerSummaryResolver',
+      }),
+    ).toBeInstanceOf(ResourceManagerSummaryResolver);
+    expect(
+      registry.getSessionAuthorityScopeAuthorizer({
+        capabilityId: 'test.session-claim-dependency-owner',
+        authorizerName: 'resourceManagerScopeAuthorizer',
+      }),
+    ).toBeInstanceOf(ResourceManagerScopeAuthorizer);
     await module.close();
   });
 });

@@ -28,6 +28,21 @@ export interface CapabilityHealthCheckMetadata {
   readonly name: string;
 }
 
+export interface CapabilitySessionIdentityResolverMetadata {
+  readonly capabilityId: CapabilityId;
+  readonly resolverName: string;
+}
+
+export interface CapabilitySessionAuthoritySummaryResolverMetadata {
+  readonly capabilityId: CapabilityId;
+  readonly resolverName: string;
+}
+
+export interface CapabilitySessionAuthorityScopeAuthorizerMetadata {
+  readonly capabilityId: CapabilityId;
+  readonly authorizerName: string;
+}
+
 export const CAPABILITY_MANIFEST_DISCOVERABLE =
   DiscoveryService.createDecorator<CapabilityManifest>();
 export const CAPABILITY_PROVIDER_BINDING_DISCOVERABLE =
@@ -36,12 +51,24 @@ export const CAPABILITY_QUEUE_BINDING_DISCOVERABLE =
   DiscoveryService.createDecorator<CapabilityQueueBindingMetadata>();
 export const CAPABILITY_HEALTH_CHECK_DISCOVERABLE =
   DiscoveryService.createDecorator<CapabilityHealthCheckMetadata>();
+export const CAPABILITY_SESSION_IDENTITY_RESOLVER_DISCOVERABLE =
+  DiscoveryService.createDecorator<CapabilitySessionIdentityResolverMetadata>();
+export const CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_DISCOVERABLE =
+  DiscoveryService.createDecorator<CapabilitySessionAuthoritySummaryResolverMetadata>();
+export const CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_DISCOVERABLE =
+  DiscoveryService.createDecorator<CapabilitySessionAuthorityScopeAuthorizerMetadata>();
 
 export const CAPABILITY_MANIFEST_METADATA_KEY = CAPABILITY_MANIFEST_DISCOVERABLE.KEY;
 export const CAPABILITY_PROVIDER_BINDING_METADATA_KEY =
   CAPABILITY_PROVIDER_BINDING_DISCOVERABLE.KEY;
 export const CAPABILITY_QUEUE_BINDING_METADATA_KEY = CAPABILITY_QUEUE_BINDING_DISCOVERABLE.KEY;
 export const CAPABILITY_HEALTH_CHECK_METADATA_KEY = CAPABILITY_HEALTH_CHECK_DISCOVERABLE.KEY;
+export const CAPABILITY_SESSION_IDENTITY_RESOLVER_METADATA_KEY =
+  CAPABILITY_SESSION_IDENTITY_RESOLVER_DISCOVERABLE.KEY;
+export const CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_METADATA_KEY =
+  CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_DISCOVERABLE.KEY;
+export const CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_METADATA_KEY =
+  CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_DISCOVERABLE.KEY;
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export function CapabilityManifestProvider(manifest: CapabilityManifest): ClassDecorator {
@@ -67,6 +94,27 @@ export function CapabilityHealthCheckProvider(
   metadata: CapabilityHealthCheckMetadata,
 ): ClassDecorator {
   return CAPABILITY_HEALTH_CHECK_DISCOVERABLE(metadata);
+}
+
+// eslint-disable-next-line @typescript-eslint/naming-convention
+export function CapabilitySessionIdentityResolverProvider(
+  metadata: CapabilitySessionIdentityResolverMetadata,
+): ClassDecorator {
+  return CAPABILITY_SESSION_IDENTITY_RESOLVER_DISCOVERABLE(metadata);
+}
+
+// eslint-disable-next-line @typescript-eslint/naming-convention
+export function CapabilitySessionAuthoritySummaryResolverProvider(
+  metadata: CapabilitySessionAuthoritySummaryResolverMetadata,
+): ClassDecorator {
+  return CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_DISCOVERABLE(metadata);
+}
+
+// eslint-disable-next-line @typescript-eslint/naming-convention
+export function CapabilitySessionAuthorityScopeAuthorizerProvider(
+  metadata: CapabilitySessionAuthorityScopeAuthorizerMetadata,
+): ClassDecorator {
+  return CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_DISCOVERABLE(metadata);
 }
 
 export function isCapabilityHealthCheck(value: unknown): value is CapabilityHealthCheck {
