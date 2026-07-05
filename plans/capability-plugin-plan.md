@@ -450,11 +450,13 @@ P2.1 是 P2 的实现收口，不扩大到 P3 dispatcher，也不改真实 auth/
 - Session contribution：跨 capability `subjectPrincipalCode` 有 `dependsOn` 时通过；resolver / authorizer 不可调用时失败。
 - Session builder：JWT 兼容字段可构建 context；reference fixture resolver 可填充 `principalCodes` / `authorityClaims`。
 
-## P3: Business Capability Pilot 与 API Surface 对账
+## P3: Capability Boundary Runtime 与 Surface 对账
 
 P3 等 technical capability、session contribution 和 reference fixture 稳定后再推进。它需要真实业务语义或从业务项目回投的明确样本；当前基线不虚构业务域。
 
-### C3.0 Dispatcher / Bus / Envelope 最小运行时
+P3 的目标是收口 capability 边界、声明面和启动对账，不实现运行态启停、真实 queue transport、event publisher 或 capability-aware GraphQL disabled guard。当前基线没有足够小且真实的 business capability 可作为默认 pilot，因此先落 GraphQL surface、data resource 与 resource claim 的通用声明和启动对账；`client` / `resource-manager` 只保留为测试 fixture 样本，不进入默认装配。真实 business capability pilot 继续等待明确业务样本后再推进。
+
+### C3.0 Dispatcher / Bus / Envelope 最小 Boundary
 
 P0 到 P2 保留现有直接调用模型，不通过 dispatcher 重写既有流程。进入 business capability pilot 前，再引入 direction 中的最小 runtime boundary。
 
@@ -486,36 +488,22 @@ P3a 锁定范围：
 - queue operation 可解析到现有 BullMQ queue/job descriptor，但不会 enqueue。
 - event subscriber fixture 可被 registry 发现，但不会触发真实副作用。
 
-### C3.1 Business Capability Pilot
-
-选择一个小而完整的业务能力作为样本，要求它至少包含：
-
-- manifest
-- operation 声明
-- usecase handler
-- QueryService 或 module service
-- GraphQL surface 声明
-- 权限声明
-
-不建议在没有真实业务样本时虚构复杂 business capability。
-
-约束：
-
-- pilot 必须先写清 owner bounded context，不能把多个既有域打包成一个“方便演示”的 capability。
-- pilot handler 只能落在 usecase 层或该 capability owner 的合法 layer 中，不允许 adapter 直接调 handler。
-- 多独立写语义必须回到 Flow Usecase，不用 dispatcher 隐藏流程。
-- 若 pilot 暴露 direction 未覆盖的新 contribution 形态，先更新 direction，再实现 plan。
-
-### C3.2 GraphQL Surface 对账
+### C3.1 GraphQL Surface 对账
 
 要求：
 
 - manifest 声明 GraphQL operation。
 - API bootstrap 从 schema 或显式注册表对账 resolver。
-- 部署态 / 运行态关闭保持 schema 一致，通过 guard / resolver 返回 capability disabled。
+- P3 只做 schema surface 启动对账；部署态 / 运行态关闭保持 schema 一致、通过 guard / resolver 返回 capability disabled 的能力放到 P4 runtime。
 - GraphQL resolver / DTO 仍归 adapters，manifest 只做 surface 声明和对账真源。
 
-### C3.3 Resource Claim 与 Ownership 对账
+验收：
+
+- manifest 声明的 GraphQL operation 在 schema 中缺失时，API 侧启动对账失败。
+- 旧 resolver 未声明 manifest 时不失败，便于渐进 capability 化。
+- 对账逻辑在 API adapter / bootstrap 侧触发，不让 infrastructure registry 静态 import resolver。
+
+### C3.2 Resource Claim 与 Ownership 对账
 
 范围：
 
@@ -530,9 +518,110 @@ P3a 锁定范围：
 - `readShared` 只表达数据资源的共享读取声明，不代表其他 capability 可以绕过 owner 的 Query operation 直接跨 capability 读表。
 - 跨 capability 读取仍优先通过 owner 的 Query operation；若确实需要同进程模块级共享读取，必须单独写清读口径、权限和依赖方向。
 
-## P4: 稳定规则沉淀
+验收：
 
-P4 只在 P0 到 P3 的实现被测试验证后推进。
+- `data.resources`、`data.migrations` 和 `resourceClaims` 的非法声明产出结构化 bootstrap issue。
+- `relation: owns` 的 owner 必须是当前 capability。
+- `relation: dependsOn | contributes` 指向其他 capability 时，当前 manifest 必须声明对应 dependency。
+
+### C3.3 Business Capability Pilot
+
+真实 business capability pilot 不在当前 P3 阻塞主线。出现足够小且真实的业务样本后再推进，要求它至少包含：
+
+- manifest
+- operation 声明
+- usecase handler
+- QueryService 或 module service
+- GraphQL surface 声明
+- 权限声明
+
+约束：
+
+- pilot 必须先写清 owner bounded context，不能把多个既有域打包成一个“方便演示”的 capability。
+- pilot handler 只能落在 usecase 层或该 capability owner 的合法 layer 中，不允许 adapter 直接调 handler。
+- 多独立写语义必须回到 Flow Usecase，不用 dispatcher 隐藏流程。
+- 若 pilot 暴露 direction 未覆盖的新 contribution 形态，先更新 direction，再实现 plan。
+
+## P4: Runtime Enablement & Transport
+
+P4 承接 direction 中必须完成、但当前 P3 不实现的运行态能力。P4 之前不得把 runtime disabled、queue transport 或 event publisher 描述成已可用。
+
+### C4.1 Runtime State 与 Kill Switch
+
+要求：
+
+- 明确安装态、部署态、运行态、kill switch 的来源和优先级。
+- `platform.*` 不参与 enableState 状态机，依赖校验中恒视为 enabled。
+- 运行态关闭返回统一 capability error，不删除能力数据。
+- 健康检查失败不自动等同 disabled；是否触发 kill switch 由单独策略决定。
+- 启停状态不写入业务数据库；运行态配置来源应走平台配置或健康降级通道。
+
+验收：
+
+- disabled / operation disabled / kill switch 的错误语义有单测覆盖。
+- runtime state 查询不反向依赖业务 modules。
+
+### C4.2 GraphQL Runtime Guard / Resolver 语义
+
+要求：
+
+- code-first schema 保持一致；能力关闭时不动态摘 resolver。
+- capability-aware guard 或 resolver helper 返回 `CAPABILITY_DISABLED` / `CAPABILITY_OPERATION_DISABLED`。
+- adapter 仍只解析输入、调用 usecase、映射输出；不得把 dispatcher 当成 resolver 的通用替代入口。
+
+验收：
+
+- 能力关闭时 GraphQL schema 不变。
+- GraphQL error contract 不回退。
+
+### C4.3 Queue Transport
+
+要求：
+
+- 实现 dispatcher queue transport 的 envelope -> BullMQ job data 映射。
+- `queueName + jobName` 继续以 BullMQ registry 为真源，不强行改为 capability id。
+- `traceId` / `requestId` 来自 `envelope.context`；BullMQ `jobId` 不得替代 trace。
+- `dedupKey` 映射为 jobId 或 dedup option 时，必须由 queue binding 策略显式声明。
+- Worker adapter 从 job data 恢复 envelope，并用 envelope context 初始化 `CapabilityRequestContextStore`。
+- 跨进程 capability 协作必须走 queue transport 或后续 remote transport，不走 in-process。
+
+验收：
+
+- API 进程无法 in-process 调用 worker-only operation。
+- queue transport enqueue 与 worker context restore 有窄测试或 worker e2e 覆盖。
+
+### C4.4 Event Runtime
+
+要求：
+
+- 补齐 event publisher token / provider。
+- in-process event 默认 fire-and-forget，只保证派发一次。
+- in-process subscriber 失败进入审计或结构化记录，不冒泡回发布方。
+- 需要可靠重试的 event 应声明走 queue transport。
+- `CapabilityEvent.eventId` 由发布方生成并全局唯一，用于订阅方幂等；`idempotencyKey` 保留给 command 调用幂等。
+
+验收：
+
+- event publisher / subscriber 路径与 command / query handler 路径在测试中可区分。
+- in-process event 不承诺自动重试。
+
+### C4.5 Permission Runtime
+
+要求：
+
+- 当前 allow-all checker 只作为 bootstrap 默认值或测试 fallback。
+- 后续 permission checker 应接入后端权限真源，不与前端菜单 / 功能点 manifest 共用。
+- operation 级 `requiredPermissions` 优先；permission manifest 只做声明、启动对账和文档/派生用途。
+- in-process 场景权限检查优先使用启动期或请求期内存映射，避免每次跨 capability 调用查库。
+
+验收：
+
+- dispatcher 前置权限检查仍发生在 handler 调用前。
+- 权限失败统一折叠为 `CAPABILITY_PERMISSION_DENIED`。
+
+## P5: 稳定规则沉淀
+
+P5 只在 P0 到 P4 的实现被测试验证后推进。
 
 输出：
 
@@ -540,7 +629,7 @@ P4 只在 P0 到 P3 的实现被测试验证后推进。
 - 将仍未完成的尾项拆到 `*-followup.md`。
 - 将已经完成且只保留背景价值的内容归档到 `docs/deprecated/`。
 
-不在 P4 前把 direction 删除；direction 继续保留为历史判断和架构解释。
+不在 P5 前把 direction 删除；direction 继续保留为历史判断和架构解释。
 
 ## 总体验收
 
@@ -552,6 +641,7 @@ P4 只在 P0 到 P3 的实现被测试验证后推进。
 - Capability error mapping tests
 - Technical capability health check tests
 - Dispatcher / bus / envelope tests 在 P3 引入后补齐
+- Runtime state / queue transport / event runtime tests 在 P4 引入后补齐
 - Worker e2e 或相关窄 e2e
 - GraphQL error contract 不回退
 
@@ -561,3 +651,4 @@ P4 只在 P0 到 P3 的实现被测试验证后推进。
 - 如果某个 common 子目录无法判断归属，不强行迁移，先标为待审视。
 - 如果 session contribution 迫使 adapter 承担业务编排，应停止实现并改回 usecase-owned boundary。
 - 如果业务 capability pilot 需要多个独立写语义，应先设计 Flow Usecase，不用 dispatcher 隐藏流程。
+- 如果 P4 runtime 迫使 GraphQL adapter 绕过 usecase 或把业务流程藏进 dispatcher，应停止实现并回到 direction 修正。

@@ -239,6 +239,132 @@ describe('CapabilityRegistry', () => {
     await module.close();
   });
 
+  it('collects GraphQL API surface and accepts owned data and resource claims', async () => {
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.surface-owner',
+      kind: 'business',
+      displayName: 'Test Surface Owner',
+      version: '0.1.0',
+      processes: ['api'],
+      dependsOn: [{ capabilityId: 'platform.account', mode: 'required' }],
+      contributions: {
+        api: {
+          graphqlOperations: [
+            {
+              operationName: 'testSurface',
+              operationKind: 'query',
+              requiredPermissions: ['test.surface.read'],
+            },
+          ],
+        },
+      },
+      data: {
+        resources: [
+          {
+            name: 'test_surface_record',
+            kind: 'table',
+            owner: 'test.surface-owner',
+            writeOwnerOnly: true,
+            readShared: false,
+          },
+        ],
+        migrations: [{ id: '1900000000000-test-surface' }],
+      },
+      resourceClaims: {
+        claims: [
+          {
+            name: 'test.surface.authorization',
+            kind: 'authorizationResource',
+            owner: 'test.surface-owner',
+            relation: 'owns',
+          },
+          {
+            name: 'platform.account.identity',
+            kind: 'authorizationResource',
+            owner: 'platform.account',
+            relation: 'dependsOn',
+          },
+        ],
+      },
+    })
+    class SurfaceOwnerCapability {}
+
+    const module = await buildModule([SurfaceOwnerCapability], 'api');
+    const registry = module.get(CapabilityRegistry);
+
+    expect(registry.validateBootstrap().issues).toEqual([]);
+    expect(registry.getGraphqlOperationContributions()).toEqual(
+      expect.arrayContaining([
+        {
+          capabilityId: 'test.surface-owner',
+          operationName: 'testSurface',
+          operationKind: 'query',
+          requiredPermissions: ['test.surface.read'],
+        },
+      ]),
+    );
+    await module.close();
+  });
+
+  it('reports invalid API, data and resource declarations as bootstrap issues', async () => {
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.invalid-surface',
+      kind: 'business',
+      displayName: 'Test Invalid Surface',
+      version: '0.1.0',
+      processes: ['api'],
+      contributions: {
+        api: {
+          graphqlOperations: [{ operationName: ' ', operationKind: 'query' }],
+        },
+      },
+      data: {
+        resources: [
+          {
+            name: 'test_invalid_surface_record',
+            kind: 'table',
+            owner: 'test.other-owner',
+            writeOwnerOnly: true,
+          },
+        ],
+        migrations: [{ id: ' ' }],
+      },
+      resourceClaims: {
+        claims: [
+          {
+            name: 'test.invalid-owned-resource',
+            kind: 'artifact',
+            owner: 'test.other-owner',
+            relation: 'owns',
+          },
+          {
+            name: 'test.missing-dependency-resource',
+            kind: 'externalResource',
+            owner: 'test.resource-owner',
+            relation: 'dependsOn',
+          },
+        ],
+      },
+    })
+    class InvalidSurfaceCapability {}
+
+    const module = await buildModule([InvalidSurfaceCapability], 'api');
+    const registry = module.get(CapabilityRegistry);
+
+    expect(registry.validateBootstrap().issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'CAPABILITY_GRAPHQL_OPERATION_INVALID' }),
+        expect.objectContaining({ code: 'CAPABILITY_DATA_RESOURCE_OWNER_MISMATCH' }),
+        expect.objectContaining({ code: 'CAPABILITY_DATA_RESOURCE_INVALID' }),
+        expect.objectContaining({ code: 'CAPABILITY_RESOURCE_CLAIM_OWNER_MISMATCH' }),
+        expect.objectContaining({ code: 'CAPABILITY_RESOURCE_CLAIM_DEPENDENCY_MISSING' }),
+      ]),
+    );
+    await module.close();
+  });
+
   it('fails validation when a declared queue job is not registered', async () => {
     @Injectable()
     @CapabilityManifestProvider({

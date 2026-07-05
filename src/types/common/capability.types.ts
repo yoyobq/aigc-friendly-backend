@@ -71,6 +71,16 @@ export interface CapabilityQueueContribution {
   readonly dedupKeyMapping?: 'jobId' | 'bullmq-dedup-option' | 'none';
 }
 
+export interface CapabilityApiContributionManifest {
+  readonly graphqlOperations?: readonly CapabilityGraphqlOperationContribution[];
+}
+
+export interface CapabilityGraphqlOperationContribution {
+  readonly operationName: string;
+  readonly operationKind: 'query' | 'mutation' | 'subscription';
+  readonly requiredPermissions?: readonly string[];
+}
+
 export interface CapabilityOperationManifest {
   readonly commands?: readonly CapabilityCommandDefinition[];
   readonly queries?: readonly CapabilityQueryDefinition[];
@@ -147,9 +157,40 @@ export interface CapabilityRuntimeManifest {
 }
 
 export interface CapabilityContributionManifest {
+  readonly api?: CapabilityApiContributionManifest;
   readonly providers?: readonly CapabilityProviderContribution[];
   readonly queues?: readonly CapabilityQueueContribution[];
   readonly session?: CapabilitySessionContributionManifest;
+}
+
+export interface CapabilityDataManifest {
+  readonly resources?: readonly CapabilityDataResourceClaim[];
+  readonly migrations?: readonly CapabilityMigrationDefinition[];
+}
+
+export interface CapabilityDataResourceClaim {
+  readonly name: string;
+  readonly kind: 'table' | 'view';
+  readonly owner: CapabilityId;
+  readonly readShared?: boolean;
+  readonly writeOwnerOnly: boolean;
+}
+
+export interface CapabilityMigrationDefinition {
+  readonly id: string;
+  readonly description?: string;
+  readonly irreversible?: boolean;
+}
+
+export interface CapabilityResourceClaimManifest {
+  readonly claims?: readonly CapabilityResourceClaim[];
+}
+
+export interface CapabilityResourceClaim {
+  readonly name: string;
+  readonly kind: 'queue' | 'cache' | 'externalResource' | 'artifact' | 'authorizationResource';
+  readonly owner: CapabilityId;
+  readonly relation: 'owns' | 'dependsOn' | 'contributes';
 }
 
 export interface CapabilityManifest {
@@ -162,6 +203,8 @@ export interface CapabilityManifest {
   readonly operations?: CapabilityOperationManifest;
   readonly runtime?: CapabilityRuntimeManifest;
   readonly contributions?: CapabilityContributionManifest;
+  readonly data?: CapabilityDataManifest;
+  readonly resourceClaims?: CapabilityResourceClaimManifest;
 }
 
 export interface CapabilityHealthResult {

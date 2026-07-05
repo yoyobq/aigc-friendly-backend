@@ -27,6 +27,15 @@ export const SESSION_REFERENCE_CAPABILITY_MANIFEST: CapabilityManifest = {
   version: '0.1.0',
   processes: ['api'],
   contributions: {
+    api: {
+      graphqlOperations: [
+        {
+          operationName: 'referenceClient',
+          operationKind: 'query',
+          requiredPermissions: ['reference.client.read'],
+        },
+      ],
+    },
     session: {
       principals: [
         {
@@ -46,6 +55,22 @@ export const SESSION_REFERENCE_CAPABILITY_MANIFEST: CapabilityManifest = {
         },
       ],
     },
+  },
+  resourceClaims: {
+    claims: [
+      {
+        name: 'reference.client-scope',
+        kind: 'authorizationResource',
+        owner: SESSION_REFERENCE_CAPABILITY_ID,
+        relation: 'owns',
+      },
+      {
+        name: 'reference.resource-manager-policy',
+        kind: 'artifact',
+        owner: SESSION_REFERENCE_CAPABILITY_ID,
+        relation: 'owns',
+      },
+    ],
   },
 };
 

@@ -16,6 +16,7 @@ import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { ApiController } from './api.controller';
 import { ApiService } from './api.service';
+import { CapabilityGraphqlSurfaceCheck } from './capability-graphql-surface.check';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { ApiService } from './api.service';
   controllers: [ApiController],
   providers: [
     ApiService,
+    CapabilityGraphqlSurfaceCheck,
     {
       provide: APP_FILTER,
       useClass: GqlAllExceptionsFilter,

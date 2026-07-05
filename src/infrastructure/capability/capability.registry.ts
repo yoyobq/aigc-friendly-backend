@@ -1,5 +1,6 @@
 // src/infrastructure/capability/capability.registry.ts
 import type {
+  CapabilityGraphqlOperationContribution,
   CapabilityHealthCheck,
   CapabilityHealthReport,
   CapabilityId,
@@ -60,6 +61,10 @@ export interface CapabilityProviderBinding {
   readonly instance: unknown;
 }
 
+export interface CapabilityGraphqlOperationBinding extends CapabilityGraphqlOperationContribution {
+  readonly capabilityId: CapabilityId;
+}
+
 export interface CapabilityHealthCheckBinding {
   readonly metadata: CapabilityHealthCheckMetadata;
   readonly instance: CapabilityHealthCheck;
@@ -102,6 +107,12 @@ export interface CapabilityBootstrapIssue {
     | 'CAPABILITY_QUEUE_NOT_REGISTERED'
     | 'CAPABILITY_JOB_NOT_REGISTERED'
     | 'CAPABILITY_HEALTH_CHECK_MISSING'
+    | 'CAPABILITY_GRAPHQL_OPERATION_INVALID'
+    | 'CAPABILITY_DATA_RESOURCE_INVALID'
+    | 'CAPABILITY_DATA_RESOURCE_OWNER_MISMATCH'
+    | 'CAPABILITY_RESOURCE_CLAIM_INVALID'
+    | 'CAPABILITY_RESOURCE_CLAIM_OWNER_MISMATCH'
+    | 'CAPABILITY_RESOURCE_CLAIM_DEPENDENCY_MISSING'
     | 'CAPABILITY_OPERATION_HANDLER_MISSING'
     | 'CAPABILITY_OPERATION_HANDLER_DUPLICATE'
     | 'CAPABILITY_OPERATION_HANDLER_PROCESS_MISMATCH'
@@ -247,6 +258,19 @@ export class CapabilityRegistry {
     };
   }
 
+  getGraphqlOperationContributions(): readonly CapabilityGraphqlOperationBinding[] {
+    return this.resolveSnapshot().manifests.flatMap((manifest) =>
+      (manifest.contributions?.api?.graphqlOperations ?? []).map((operation) => ({
+        capabilityId: manifest.id,
+        operationName: operation.operationName,
+        operationKind: operation.operationKind,
+        ...(operation.requiredPermissions === undefined
+          ? {}
+          : { requiredPermissions: operation.requiredPermissions }),
+      })),
+    );
+  }
+
   getEventSubscribers(input: {
     readonly capabilityId: CapabilityId;
     readonly event: string;
@@ -363,6 +387,9 @@ export class CapabilityRegistry {
         manifests: snapshot.manifests,
         healthChecks: snapshot.healthChecks,
       }),
+      ...validateApiContributions(snapshot.manifests),
+      ...validateDataResources(snapshot.manifests),
+      ...validateResourceClaims(snapshot.manifests),
       ...validateOperationHandlers({
         manifests: snapshot.manifests,
         operationHandlers: snapshot.operationHandlers,
@@ -764,6 +791,112 @@ function validateHealthChecks(input: {
         capabilityId: manifest.id,
         message: `capability_health_check_missing:${manifest.id}`,
       });
+    }
+  }
+  return issues;
+}
+
+function validateApiContributions(
+  manifests: readonly CapabilityManifest[],
+): readonly CapabilityBootstrapIssue[] {
+  const issues: CapabilityBootstrapIssue[] = [];
+  for (const manifest of manifests) {
+    for (const operation of manifest.contributions?.api?.graphqlOperations ?? []) {
+      if (!operation.operationName.trim() || !isGraphqlOperationKind(operation.operationKind)) {
+        issues.push({
+          code: 'CAPABILITY_GRAPHQL_OPERATION_INVALID',
+          capabilityId: manifest.id,
+          message: `capability_graphql_operation_invalid:${manifest.id}:${operation.operationKind}:${operation.operationName}`,
+        });
+      }
+    }
+  }
+  return issues;
+}
+
+function validateDataResources(
+  manifests: readonly CapabilityManifest[],
+): readonly CapabilityBootstrapIssue[] {
+  const issues: CapabilityBootstrapIssue[] = [];
+  for (const manifest of manifests) {
+    for (const resource of manifest.data?.resources ?? []) {
+      if (
+        !resource.name.trim() ||
+        !resource.owner.trim() ||
+        !isDataResourceKind(resource.kind) ||
+        typeof resource.writeOwnerOnly !== 'boolean'
+      ) {
+        issues.push({
+          code: 'CAPABILITY_DATA_RESOURCE_INVALID',
+          capabilityId: manifest.id,
+          message: `capability_data_resource_invalid:${manifest.id}:${resource.kind}:${resource.name}`,
+        });
+        continue;
+      }
+      if (normalizeRequiredText(resource.owner) !== normalizeRequiredText(manifest.id)) {
+        issues.push({
+          code: 'CAPABILITY_DATA_RESOURCE_OWNER_MISMATCH',
+          capabilityId: manifest.id,
+          message: `capability_data_resource_owner_mismatch:${manifest.id}:${resource.name}:${resource.owner}`,
+        });
+      }
+    }
+    for (const migration of manifest.data?.migrations ?? []) {
+      if (!migration.id.trim()) {
+        issues.push({
+          code: 'CAPABILITY_DATA_RESOURCE_INVALID',
+          capabilityId: manifest.id,
+          message: `capability_migration_invalid:${manifest.id}`,
+        });
+      }
+    }
+  }
+  return issues;
+}
+
+function validateResourceClaims(
+  manifests: readonly CapabilityManifest[],
+): readonly CapabilityBootstrapIssue[] {
+  const issues: CapabilityBootstrapIssue[] = [];
+  for (const manifest of manifests) {
+    for (const claim of manifest.resourceClaims?.claims ?? []) {
+      if (
+        !claim.name.trim() ||
+        !claim.owner.trim() ||
+        !isResourceClaimKind(claim.kind) ||
+        !isResourceClaimRelation(claim.relation)
+      ) {
+        issues.push({
+          code: 'CAPABILITY_RESOURCE_CLAIM_INVALID',
+          capabilityId: manifest.id,
+          message: `capability_resource_claim_invalid:${manifest.id}:${claim.kind}:${claim.name}`,
+        });
+        continue;
+      }
+
+      const ownerMatchesManifest =
+        normalizeRequiredText(claim.owner) === normalizeRequiredText(manifest.id);
+      if (claim.relation === 'owns') {
+        if (!ownerMatchesManifest) {
+          issues.push({
+            code: 'CAPABILITY_RESOURCE_CLAIM_OWNER_MISMATCH',
+            capabilityId: manifest.id,
+            message: `capability_resource_claim_owner_mismatch:${manifest.id}:${claim.name}:${claim.owner}`,
+          });
+        }
+        continue;
+      }
+
+      if (
+        !ownerMatchesManifest &&
+        !hasDeclaredCapabilityDependency({ manifest, capabilityId: claim.owner })
+      ) {
+        issues.push({
+          code: 'CAPABILITY_RESOURCE_CLAIM_DEPENDENCY_MISSING',
+          capabilityId: manifest.id,
+          message: `capability_resource_claim_dependency_missing:${manifest.id}:${claim.name}:${claim.owner}`,
+        });
+      }
     }
   }
   return issues;
@@ -1362,6 +1495,28 @@ function buildSessionBindingKey(input: {
 
 function isValidCapabilityId(value: string): boolean {
   return /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/.test(value);
+}
+
+function isGraphqlOperationKind(value: string): boolean {
+  return value === 'query' || value === 'mutation' || value === 'subscription';
+}
+
+function isDataResourceKind(value: string): boolean {
+  return value === 'table' || value === 'view';
+}
+
+function isResourceClaimKind(value: string): boolean {
+  return (
+    value === 'queue' ||
+    value === 'cache' ||
+    value === 'externalResource' ||
+    value === 'artifact' ||
+    value === 'authorizationResource'
+  );
+}
+
+function isResourceClaimRelation(value: string): boolean {
+  return value === 'owns' || value === 'dependsOn' || value === 'contributes';
 }
 
 function isCapabilityOperationHandler(value: unknown): value is CapabilityOperationHandler {
