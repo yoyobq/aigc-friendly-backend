@@ -56,6 +56,12 @@
   - Boundary contract or port/contract naming:
     - `docs/common/boundary-contract.rules.md`
 
+  - Capability plugin / ability modularization:
+    - `docs/common/capability-plugin.rules.md`
+    - `docs/common/boundary-contract.rules.md` when adding dispatcher / runtime contracts
+    - `docs/worker/qm-worker-integration.rules.md` when adding queue transport or worker consumer
+    - `docs/api/graphql-error-contract-current.md` when changing capability-aware GraphQL behavior
+
   - Input normalization:
     - `docs/project-convention/input-field-design.md`
     - `docs/project-convention/input-normalize-v1-boundaries.md`
@@ -112,6 +118,7 @@
   ## One-Line Meanings
 
   - `core.rules`: pure domain only
+  - `capability-plugin.rules`: capability plugin boundaries, runtime semantics, transport and contribution rules
   - `eslint-architecture-rules.md`: executable lint rule map and architecture validation commands
   - `boundary-contract.rules`: layer-owned contract naming and port/contract distinction
   - `aggregate.rules`: aggregate root and child-entity write boundaries

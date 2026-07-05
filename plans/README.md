@@ -88,10 +88,12 @@ direction -> plan -> docs / followup -> delete
 
 ## 当前计划
 
-- [Capability Plugin Direction](./capability-plugin-direction.md)：能力插拔方向判断。
-- [Capability Plugin Plan](./capability-plugin-plan.md)：能力插拔执行计划，按提交顺序分 P 推进。
+- [Capability Plugin Direction](./capability-plugin-direction.md)：能力插拔方向判断和背景解释，不作为稳定规则真源。
+- [Capability Plugin Followup](./capability-plugin-followup.md)：能力插拔主链路完成后的尾项跟踪。
 
 ## 已收口背景
 
 - 已完成计划统一归档到 [docs/deprecated](../docs/deprecated/README.md)。
+- [Capability Plugin Plan](../docs/deprecated/capability-plugin-plan.md) 已完成并归档；稳定规则已沉淀到
+  [docs/common/capability-plugin.rules.md](../docs/common/capability-plugin.rules.md)。
 - [AI Workflow 基线补强计划](../docs/deprecated/ai-workflow-baseline-plan.md) 已完成并归档。

@@ -1,8 +1,8 @@
-<!-- 文件位置: plans/capability-plugin-plan.md -->
+<!-- 文件位置: docs/deprecated/capability-plugin-plan.md -->
 
 # Capability Plugin Plan
 
-本文是 [Capability Plugin Direction](./capability-plugin-direction.md) 的执行计划。
+本文是 [Capability Plugin Direction](../../plans/capability-plugin-direction.md) 的执行计划。
 
 Direction 保留为方向判断和边界依据；本文只回答当前基线项目按什么提交顺序落地。若 direction 与本文冲突，以 direction 的架构边界为准，本文再调整阶段和提交顺序。
 
