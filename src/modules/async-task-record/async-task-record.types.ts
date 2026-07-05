@@ -112,9 +112,11 @@ export interface RecordAsyncTaskStartedInput {
   readonly bizKey: string;
   readonly bizSubKey?: string | null;
   readonly source: AsyncTaskRecordSource;
+  readonly overwriteExistingSource?: boolean;
   readonly reason?: string | null;
   readonly dedupKey?: string | null;
   readonly maxAttempts?: number | null;
+  readonly overwriteExistingMaxAttempts?: boolean;
   readonly enqueuedAt?: Date;
   readonly startedAt?: Date;
   readonly occurredAt?: Date | null;
@@ -132,10 +134,12 @@ export interface RecordAsyncTaskFinishedInput {
   readonly bizKey: string;
   readonly bizSubKey?: string | null;
   readonly source: AsyncTaskRecordSource;
+  readonly overwriteExistingSource?: boolean;
   readonly status: AsyncTaskRecordTerminalStatus;
   readonly reason?: string | null;
   readonly dedupKey?: string | null;
   readonly maxAttempts?: number | null;
+  readonly overwriteExistingMaxAttempts?: boolean;
   readonly enqueuedAt?: Date;
   readonly startedAt?: Date | null;
   readonly finishedAt?: Date;
@@ -167,7 +171,9 @@ export interface CreateAsyncTaskRecordInput {
 
 export interface UpdateAsyncTaskRecordStatusInput {
   readonly status?: AsyncTaskRecordStatus;
+  readonly source?: AsyncTaskRecordSource;
   readonly attemptCount?: number;
+  readonly maxAttempts?: number | null;
   readonly startedAt?: Date | null;
   readonly finishedAt?: Date | null;
   readonly reason?: string | null;

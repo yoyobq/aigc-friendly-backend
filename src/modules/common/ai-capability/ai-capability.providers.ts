@@ -80,6 +80,7 @@ export class AiQueueWorkflowBindingDeclaration {}
   kind: 'technical',
   version: '0.1.0',
   processes: ['worker'],
+  runtime: { healthCheck: true },
   contributions: {
     providers: [{ providerKind: AI_PROVIDER_KIND, providerName: 'mock' }],
   },
@@ -92,6 +93,7 @@ export class AiLocalMockCapabilityDeclaration {}
   kind: 'technical',
   version: '0.1.0',
   processes: ['worker'],
+  runtime: { healthCheck: true },
   contributions: {
     providers: [{ providerKind: AI_PROVIDER_KIND, providerName: 'openai' }],
   },
@@ -104,6 +106,7 @@ export class AiOpenAiCapabilityDeclaration {}
   kind: 'technical',
   version: '0.1.0',
   processes: ['worker'],
+  runtime: { healthCheck: true },
   contributions: {
     providers: [{ providerKind: AI_PROVIDER_KIND, providerName: 'qwen' }],
   },

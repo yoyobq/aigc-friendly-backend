@@ -1,6 +1,7 @@
 // src/infrastructure/capability/capability.decorators.ts
 import type {
   CapabilityId,
+  CapabilityHealthCheck,
   CapabilityManifest,
   CapabilityOperationKind,
   CapabilityProviderKind,
@@ -22,17 +23,25 @@ export interface CapabilityQueueBindingMetadata {
   readonly dedupKeyMapping?: 'jobId' | 'bullmq-dedup-option' | 'none';
 }
 
+export interface CapabilityHealthCheckMetadata {
+  readonly capabilityId: CapabilityId;
+  readonly name: string;
+}
+
 export const CAPABILITY_MANIFEST_DISCOVERABLE =
   DiscoveryService.createDecorator<CapabilityManifest>();
 export const CAPABILITY_PROVIDER_BINDING_DISCOVERABLE =
   DiscoveryService.createDecorator<CapabilityProviderBindingMetadata>();
 export const CAPABILITY_QUEUE_BINDING_DISCOVERABLE =
   DiscoveryService.createDecorator<CapabilityQueueBindingMetadata>();
+export const CAPABILITY_HEALTH_CHECK_DISCOVERABLE =
+  DiscoveryService.createDecorator<CapabilityHealthCheckMetadata>();
 
 export const CAPABILITY_MANIFEST_METADATA_KEY = CAPABILITY_MANIFEST_DISCOVERABLE.KEY;
 export const CAPABILITY_PROVIDER_BINDING_METADATA_KEY =
   CAPABILITY_PROVIDER_BINDING_DISCOVERABLE.KEY;
 export const CAPABILITY_QUEUE_BINDING_METADATA_KEY = CAPABILITY_QUEUE_BINDING_DISCOVERABLE.KEY;
+export const CAPABILITY_HEALTH_CHECK_METADATA_KEY = CAPABILITY_HEALTH_CHECK_DISCOVERABLE.KEY;
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export function CapabilityManifestProvider(manifest: CapabilityManifest): ClassDecorator {
@@ -51,4 +60,19 @@ export function CapabilityQueueBindingProvider(
   metadata: CapabilityQueueBindingMetadata,
 ): ClassDecorator {
   return CAPABILITY_QUEUE_BINDING_DISCOVERABLE(metadata);
+}
+
+// eslint-disable-next-line @typescript-eslint/naming-convention
+export function CapabilityHealthCheckProvider(
+  metadata: CapabilityHealthCheckMetadata,
+): ClassDecorator {
+  return CAPABILITY_HEALTH_CHECK_DISCOVERABLE(metadata);
+}
+
+export function isCapabilityHealthCheck(value: unknown): value is CapabilityHealthCheck {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as { readonly check?: unknown };
+  return typeof candidate.check === 'function';
 }

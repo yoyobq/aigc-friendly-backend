@@ -5,8 +5,12 @@ import type {
   GenerateAiContentInput,
   GenerateAiContentResult,
 } from '@core/ai/ai-provider.interface';
+import type { CapabilityHealthResult } from '@app-types/common/capability.types';
 import { Injectable } from '@nestjs/common';
-import { CapabilityProviderBindingProvider } from '@src/infrastructure/capability/capability.decorators';
+import {
+  CapabilityHealthCheckProvider,
+  CapabilityProviderBindingProvider,
+} from '@src/infrastructure/capability/capability.decorators';
 import { createHash } from 'node:crypto';
 
 @Injectable()
@@ -15,8 +19,20 @@ import { createHash } from 'node:crypto';
   providerKind: 'ai.provider',
   providerName: 'mock',
 })
+@CapabilityHealthCheckProvider({
+  capabilityId: 'ai.local-mock',
+  name: 'provider-config',
+})
 export class LocalMockAiProvider implements AiProviderClient {
   readonly name = 'mock';
+
+  check(): Promise<CapabilityHealthResult> {
+    return Promise.resolve({
+      status: 'healthy',
+      checkedAt: new Date(),
+      message: 'mock_ai_provider_ready',
+    });
+  }
 
   generate(input: GenerateAiContentInput): Promise<GenerateAiContentResult> {
     const providerStartedAt = new Date();

@@ -1,4 +1,5 @@
 import { AudienceTypeEnum, ThirdPartyProviderEnum } from '@app-types/models/account.types';
+import type { CapabilityHealthResult } from '@app-types/common/capability.types';
 import {
   PhoneNumberResult,
   ThirdPartySession,
@@ -14,6 +15,10 @@ import {
 } from '@modules/third-party-auth/contracts/third-party-provider.contract';
 import { HttpService } from '@nestjs/axios';
 import { Inject, Injectable } from '@nestjs/common';
+import {
+  CapabilityHealthCheckProvider,
+  CapabilityProviderBindingProvider,
+} from '@src/infrastructure/capability/capability.decorators';
 import { PinoLogger } from 'nestjs-pino';
 import { WEAPP_PROVIDER_OPTIONS, type WeAppProviderOptions } from '../weapp-provider.options';
 
@@ -22,6 +27,15 @@ import { WEAPP_PROVIDER_OPTIONS, type WeAppProviderOptions } from '../weapp-prov
  * 实现微信小程序 js_code 换取 session_key 和 openid 的认证流程
  */
 @Injectable()
+@CapabilityProviderBindingProvider({
+  capabilityId: 'third-party-auth.weapp',
+  providerKind: 'third-party-auth.provider',
+  providerName: 'weapp',
+})
+@CapabilityHealthCheckProvider({
+  capabilityId: 'third-party-auth.weapp',
+  name: 'provider-config',
+})
 export class WeAppHttpProvider implements WeAppProviderContract {
   readonly provider = ThirdPartyProviderEnum.WEAPP;
 
@@ -40,6 +54,21 @@ export class WeAppHttpProvider implements WeAppProviderContract {
     private readonly options: WeAppProviderOptions,
     private readonly logger: PinoLogger,
   ) {}
+
+  check(): Promise<CapabilityHealthResult> {
+    const appIdConfigured = Boolean(this.options.appId?.trim());
+    const appSecretConfigured = Boolean(this.options.appSecret?.trim());
+    const isConfigured = appIdConfigured && appSecretConfigured;
+    return Promise.resolve({
+      status: isConfigured ? 'healthy' : 'unhealthy',
+      checkedAt: new Date(),
+      message: isConfigured ? 'weapp_provider_configured' : 'weapp_provider_config_missing',
+      details: {
+        appIdConfigured,
+        appSecretConfigured,
+      },
+    });
+  }
 
   /**
    * 根据客户端类型选择微信应用配置

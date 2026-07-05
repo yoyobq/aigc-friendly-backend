@@ -188,9 +188,13 @@ export class AsyncTaskRecordService {
         where: { queueName: input.data.queueName, jobId: input.data.jobId },
         patch: {
           status: 'processing',
+          ...(input.data.overwriteExistingSource ? { source: input.data.source } : {}),
           startedAt,
           occurredAt,
           attemptCount,
+          ...(input.data.overwriteExistingMaxAttempts
+            ? { maxAttempts: input.data.maxAttempts }
+            : {}),
           reason: input.data.reason,
         },
         transactionContext: input.transactionContext,
@@ -315,9 +319,13 @@ export class AsyncTaskRecordService {
         where: { queueName: input.data.queueName, jobId: input.data.jobId },
         patch: {
           status: input.data.status,
+          ...(input.data.overwriteExistingSource ? { source: input.data.source } : {}),
           finishedAt,
           occurredAt,
           attemptCount,
+          ...(input.data.overwriteExistingMaxAttempts
+            ? { maxAttempts: input.data.maxAttempts }
+            : {}),
           reason: input.data.reason,
         },
         transactionContext: input.transactionContext,
@@ -366,8 +374,14 @@ export class AsyncTaskRecordService {
     if (input.patch.status !== undefined) {
       entity.status = input.patch.status;
     }
+    if (input.patch.source !== undefined) {
+      entity.source = input.patch.source;
+    }
     if (input.patch.attemptCount !== undefined) {
       entity.attemptCount = input.patch.attemptCount;
+    }
+    if (input.patch.maxAttempts !== undefined) {
+      entity.maxAttempts = input.patch.maxAttempts;
     }
     if (input.patch.startedAt !== undefined) {
       entity.startedAt = input.patch.startedAt;

@@ -3,11 +3,15 @@ import type {
   GenerateAiContentInput,
   GenerateAiContentResult,
 } from '@core/ai/ai-provider.interface';
+import type { CapabilityHealthResult } from '@app-types/common/capability.types';
 import { DomainError, THIRDPARTY_ERROR } from '@core/common/errors/domain-error';
 import { HttpService } from '@nestjs/axios';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { CapabilityProviderBindingProvider } from '@src/infrastructure/capability/capability.decorators';
+import {
+  CapabilityHealthCheckProvider,
+  CapabilityProviderBindingProvider,
+} from '@src/infrastructure/capability/capability.decorators';
 import axios from 'axios';
 import { createHash } from 'node:crypto';
 
@@ -32,6 +36,10 @@ interface OpenAiChatCompletionResponse {
   providerKind: 'ai.provider',
   providerName: 'openai',
 })
+@CapabilityHealthCheckProvider({
+  capabilityId: 'ai.openai',
+  name: 'provider-config',
+})
 export class OpenAiGenerateProvider implements AiProviderClient {
   readonly name = 'openai';
 
@@ -39,6 +47,21 @@ export class OpenAiGenerateProvider implements AiProviderClient {
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
   ) {}
+
+  check(): Promise<CapabilityHealthResult> {
+    const baseUrlConfigured = this.hasConfigValue('aiWorker.openai.baseUrl');
+    const apiKeyConfigured = this.hasConfigValue('aiWorker.openai.apiKey');
+    const isConfigured = baseUrlConfigured && apiKeyConfigured;
+    return Promise.resolve({
+      status: isConfigured ? 'healthy' : 'unhealthy',
+      checkedAt: new Date(),
+      message: isConfigured ? 'openai_provider_configured' : 'openai_provider_config_missing',
+      details: {
+        baseUrlConfigured,
+        apiKeyConfigured,
+      },
+    });
+  }
 
   async generate(input: GenerateAiContentInput): Promise<GenerateAiContentResult> {
     const baseUrl = this.resolveBaseUrl();
@@ -119,6 +142,11 @@ export class OpenAiGenerateProvider implements AiProviderClient {
       return 30000;
     }
     return timeoutMs;
+  }
+
+  private hasConfigValue(key: string): boolean {
+    const value = this.configService.get<string>(key, '');
+    return value.trim().length > 0;
   }
 
   private resolveOutputText(data: OpenAiChatCompletionResponse): string {

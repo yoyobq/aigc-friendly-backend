@@ -310,6 +310,14 @@ P1 不引入新的业务模型，重点是复用 P0 runtime，把第二类 techn
 - 每个 common 子目录都有“保留 / 迁移 / 待审视”结论。
 - 归属审计只产出 owner 判断，不以“为了 common 变少”为目标强行搬目录。
 
+P1 实施判断：
+
+- `ai-capability` / `ai-queue` / `ai-worker`：归 `ai.*` technical capability。
+- `email-capability` / `email-queue` / `email-worker`：归 `notification.email` technical capability；当前本机 `sendmail` 实现按 `notification.email.sendmail` provider capability 建模。
+- `password` / `security` / `tokens`：继续保留为 platform common，不作为可选业务能力迁移。
+- `utils`：暂标为待审视，只在后续出现明确 owner 时迁移。
+- 当前基线没有 `modules/common/pagination` 或 `modules/common/search`；分页与搜索相关纯规则仍按 `src/core/` 归属处理。
+
 ### C1.4 Technical Capability Health Check
 
 为外部系统型 technical capability 补最小健康检查声明，不做运维面板。

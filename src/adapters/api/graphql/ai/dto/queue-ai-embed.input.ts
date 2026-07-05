@@ -2,8 +2,9 @@
 import { trimText } from '@core/common/text/text.helper';
 import { Field, InputType } from '@nestjs/graphql';
 import { Transform, TransformFnParams } from 'class-transformer';
-import { IsNotEmpty, IsObject, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
 import GraphQLJSON from 'graphql-type-json';
+import { isStringRecord } from './string-record.validator';
 
 @InputType()
 export class QueueAiEmbedInput {
@@ -24,18 +25,20 @@ export class QueueAiEmbedInput {
   @Field(() => GraphQLJSON, { nullable: true, description: '扩展元数据' })
   @IsOptional()
   @ValidateIf((input: QueueAiEmbedInput) => input.metadata !== undefined)
-  @IsObject({ message: '扩展元数据必须是对象' })
+  @isStringRecord({ message: '扩展元数据必须是字符串键值对象' })
   metadata?: Readonly<Record<string, string>>;
 
   @Field(() => String, { nullable: true, description: '幂等键' })
   @IsOptional()
   @Transform(({ value }: TransformFnParams) => trimText(value))
   @IsString({ message: '幂等键必须是字符串' })
+  @MaxLength(191, { message: '幂等键长度不能超过 191 个字符' })
   dedupKey?: string;
 
   @Field(() => String, { nullable: true, description: '链路追踪 ID' })
   @IsOptional()
   @Transform(({ value }: TransformFnParams) => trimText(value))
   @IsString({ message: '链路追踪 ID 必须是字符串' })
+  @MaxLength(128, { message: '链路追踪 ID 长度不能超过 128 个字符' })
   traceId?: string;
 }

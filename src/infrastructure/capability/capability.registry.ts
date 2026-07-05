@@ -1,5 +1,7 @@
 // src/infrastructure/capability/capability.registry.ts
 import type {
+  CapabilityHealthCheck,
+  CapabilityHealthReport,
   CapabilityId,
   CapabilityManifest,
   CapabilityProcess,
@@ -11,10 +13,13 @@ import { BULLMQ_QUEUE_REGISTRY } from '@src/infrastructure/bullmq/queue-registry
 import {
   CAPABILITY_MANIFEST_DISCOVERABLE,
   CAPABILITY_MANIFEST_METADATA_KEY,
+  CAPABILITY_HEALTH_CHECK_DISCOVERABLE,
   CAPABILITY_PROVIDER_BINDING_DISCOVERABLE,
   CAPABILITY_PROVIDER_BINDING_METADATA_KEY,
   CAPABILITY_QUEUE_BINDING_DISCOVERABLE,
   CAPABILITY_QUEUE_BINDING_METADATA_KEY,
+  isCapabilityHealthCheck,
+  type CapabilityHealthCheckMetadata,
   type CapabilityProviderBindingMetadata,
   type CapabilityQueueBindingMetadata,
 } from './capability.decorators';
@@ -24,6 +29,11 @@ export const CAPABILITY_PROCESS = Symbol('CAPABILITY_PROCESS');
 export interface CapabilityProviderBinding {
   readonly metadata: CapabilityProviderBindingMetadata;
   readonly instance: unknown;
+}
+
+export interface CapabilityHealthCheckBinding {
+  readonly metadata: CapabilityHealthCheckMetadata;
+  readonly instance: CapabilityHealthCheck;
 }
 
 export interface CapabilityBootstrapIssue {
@@ -36,7 +46,8 @@ export interface CapabilityBootstrapIssue {
     | 'CAPABILITY_PROVIDER_BINDING_MISSING'
     | 'CAPABILITY_QUEUE_BINDING_MISSING'
     | 'CAPABILITY_QUEUE_NOT_REGISTERED'
-    | 'CAPABILITY_JOB_NOT_REGISTERED';
+    | 'CAPABILITY_JOB_NOT_REGISTERED'
+    | 'CAPABILITY_HEALTH_CHECK_MISSING';
   readonly message: string;
   readonly capabilityId?: CapabilityId;
 }
@@ -50,6 +61,7 @@ interface CapabilitySnapshot {
   readonly manifests: readonly CapabilityManifest[];
   readonly providerBindings: readonly CapabilityProviderBinding[];
   readonly queueBindings: readonly CapabilityQueueBindingMetadata[];
+  readonly healthChecks: readonly CapabilityHealthCheckBinding[];
 }
 
 @Injectable()
@@ -80,6 +92,30 @@ export class CapabilityRegistry {
     return binding ? (binding.instance as TClient) : null;
   }
 
+  async checkHealth(): Promise<readonly CapabilityHealthReport[]> {
+    const reports = await Promise.all(
+      this.resolveSnapshot().healthChecks.map(async (binding): Promise<CapabilityHealthReport> => {
+        try {
+          const result = await binding.instance.check();
+          return {
+            capabilityId: binding.metadata.capabilityId,
+            name: binding.metadata.name,
+            ...result,
+          };
+        } catch {
+          return {
+            capabilityId: binding.metadata.capabilityId,
+            name: binding.metadata.name,
+            status: 'unhealthy',
+            checkedAt: new Date(),
+            message: 'capability_health_check_failed',
+          };
+        }
+      }),
+    );
+    return reports;
+  }
+
   validateBootstrap(): CapabilityBootstrapValidationResult {
     const snapshot = this.resolveSnapshot();
     const issues = [
@@ -94,6 +130,10 @@ export class CapabilityRegistry {
         queueBindings: snapshot.queueBindings,
       }),
       ...validateQueueRuntime(snapshot.queueBindings),
+      ...validateHealthChecks({
+        manifests: snapshot.manifests,
+        healthChecks: snapshot.healthChecks,
+      }),
     ];
     return { process: this.currentProcess, issues };
   }
@@ -112,6 +152,7 @@ export class CapabilityRegistry {
         manifests,
         providerBindings: this.discoverProviderBindings(manifests),
         queueBindings: this.discoverQueueBindings(manifests),
+        healthChecks: this.discoverHealthChecks(manifests),
       };
     }
     return this.snapshot;
@@ -165,6 +206,28 @@ export class CapabilityRegistry {
       .filter((metadata): metadata is CapabilityQueueBindingMetadata =>
         Boolean(metadata && activeCapabilityIds.has(metadata.capabilityId)),
       );
+  }
+
+  private discoverHealthChecks(
+    activeManifests: readonly CapabilityManifest[],
+  ): readonly CapabilityHealthCheckBinding[] {
+    const activeCapabilityIds = new Set(activeManifests.map((manifest) => manifest.id));
+    return this.discoveryService
+      .getProviders()
+      .map((wrapper): CapabilityHealthCheckBinding | null => {
+        const metadata = this.discoveryService.getMetadataByDecorator(
+          CAPABILITY_HEALTH_CHECK_DISCOVERABLE,
+          wrapper,
+        );
+        if (!metadata || !activeCapabilityIds.has(metadata.capabilityId)) {
+          return null;
+        }
+        if (!isCapabilityHealthCheck(wrapper.instance)) {
+          return null;
+        }
+        return { metadata, instance: wrapper.instance };
+      })
+      .filter((binding): binding is CapabilityHealthCheckBinding => binding !== null);
   }
 }
 
@@ -316,6 +379,29 @@ function validateQueueRuntime(
         code: 'CAPABILITY_JOB_NOT_REGISTERED',
         capabilityId: binding.capabilityId,
         message: `capability_job_not_registered:${binding.capabilityId}:${binding.queueName}/${binding.jobName}`,
+      });
+    }
+  }
+  return issues;
+}
+
+function validateHealthChecks(input: {
+  readonly manifests: readonly CapabilityManifest[];
+  readonly healthChecks: readonly CapabilityHealthCheckBinding[];
+}): readonly CapabilityBootstrapIssue[] {
+  const healthCheckCapabilityIds = new Set(
+    input.healthChecks.map((binding) => normalizeRequiredText(binding.metadata.capabilityId)),
+  );
+  const issues: CapabilityBootstrapIssue[] = [];
+  for (const manifest of input.manifests) {
+    if (
+      manifest.runtime?.healthCheck === true &&
+      !healthCheckCapabilityIds.has(normalizeRequiredText(manifest.id))
+    ) {
+      issues.push({
+        code: 'CAPABILITY_HEALTH_CHECK_MISSING',
+        capabilityId: manifest.id,
+        message: `capability_health_check_missing:${manifest.id}`,
       });
     }
   }

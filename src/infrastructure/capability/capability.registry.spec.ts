@@ -2,8 +2,10 @@
 import { Injectable } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { BULLMQ_JOBS, BULLMQ_QUEUES } from '@src/infrastructure/bullmq/bullmq.constants';
+import type { CapabilityHealthCheck } from '@app-types/common/capability.types';
 import { CapabilityBootstrapCheck } from './capability-bootstrap-check';
 import {
+  CapabilityHealthCheckProvider,
   CapabilityManifestProvider,
   CapabilityProviderBindingProvider,
   CapabilityQueueBindingProvider,
@@ -23,6 +25,7 @@ describe('CapabilityRegistry', () => {
       kind: 'technical',
       version: '0.1.0',
       processes: ['worker'],
+      runtime: { healthCheck: true },
       contributions: {
         providers: [{ providerKind: 'test.provider', providerName: 'mock' }],
       },
@@ -35,8 +38,20 @@ describe('CapabilityRegistry', () => {
       providerKind: 'test.provider',
       providerName: 'mock',
     })
-    class TestProvider {
+    @CapabilityHealthCheckProvider({
+      capabilityId: 'test.provider',
+      name: 'provider-config',
+    })
+    class TestProvider implements CapabilityHealthCheck {
       readonly name = 'mock';
+
+      check() {
+        return Promise.resolve({
+          status: 'healthy' as const,
+          checkedAt: new Date('2026-01-01T00:00:00.000Z'),
+          message: 'test_provider_ready',
+        });
+      }
     }
 
     @Injectable()
@@ -88,6 +103,16 @@ describe('CapabilityRegistry', () => {
         providerName: 'mock',
       }),
     ).toBeInstanceOf(TestProvider);
+    await expect(registry.checkHealth()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          capabilityId: 'test.provider',
+          name: 'provider-config',
+          status: 'healthy',
+          message: 'test_provider_ready',
+        }),
+      ]),
+    );
     await module.close();
   });
 
@@ -172,6 +197,29 @@ describe('CapabilityRegistry', () => {
     expect(registry.validateBootstrap().issues).toEqual(
       expect.arrayContaining([expect.objectContaining({ code: 'CAPABILITY_JOB_NOT_REGISTERED' })]),
     );
+    await module.close();
+  });
+
+  it('fails validation when a declared health check is missing', async () => {
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.missing-health',
+      kind: 'technical',
+      version: '0.1.0',
+      processes: ['worker'],
+      runtime: { healthCheck: true },
+    })
+    class MissingHealthCapability {}
+
+    const module = await buildModule([MissingHealthCapability]);
+    const registry = module.get(CapabilityRegistry);
+
+    expect(registry.validateBootstrap().issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'CAPABILITY_HEALTH_CHECK_MISSING' }),
+      ]),
+    );
+    expect(() => registry.assertBootstrapValid()).toThrow(CapabilityBootstrapError);
     await module.close();
   });
 });

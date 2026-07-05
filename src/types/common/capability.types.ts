@@ -12,6 +12,8 @@ export type CapabilityProviderKind = string;
 
 export type CapabilityEnableState = 'enabled' | 'disabled';
 
+export type CapabilityHealthStatus = 'healthy' | 'degraded' | 'unhealthy';
+
 export type CapabilityErrorCode =
   | 'CAPABILITY_DISABLED'
   | 'CAPABILITY_OPERATION_DISABLED'
@@ -59,6 +61,7 @@ export interface CapabilityQueueContribution {
 export interface CapabilityRuntimeManifest {
   readonly defaultState?: CapabilityEnableState;
   readonly isReadonly?: boolean;
+  readonly healthCheck?: boolean;
 }
 
 export interface CapabilityContributionManifest {
@@ -74,4 +77,20 @@ export interface CapabilityManifest {
   readonly dependsOn?: readonly CapabilityDependency[];
   readonly runtime?: CapabilityRuntimeManifest;
   readonly contributions?: CapabilityContributionManifest;
+}
+
+export interface CapabilityHealthResult {
+  readonly status: CapabilityHealthStatus;
+  readonly checkedAt: Date;
+  readonly message?: string;
+  readonly details?: Readonly<Record<string, unknown>>;
+}
+
+export interface CapabilityHealthReport extends CapabilityHealthResult {
+  readonly capabilityId: CapabilityId;
+  readonly name: string;
+}
+
+export interface CapabilityHealthCheck {
+  check(): Promise<CapabilityHealthResult>;
 }

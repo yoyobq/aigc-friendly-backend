@@ -174,7 +174,7 @@ const queueAiGenerate = async (input: {
   readonly model: string;
   readonly prompt: string;
   readonly provider?: 'openai' | 'qwen';
-  readonly metadata?: Record<string, string>;
+  readonly metadata?: Readonly<Record<string, unknown>>;
   readonly dedupKey?: string;
   readonly traceId?: string;
 }): Promise<request.Response> => {
@@ -204,7 +204,7 @@ const queueAiEmbed = async (input: {
   readonly token?: string;
   readonly model: string;
   readonly text: string;
-  readonly metadata?: Record<string, string>;
+  readonly metadata?: Readonly<Record<string, unknown>>;
   readonly dedupKey?: string;
   readonly traceId?: string;
 }): Promise<request.Response> => {
@@ -639,13 +639,18 @@ describe('AI GraphQL 队列入口与 Worker 联动（e2e）', () => {
       dataSource,
       queueName: BULLMQ_QUEUES.AI,
       jobId: data.jobId,
-      statuses: ['queued', 'processing', 'succeeded'],
+      statuses: ['succeeded'],
       timeoutMs: 15000,
       pollMs: 150,
     });
     expect(record.traceId).toBe(data.traceId);
     expect(record.jobId).toBe(data.jobId);
     expect(record.bizKey).toBe(data.traceId);
+    expect(record.source).toBe('system');
+    expect(record.reason).toBe('worker_completed');
+    expect(record.maxAttempts).toBe(3);
+    expect(record.actorAccountId).toBe(staffPrimaryAccountId);
+    expect(record.actorActiveRole).toBe(staffPrimaryActiveRole);
   }, 60000);
 
   it('enqueue 失败时应写 failed 记录并使用 enqueue_failed 前缀', async () => {
@@ -1040,6 +1045,87 @@ describe('AI GraphQL 队列入口与 Worker 联动（e2e）', () => {
       expect(errors[0]?.message ?? '').toMatch(
         /模型名称不能为空|Validation failed|校验|validation/i,
       );
+    });
+
+    it('queueAiGenerate 拒绝超过存储边界的 dedupKey 且不入队', async () => {
+      const timestamp = Date.now();
+      const dedupKey = 'd'.repeat(192);
+      const traceId = `e2e-ai-invalid-dedup-trace-${timestamp}`;
+      const response = await queueAiGenerate({
+        app: apiApp,
+        token: staffPrimaryToken,
+        model: 'gpt-4o-mini',
+        prompt: 'invalid dedup key length',
+        dedupKey,
+        traceId,
+      });
+
+      const errors = (response.body as { errors?: Array<{ message?: string }> }).errors ?? [];
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0]?.message ?? '').toMatch(/幂等键长度不能超过 191|Validation failed|校验/i);
+      expect(await aiQueue.getJob(dedupKey)).toBeUndefined();
+      await expect(
+        countAsyncTaskRecords({
+          dataSource,
+          queueName: BULLMQ_QUEUES.AI,
+          jobId: dedupKey,
+        }),
+      ).resolves.toBe(0);
+    });
+
+    it('queueAiGenerate 拒绝超过存储边界的 traceId 且不入队', async () => {
+      const timestamp = Date.now();
+      const dedupKey = `e2e-ai-invalid-trace-${timestamp}`;
+      const response = await queueAiGenerate({
+        app: apiApp,
+        token: staffPrimaryToken,
+        model: 'gpt-4o-mini',
+        prompt: 'invalid trace id length',
+        dedupKey,
+        traceId: 't'.repeat(129),
+      });
+
+      const errors = (response.body as { errors?: Array<{ message?: string }> }).errors ?? [];
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0]?.message ?? '').toMatch(
+        /链路追踪 ID 长度不能超过 128|Validation failed|校验/i,
+      );
+      expect(await aiQueue.getJob(dedupKey)).toBeUndefined();
+      await expect(
+        countAsyncTaskRecords({
+          dataSource,
+          queueName: BULLMQ_QUEUES.AI,
+          jobId: dedupKey,
+        }),
+      ).resolves.toBe(0);
+    });
+
+    it('queueAiGenerate 拒绝非字符串 metadata 值且不写 enqueue_failed 审计', async () => {
+      const timestamp = Date.now();
+      const dedupKey = `e2e-ai-invalid-metadata-${timestamp}`;
+      const response = await queueAiGenerate({
+        app: apiApp,
+        token: staffPrimaryToken,
+        model: 'gpt-4o-mini',
+        prompt: 'invalid metadata value',
+        metadata: { count: 1 },
+        dedupKey,
+        traceId: `e2e-ai-invalid-metadata-trace-${timestamp}`,
+      });
+
+      const errors = (response.body as { errors?: Array<{ message?: string }> }).errors ?? [];
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0]?.message ?? '').toMatch(
+        /扩展元数据必须是字符串键值对象|Validation failed|校验/i,
+      );
+      expect(await aiQueue.getJob(dedupKey)).toBeUndefined();
+      await expect(
+        countAsyncTaskRecords({
+          dataSource,
+          queueName: BULLMQ_QUEUES.AI,
+          jobId: dedupKey,
+        }),
+      ).resolves.toBe(0);
     });
 
     it('未登录调用 queueAiEmbed 应返回未认证错误', async () => {
