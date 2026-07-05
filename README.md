@@ -7,7 +7,7 @@ For AI/Agent: read `docs/README.md` first.
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![TypeScript](https://img.shields.io/badge/language-TypeScript-3178C6.svg)
 ![NestJS](https://img.shields.io/badge/framework-NestJS-E0234E.svg)
-![Node](https://img.shields.io/badge/node-%3E%3D18-green.svg)
+![Node](https://img.shields.io/badge/node-%3E%3D20.19-green.svg)
 
 基于 NestJS + TypeScript 的后端基础框架，当前以 GraphQL 为主入口，使用 MySQL + TypeORM，并遵循严格的分层架构约束。
 
@@ -26,6 +26,7 @@ For AI/Agent: read `docs/README.md` first.
 - [技术栈](#技术栈)
 - [项目结构与架构](#项目结构与架构)
 - [功能概览](#功能概览)
+- [能力插拔基线](#能力插拔基线)
 - [快速开始](#快速开始)
 - [开发与测试](#开发与测试)
 - [API 访问](#api-访问)
@@ -35,7 +36,7 @@ For AI/Agent: read `docs/README.md` first.
 
 项目面向可复用后端基础设施与分层架构治理场景，提供账号与会话鉴权、分页 / 排序 / 搜索、错误映射、输入规范化、事务边界与数据库基线交付能力，并内置基于 QM Worker 的 AI / Email 异步队列、任务审计与调试查询能力。它既是可直接扩展的基础框架，也是一套经过实践验证的 DDD 轻量级落地实现。
 
-当前 `v1.2.0-framework-baseline` 版本已将具体业务域从默认模板中剥离，保留通用角色、账号、验证、队列与审计能力，适合作为新业务域的起始基线。
+当前 `v1.4.0-capability-plugin-baseline` 版本在框架基线之上补齐了能力插拔底座：能力 manifest、启动对账、运行态启停、dispatcher / bus、API / Worker runtime guard、BullMQ queue transport、session contribution、健康检查与 generated capability 清单。具体业务域仍不进入默认模板，业务能力应在明确 bounded context 后按分层规则接入。
 
 ## 技术栈
 
@@ -132,6 +133,8 @@ adapters -> usecases -> modules -> infrastructure
 - [Boundary Contract Rules](docs/common/boundary-contract.rules.md)
 - [Type Rules](docs/common/type.rules.md)
 - [Infrastructure Rules](docs/common/infrastructure.rules.md)
+- [Capability Plugin Rules](docs/common/capability-plugin.rules.md)
+- [Capability Plugin Authoring Guide](docs/common/capability-plugin-authoring.guide.md)
 - [ESLint Architecture Rules](docs/common/eslint-architecture-rules.md)
 - [Queue Identifiers Rules](docs/common/queue-identifiers.rules.md)
 - [AI Task Lifecycle Audit Rules](docs/common/ai-task-lifecycle-audit.rules.md)
@@ -149,6 +152,7 @@ adapters -> usecases -> modules -> infrastructure
 - ✅ **Data Access**: 分页 / 排序 / 搜索通用能力、数据库事务支持
 - ✅ **Observability**: 结构化日志 (Pino)、配置管理
 - ✅ **QM Worker Base**: 统一 AI / Email 队列接入、消费链路与模块装配模式
+- ✅ **Capability Runtime**: 能力 manifest、启动对账、运行态启停、dispatcher / bus、queue transport、GraphQL guard 与 generated capability 清单
 - ✅ **AI Provider Call Record**: 记录 provider 调用链路、请求响应快照与耗时指标，支撑审计与排障
 
 ### 基础域能力
@@ -163,11 +167,28 @@ adapters -> usecases -> modules -> infrastructure
 - ✅ **AI Workflow Baseline**: 支持最小 workflow context、admission、worker handler registry 与 `generic_text_generate`
 - ✅ **Async Task Audit**: 支持按 `traceId` / 业务锚点 / 队列任务标识进行调试查询
 
+## 能力插拔基线
+
+`v1.4.0` 引入的 capability plugin 不是新的分层，也不是独立服务拆分方案。它是在既有 `adapters -> usecases -> modules -> infrastructure` 分层上增加的能力声明、装配、启停和运行时治理面。
+
+- **显式声明**：能力通过 `@CapabilityManifestProvider(...)` 声明 id、kind、processes、dependsOn、provider / queue / session / API / data contribution。
+- **启动对账**：registry 在启动期检查 manifest、provider binding、queue binding、operation handler、session resolver、GraphQL surface 和资源声明的一致性。
+- **运行态治理**：通过 `CAPABILITY_DISABLED_IDS`、`CAPABILITY_KILL_SWITCH_IDS`、`CAPABILITY_OPERATION_DISABLED_KEYS` 与 guard / dispatcher 返回统一 capability error。
+- **跨进程协作**：API 与 Worker 之间通过 BullMQ queue transport 传递 capability envelope；同进程协作只在 usecase-owned runtime boundary 中使用 dispatcher / bus。
+- **会话扩展**：能力可贡献 session principal / authority claim，平台只理解稳定 code 和投影，不内置具体业务语义。
+- **本地观察**：`npm run capability:list` 查看当前 manifest 清单，`npm run capability:docs` 生成 `docs/generated/capabilities-current.md`，`npm run capability:docs:check` 校验快照是否同步。
+
+新增或合并 capability 代码时，先读：
+
+- [Capability Plugin Rules](docs/common/capability-plugin.rules.md)
+- [Capability Plugin Authoring Guide](docs/common/capability-plugin-authoring.guide.md)
+- [Current Capability Manifest](docs/generated/capabilities-current.md)
+
 ## 快速开始
 
 ### 环境准备
 
-- Node.js >= 18
+- Node.js >= 20.19
 - MySQL >= 8.0
 - npm
 
@@ -225,8 +246,15 @@ npm run lint
 # TypeScript 类型检查
 npm run typecheck
 
-# 构建 API 入口
+# 构建生产产物（API / Worker 共享 dist）
 npm run build
+
+# 查看当前 capability id / process / contribution 清单
+npm run capability:list
+
+# 生成并校验 capability generated docs
+npm run capability:docs
+npm run capability:docs:check
 ```
 
 ### 测试策略
@@ -281,6 +309,7 @@ MIGRATION_DRILL_CREATE_TEMP_DB=true npm run migration:drill:empty-db
 - **共享类型**: 跨上下文稳定类型放在 `src/types`，通过 `@app-types/*` 引用。
 - **GraphQL**: DTO / Input / Args / Result 保持在 adapter 层；枚举、标量与 schema 初始化放在 `src/adapters/api/graphql/schema/`。
 - **ORM Entity**: 只表达持久化结构，不添加 GraphQL / HTTP / Swagger 等 adapter decorator。
+- **Capability**: manifest 是能力声明真源；generated capability 文档只能由命令生成；dispatcher / bus 只作为 usecase-owned runtime boundary，不替代业务 usecase 编排。
 
 ## API 访问
 
