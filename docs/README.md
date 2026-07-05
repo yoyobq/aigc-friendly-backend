@@ -59,6 +59,7 @@
 
   - Capability plugin / ability modularization:
     - `docs/common/capability-plugin.rules.md`
+    - `docs/common/capability-plugin-authoring.guide.md` when adding, reviewing, or merging capability code
     - `docs/generated/capabilities-current.md` when you need the current generated capability id list
     - `docs/common/boundary-contract.rules.md` when adding dispatcher / runtime contracts
     - `docs/worker/qm-worker-integration.rules.md` when adding queue transport or worker consumer
@@ -121,6 +122,7 @@
 
   - `core.rules`: pure domain only
   - `capability-plugin.rules`: capability plugin boundaries, runtime semantics, transport and contribution rules
+  - `capability-plugin-authoring.guide.md`: capability authoring, merge and validation checklist for AI agents
   - `generated/capabilities-current.md`: generated local capability id list
   - `eslint-architecture-rules.md`: executable lint rule map and architecture validation commands
   - `boundary-contract.rules`: layer-owned contract naming and port/contract distinction
