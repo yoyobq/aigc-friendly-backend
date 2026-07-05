@@ -11,6 +11,9 @@ import type {
 
 export const CAPABILITY_COMMAND_BUS = Symbol('CAPABILITY_COMMAND_BUS');
 export const CAPABILITY_QUERY_BUS = Symbol('CAPABILITY_QUERY_BUS');
+export const CAPABILITY_QUEUE_TRANSPORT = Symbol('CAPABILITY_QUEUE_TRANSPORT');
+export const CAPABILITY_QUEUE_CONSUMER = Symbol('CAPABILITY_QUEUE_CONSUMER');
+export const CAPABILITY_EVENT_PUBLISHER = Symbol('CAPABILITY_EVENT_PUBLISHER');
 export const CAPABILITY_PERMISSION_CHECKER = Symbol('CAPABILITY_PERMISSION_CHECKER');
 
 export interface CapabilityDispatchInput<TPayload> {
@@ -64,6 +67,26 @@ export interface CapabilityQueueTransportDescriptor {
   readonly queueName: string;
   readonly jobName: string;
   readonly dedupKeyMapping?: 'jobId' | 'bullmq-dedup-option' | 'none';
+}
+
+export interface CapabilityQueueTransportResult {
+  readonly queueName: string;
+  readonly jobName: string;
+  readonly jobId: string;
+  readonly traceId: string;
+}
+
+export interface CapabilityQueueTransport {
+  enqueue<TPayload>(
+    envelope: CapabilityCommand<TPayload> | CapabilityEvent<TPayload>,
+    descriptor: CapabilityQueueTransportDescriptor,
+  ): Promise<CapabilityResult<CapabilityQueueTransportResult>>;
+}
+
+export interface CapabilityQueueConsumer {
+  consume<TPayload, TResult>(
+    envelope: CapabilityCommand<TPayload>,
+  ): Promise<CapabilityResult<TResult>>;
 }
 
 export interface CapabilityEventPublisher {

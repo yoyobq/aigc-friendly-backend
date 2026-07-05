@@ -1,20 +1,27 @@
 import type {
   CapabilityCommand,
+  CapabilityProcess,
   CapabilityQuery,
   CapabilityRequestContext,
   CapabilityResult,
 } from '@app-types/common/capability.types';
 import { DomainError } from '@core/common/errors/domain-error';
-import { Injectable } from '@nestjs/common';
+import { Injectable, type Provider } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { BULLMQ_JOBS, BULLMQ_QUEUES } from '@src/infrastructure/bullmq/bullmq.constants';
+import { BullMqProducerGateway } from '@src/infrastructure/bullmq/producer.gateway';
 import {
   CAPABILITY_COMMAND_BUS,
+  CAPABILITY_EVENT_PUBLISHER,
   CAPABILITY_PERMISSION_CHECKER,
+  CAPABILITY_QUEUE_CONSUMER,
   CAPABILITY_QUERY_BUS,
   type CapabilityCommandBus,
+  type CapabilityEventPublisher,
+  type CapabilityEventSubscriber,
   type CapabilityOperationHandler,
   type CapabilityPermissionChecker,
+  type CapabilityQueueConsumer,
   type CapabilityQueryBus,
 } from '@src/usecases/common/ports/capability-bus.contract';
 import {
@@ -23,6 +30,7 @@ import {
 } from '@src/usecases/common/ports/capability-request-context-store.contract';
 import { CapabilityBootstrapCheck } from './capability-bootstrap-check';
 import {
+  CapabilityEventSubscriberProvider,
   CapabilityManifestProvider,
   CapabilityOperationHandlerProvider,
   CapabilityQueueBindingProvider,
@@ -282,7 +290,7 @@ describe('CapabilityDispatcher', () => {
     await module.close();
   });
 
-  it('does not execute queue transport in P3a', async () => {
+  it('enqueues queue transport commands through BullMQ producer', async () => {
     @Injectable()
     @CapabilityManifestProvider({
       id: 'test.queue-dispatch',
@@ -294,7 +302,7 @@ describe('CapabilityDispatcher', () => {
         commands: [
           {
             kind: 'command',
-            name: 'generate',
+            name: 'dispatch',
             sideEffects: 'external',
             transport: 'queue',
           },
@@ -303,10 +311,11 @@ describe('CapabilityDispatcher', () => {
       contributions: {
         queues: [
           {
-            operation: 'generate',
+            operation: 'dispatch',
             operationKind: 'command',
-            queueName: BULLMQ_QUEUES.AI,
-            jobName: BULLMQ_JOBS.AI.GENERATE,
+            queueName: BULLMQ_QUEUES.CAPABILITY,
+            jobName: BULLMQ_JOBS.CAPABILITY.DISPATCH,
+            dedupKeyMapping: 'jobId',
           },
         ],
       },
@@ -316,14 +325,25 @@ describe('CapabilityDispatcher', () => {
     @Injectable()
     @CapabilityQueueBindingProvider({
       capabilityId: 'test.queue-dispatch',
-      operation: 'generate',
+      operation: 'dispatch',
       operationKind: 'command',
-      queueName: BULLMQ_QUEUES.AI,
-      jobName: BULLMQ_JOBS.AI.GENERATE,
+      queueName: BULLMQ_QUEUES.CAPABILITY,
+      jobName: BULLMQ_JOBS.CAPABILITY.DISPATCH,
+      dedupKeyMapping: 'jobId',
     })
     class QueueDispatchBinding {}
 
-    const module = await buildModule([QueueDispatchCapability, QueueDispatchBinding]);
+    const enqueue = jest.fn().mockResolvedValue({
+      queueName: BULLMQ_QUEUES.CAPABILITY,
+      jobName: BULLMQ_JOBS.CAPABILITY.DISPATCH,
+      jobId: 'dedup-1',
+      traceId: 'trace-1',
+    });
+    const module = await buildModule([
+      QueueDispatchCapability,
+      QueueDispatchBinding,
+      { provide: BullMqProducerGateway, useValue: { enqueue } },
+    ]);
     const commandBus = module.get<CapabilityCommandBus>(CAPABILITY_COMMAND_BUS);
     const store = module.get<CapabilityRequestContextStore>(CAPABILITY_REQUEST_CONTEXT_STORE);
 
@@ -331,13 +351,208 @@ describe('CapabilityDispatcher', () => {
       await expect(
         commandBus.execute({
           capability: 'test.queue-dispatch',
-          operation: 'generate',
-          payload: {},
+          operation: 'dispatch',
+          payload: { id: 'item-1' },
+          dedupKey: 'dedup-1',
         }),
-      ).resolves.toMatchObject({
-        ok: false,
-        error: { code: 'CAPABILITY_TRANSPORT_UNAVAILABLE' },
+      ).resolves.toEqual({
+        ok: true,
+        value: {
+          queueName: BULLMQ_QUEUES.CAPABILITY,
+          jobName: BULLMQ_JOBS.CAPABILITY.DISPATCH,
+          jobId: 'dedup-1',
+          traceId: 'trace-1',
+        },
       });
+    });
+    expect(enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queueName: BULLMQ_QUEUES.CAPABILITY,
+        jobName: BULLMQ_JOBS.CAPABILITY.DISPATCH,
+        dedupKey: 'dedup-1',
+        traceId: 'trace-1',
+      }),
+    );
+    await module.close();
+  });
+
+  it('consumes queued commands by invoking the worker-local handler', async () => {
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.queue-consume',
+      kind: 'business',
+      displayName: 'Test Queue Consume',
+      version: '0.1.0',
+      processes: ['worker'],
+      operations: {
+        commands: [
+          {
+            kind: 'command',
+            name: 'dispatch',
+            sideEffects: 'internal',
+            transport: 'queue',
+          },
+        ],
+      },
+      contributions: {
+        queues: [
+          {
+            operation: 'dispatch',
+            operationKind: 'command',
+            queueName: BULLMQ_QUEUES.CAPABILITY,
+            jobName: BULLMQ_JOBS.CAPABILITY.DISPATCH,
+          },
+        ],
+      },
+    })
+    class QueueConsumeCapability {}
+
+    @Injectable()
+    @CapabilityQueueBindingProvider({
+      capabilityId: 'test.queue-consume',
+      operation: 'dispatch',
+      operationKind: 'command',
+      queueName: BULLMQ_QUEUES.CAPABILITY,
+      jobName: BULLMQ_JOBS.CAPABILITY.DISPATCH,
+    })
+    class QueueConsumeBinding {}
+
+    @Injectable()
+    @CapabilityOperationHandlerProvider({
+      capabilityId: 'test.queue-consume',
+      operation: 'dispatch',
+      operationKind: 'command',
+    })
+    class QueueConsumeHandler implements CapabilityOperationHandler<
+      { readonly id: string },
+      { readonly processedId: string }
+    > {
+      readonly capability = 'test.queue-consume';
+      readonly operation = 'dispatch';
+      readonly operationKind = 'command' as const;
+
+      handle(
+        envelope:
+          CapabilityCommand<{ readonly id: string }> | CapabilityQuery<{ readonly id: string }>,
+      ): Promise<CapabilityResult<{ readonly processedId: string }>> {
+        return Promise.resolve({
+          ok: true,
+          value: { processedId: envelope.payload.id },
+        });
+      }
+    }
+
+    const module = await buildModule(
+      [QueueConsumeCapability, QueueConsumeBinding, QueueConsumeHandler],
+      undefined,
+      'worker',
+    );
+    const queueConsumer = module.get<CapabilityQueueConsumer>(CAPABILITY_QUEUE_CONSUMER);
+
+    await expect(
+      queueConsumer.consume({
+        capability: 'test.queue-consume',
+        operation: 'dispatch',
+        operationKind: 'command',
+        context: createContext(),
+        payload: { id: 'item-1' },
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      }),
+    ).resolves.toEqual({
+      ok: true,
+      value: { processedId: 'item-1' },
+    });
+    await module.close();
+  });
+
+  it('publishes in-process events without bubbling subscriber failures', async () => {
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.event-runtime',
+      kind: 'business',
+      displayName: 'Test Event Runtime',
+      version: '0.1.0',
+      processes: ['api'],
+      operations: {
+        events: [{ kind: 'event', name: 'published', eventType: 'fact' }],
+      },
+    })
+    class EventRuntimeCapability {}
+
+    @Injectable()
+    @CapabilityEventSubscriberProvider({
+      capabilityId: 'test.event-runtime',
+      event: 'published',
+    })
+    class FailingSubscriber implements CapabilityEventSubscriber<{ readonly id: string }> {
+      readonly capability = 'test.event-runtime';
+      readonly event = 'published';
+      called = false;
+
+      handle(): Promise<{ readonly ok: true; readonly value: void }> {
+        this.called = true;
+        throw new Error('subscriber failed');
+      }
+    }
+
+    const module = await buildModule([EventRuntimeCapability, FailingSubscriber]);
+    const publisher = module.get<CapabilityEventPublisher>(CAPABILITY_EVENT_PUBLISHER);
+    const subscriber = module.get(FailingSubscriber);
+    const context = createContext();
+
+    await expect(
+      publisher.publish({
+        capability: 'test.event-runtime',
+        operation: 'published',
+        operationKind: 'event',
+        context,
+        payload: { id: 'item-1' },
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        eventId: 'event-1',
+        occurredAt: new Date('2026-01-01T00:00:00.000Z'),
+      }),
+    ).resolves.toEqual({ ok: true, value: undefined });
+    await Promise.resolve();
+    expect(subscriber.called).toBe(true);
+    await module.close();
+  });
+
+  it('returns disabled result when publishing event for disabled capability', async () => {
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.event-disabled',
+      kind: 'business',
+      displayName: 'Test Event Disabled',
+      version: '0.1.0',
+      processes: ['api'],
+      runtime: { defaultState: 'disabled' },
+      operations: {
+        events: [{ kind: 'event', name: 'published', eventType: 'fact' }],
+      },
+    })
+    class EventDisabledCapability {}
+
+    const module = await buildModule([EventDisabledCapability]);
+    const publisher = module.get<CapabilityEventPublisher>(CAPABILITY_EVENT_PUBLISHER);
+
+    await expect(
+      publisher.publish({
+        capability: 'test.event-disabled',
+        operation: 'published',
+        operationKind: 'event',
+        context: createContext(),
+        payload: { id: 'item-1' },
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        eventId: 'event-1',
+        occurredAt: new Date('2026-01-01T00:00:00.000Z'),
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        code: 'CAPABILITY_DISABLED',
+        capabilityId: 'test.event-disabled',
+        operation: 'published',
+      }),
     });
     await module.close();
   });
@@ -358,11 +573,12 @@ function createContext(): CapabilityRequestContext {
 }
 
 async function buildModule(
-  providers: readonly (new (...args: never[]) => object)[],
+  providers: readonly Provider[],
   permissionChecker?: CapabilityPermissionChecker,
+  process: CapabilityProcess = 'api',
 ): Promise<TestingModule> {
   const builder = Test.createTestingModule({
-    imports: [CapabilityModule.forRoot({ process: 'api' })],
+    imports: [CapabilityModule.forRoot({ process })],
     providers: [...providers],
   })
     .overrideProvider(CapabilityBootstrapCheck)
