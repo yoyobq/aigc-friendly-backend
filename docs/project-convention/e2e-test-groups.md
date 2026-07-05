@@ -19,14 +19,15 @@
 
 ## 单文件运行
 
-- 跑单文件（默认 core）：`npm run test:e2e:file -- 01-auth/auth-identity.e2e-spec.ts`
-- 跑 worker 单文件：`npm run test:e2e:file -- worker 08-qm-worker/email-queue-consume.e2e-spec.ts`
-- 跑 AI workflow worker 单文件：`npm run test:e2e:file -- worker 08-qm-worker/ai-workflow-generic-handler.e2e-spec.ts`
-- 跑 smoke 单文件：`npm run test:e2e:file -- smoke 99-third-party-live-smoke/email-delivery-real.e2e-spec.ts`
-- 跑 AI 真实链路 E2E：`RUN_REAL_AI_E2E=true AI_PROVIDER_MODE=remote NODE_ENV=e2e node ./test/run-e2e-group.js smoke 99-third-party-live-smoke/ai-qwen-generate-real.e2e-spec.ts`
-- watch 单文件：`npm run test:e2e:watch -- 01-auth/auth-identity.e2e-spec.ts`
-- debug 单文件：`npm run test:e2e:debug -- 01-auth/auth-identity.e2e-spec.ts`
+- 跑单文件（默认 core）：`npm run test:e2e:file -- test/01-auth/auth-identity.e2e-spec.ts`
+- 跑 worker 单文件：`npm run test:e2e:file -- worker test/08-qm-worker/email-queue-consume.e2e-spec.ts`
+- 跑 AI workflow worker 单文件：`npm run test:e2e:file -- worker test/08-qm-worker/ai-workflow-generic-handler.e2e-spec.ts`
+- 跑 smoke 单文件：`npm run test:e2e:file -- smoke test/99-third-party-live-smoke/email-delivery-real.e2e-spec.ts`
+- 跑 AI 真实链路 E2E：`RUN_REAL_AI_E2E=true AI_PROVIDER_MODE=remote NODE_ENV=e2e node ./test/run-e2e-group.js smoke test/99-third-party-live-smoke/ai-qwen-generate-real.e2e-spec.ts`
+- watch 单文件：`npm run test:e2e:watch -- test/01-auth/auth-identity.e2e-spec.ts`
+- debug 单文件：`npm run test:e2e:debug -- test/01-auth/auth-identity.e2e-spec.ts`
 - `test:e2e:file`、`test:e2e:watch`、`test:e2e:debug` 都要求且只接受 1 个 `*.e2e-spec.ts` 参数。
+- 单文件参数使用仓库相对路径或绝对路径，不再自动补 `test/` 前缀。
 - `file` 模式与其他 E2E 一样，会在执行前做 MySQL 清理；执行结束后不会再次做 MySQL 清理。
 
 ## 选择规则（优先级）

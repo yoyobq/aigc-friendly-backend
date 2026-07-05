@@ -242,6 +242,11 @@ P0 完成条件：
 - API / Worker 进程可以按 process 装配 capability package。
 - 旧 AI 行为不回退。
 
+P0 验证备注：
+
+- `ai-worker-consume-persistence` 曾暴露 `provider_latency_ms` 负数写入 `int unsigned` 的既有缺陷；实现时应在 provider call record 写入前把负数或超出 unsigned int 范围的 latency 归一化为 `null`。
+- 若完整 `test:e2e:worker` 在该文件 13 个用例均通过后仍报 `Can't add new command when connection is in closed state`，这是 Worker failed lifecycle 事件晚于测试 DataSource 关闭的收尾问题，不应归因于 capability bootstrap / DI；另案修复 worker runtime 或 e2e teardown 的关闭等待语义。
+
 ## P1: Notification / Third-party Technical Capability 与 `modules/common` 瘦身
 
 P1 不引入新的业务模型，重点是复用 P0 runtime，把第二类 technical capability 接入，验证 `modules/common` 的归属判断。

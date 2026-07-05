@@ -440,6 +440,9 @@ describe('AI Worker 消费落库阶段（e2e）', () => {
   }, 60000);
 
   afterAll(async () => {
+    if (workerRuntime) {
+      await workerRuntime.stop();
+    }
     if (workerApp) {
       await workerApp.close();
     }

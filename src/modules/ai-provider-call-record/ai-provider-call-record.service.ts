@@ -87,6 +87,7 @@ export interface AiProviderCallRecordView {
 @Injectable()
 export class AiProviderCallRecordService {
   private static readonly CREATE_RECORD_MAX_RETRY = 5;
+  private static readonly MYSQL_UNSIGNED_INT_MAX = 4294967295;
 
   constructor(
     @InjectRepository(AiProviderCallRecordEntity)
@@ -341,7 +342,11 @@ export class AiProviderCallRecordService {
       return null;
     }
     const latencyMs = input.providerFinishedAt.getTime() - input.providerStartedAt.getTime();
-    if (!Number.isFinite(latencyMs)) {
+    if (
+      !Number.isFinite(latencyMs) ||
+      latencyMs < 0 ||
+      latencyMs > AiProviderCallRecordService.MYSQL_UNSIGNED_INT_MAX
+    ) {
       return null;
     }
     return latencyMs;

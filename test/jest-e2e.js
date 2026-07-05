@@ -3,18 +3,18 @@
 const GROUPS = {
   core: {
     specs: [
-      '00-app/00-app.e2e-spec.ts',
-      '01-auth/auth-identity.e2e-spec.ts',
-      '01-auth/auth.e2e-spec.ts',
-      '02-register/register.e2e-spec.ts',
-      '03-roles-guard/roles-guard.e2e-spec.ts',
-      '04-user-info/update-access-group.e2e-spec.ts',
-      '04-user-info/update-visible-user-info.e2e-spec.ts',
-      '05-verification-record/verification-record-types.e2e-spec.ts',
-      '05-verification-record/verification-record-invite.e2e-spec.ts',
-      '07-pagination-sort-search/pagination.e2e-spec.ts',
-      '07-pagination-sort-search/search.e2e-spec.ts',
-      '07-pagination-sort-search/sort.e2e-spec.ts',
+      'test/00-app/00-app.e2e-spec.ts',
+      'test/01-auth/auth-identity.e2e-spec.ts',
+      'test/01-auth/auth.e2e-spec.ts',
+      'test/02-register/register.e2e-spec.ts',
+      'test/03-roles-guard/roles-guard.e2e-spec.ts',
+      'test/04-user-info/update-access-group.e2e-spec.ts',
+      'test/04-user-info/update-visible-user-info.e2e-spec.ts',
+      'test/05-verification-record/verification-record-types.e2e-spec.ts',
+      'test/05-verification-record/verification-record-invite.e2e-spec.ts',
+      'test/07-pagination-sort-search/pagination.e2e-spec.ts',
+      'test/07-pagination-sort-search/search.e2e-spec.ts',
+      'test/07-pagination-sort-search/sort.e2e-spec.ts',
     ],
     needs: {
       mysql: true,
@@ -26,11 +26,11 @@ const GROUPS = {
   },
   worker: {
     specs: [
-      '08-qm-worker/email-queue-consume.e2e-spec.ts',
-      '08-qm-worker/ai-graphql-queue.e2e-spec.ts',
-      '08-qm-worker/ai-worker-consume-persistence.e2e-spec.ts',
-      '08-qm-worker/ai-worker-consume-workflow.e2e-spec.ts',
-      '08-qm-worker/ai-workflow-generic-handler.e2e-spec.ts',
+      'test/08-qm-worker/email-queue-consume.e2e-spec.ts',
+      'test/08-qm-worker/ai-graphql-queue.e2e-spec.ts',
+      'test/08-qm-worker/ai-worker-consume-persistence.e2e-spec.ts',
+      'test/08-qm-worker/ai-worker-consume-workflow.e2e-spec.ts',
+      'test/08-qm-worker/ai-workflow-generic-handler.e2e-spec.ts',
     ],
     needs: {
       mysql: true,
@@ -42,9 +42,9 @@ const GROUPS = {
   },
   smoke: {
     specs: [
-      '99-third-party-live-smoke/email-delivery-real.e2e-spec.ts',
-      '99-third-party-live-smoke/ai-qwen-generate-real.e2e-spec.ts',
-      '99-third-party-live-smoke/weapp-qrcode-real.e2e-spec.ts',
+      'test/99-third-party-live-smoke/email-delivery-real.e2e-spec.ts',
+      'test/99-third-party-live-smoke/ai-qwen-generate-real.e2e-spec.ts',
+      'test/99-third-party-live-smoke/weapp-qrcode-real.e2e-spec.ts',
     ],
     needs: {
       mysql: true,
@@ -58,11 +58,22 @@ const GROUPS = {
 
 const DEFAULT_GROUP = 'core';
 
+// 为了确保 rootDir 解析稳定，使用绝对路径
+const path = require('path');
+
 const parseCsv = (raw) =>
   (raw || '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+
+const normalizeSpecPath = (raw) => {
+  const spec = raw.trim().replace(/\\/g, '/').replace(/^\.\//, '');
+  if (spec.startsWith('<rootDir>/') || path.isAbsolute(spec)) {
+    return spec;
+  }
+  return `<rootDir>/${spec}`;
+};
 
 const requestedGroup = (process.env.E2E_GROUP || '').trim();
 const selectedGroupName = requestedGroup || DEFAULT_GROUP;
@@ -74,7 +85,7 @@ if (!selectedGroup) {
 
 const fromEnv = parseCsv(process.env.E2E_SPECS);
 const selectedSpecs = fromEnv.length ? fromEnv : selectedGroup.specs;
-const selected = selectedSpecs.map((p) => `<rootDir>/test/${p}`);
+const selected = selectedSpecs.map(normalizeSpecPath);
 
 process.env.E2E_GROUP = selectedGroupName;
 if (!process.env.E2E_NEEDS || process.env.E2E_NEEDS.trim().length === 0) {
@@ -85,9 +96,6 @@ if (!process.env.E2E_NEEDS || process.env.E2E_NEEDS.trim().length === 0) {
 }
 
 const fallbackPattern = ['<rootDir>/test/**/?(*.)e2e-spec.ts'];
-
-// 为了确保 rootDir 解析稳定，使用绝对路径
-const path = require('path');
 
 const jestConfig = {
   preset: 'ts-jest',

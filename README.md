@@ -245,8 +245,8 @@ npm run test:e2e:core
 npm run test:e2e:worker
 
 # 指定单个 E2E 文件
-npm run test:e2e:file -- 01-auth/auth.e2e-spec.ts
-npm run test:e2e:file -- worker 08-qm-worker/ai-workflow-generic-handler.e2e-spec.ts
+npm run test:e2e:file -- test/01-auth/auth.e2e-spec.ts
+npm run test:e2e:file -- worker test/08-qm-worker/ai-workflow-generic-handler.e2e-spec.ts
 
 # 真实第三方 smoke，需要外部密钥与服务可用
 npm run test:e2e:smoke
