@@ -96,6 +96,7 @@ if (!process.env.E2E_NEEDS || process.env.E2E_NEEDS.trim().length === 0) {
 }
 
 const fallbackPattern = ['<rootDir>/test/**/?(*.)e2e-spec.ts'];
+const isWatchMode = process.argv.some((arg) => arg === '--watch' || arg === '--watchAll');
 
 const jestConfig = {
   preset: 'ts-jest',
@@ -113,6 +114,8 @@ const jestConfig = {
   transform: {
     '^.+\\.(t|j)s$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
   },
+
+  dependencyExtractor: '<rootDir>/test/jest-type-dependency-extractor.js',
 
   setupFiles: ['tsconfig-paths/register'],
 
@@ -139,6 +142,12 @@ const jestConfig = {
   forceExit: true,
   detectOpenHandles: true,
 };
+
+if (isWatchMode) {
+  // ts-jest can reuse stale semantic diagnostics for erased type-only imports in watch mode.
+  // Keep normal one-shot e2e runs cached; make watch reloads deterministic.
+  jestConfig.cache = false;
+}
 
 module.exports = jestConfig;
 Object.defineProperty(module.exports, '__GROUPS', {

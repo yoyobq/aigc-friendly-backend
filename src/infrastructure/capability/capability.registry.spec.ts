@@ -3,14 +3,20 @@ import { Injectable } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { BULLMQ_JOBS, BULLMQ_QUEUES } from '@src/infrastructure/bullmq/bullmq.constants';
 import type { CapabilityHealthCheck } from '@app-types/common/capability.types';
+import type {
+  CapabilityEventSubscriber,
+  CapabilityOperationHandler,
+} from '@src/usecases/common/ports/capability-bus.contract';
 import {
   SESSION_REFERENCE_CAPABILITY_ID,
   SESSION_REFERENCE_CAPABILITY_PROVIDERS,
 } from '../../../test/support/capability/session-reference.fixture';
 import { CapabilityBootstrapCheck } from './capability-bootstrap-check';
 import {
+  CapabilityEventSubscriberProvider,
   CapabilityHealthCheckProvider,
   CapabilityManifestProvider,
+  CapabilityOperationHandlerProvider,
   CapabilityProviderBindingProvider,
   CapabilityQueueBindingProvider,
   CapabilitySessionAuthorityScopeAuthorizerProvider,
@@ -294,6 +300,303 @@ describe('CapabilityRegistry', () => {
       ]),
     );
     expect(() => registry.assertBootstrapValid()).toThrow(CapabilityBootstrapError);
+    await module.close();
+  });
+
+  it('fails validation when a declared in-process operation lacks a handler', async () => {
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.operation-missing-handler',
+      kind: 'business',
+      displayName: 'Test Operation Missing Handler',
+      version: '0.1.0',
+      processes: ['api'],
+      operations: {
+        commands: [
+          {
+            kind: 'command',
+            name: 'publish',
+            sideEffects: 'internal',
+          },
+        ],
+      },
+    })
+    class MissingOperationHandlerCapability {}
+
+    const module = await buildModule([MissingOperationHandlerCapability], 'api');
+    const registry = module.get(CapabilityRegistry);
+
+    expect(registry.validateBootstrap().issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'CAPABILITY_OPERATION_HANDLER_MISSING' }),
+      ]),
+    );
+    await module.close();
+  });
+
+  it('fails validation when operation handlers are duplicated', async () => {
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.operation-duplicate-handler',
+      kind: 'business',
+      displayName: 'Test Operation Duplicate Handler',
+      version: '0.1.0',
+      processes: ['api'],
+      operations: {
+        commands: [
+          {
+            kind: 'command',
+            name: 'publish',
+            sideEffects: 'internal',
+          },
+        ],
+      },
+    })
+    class DuplicateHandlerCapability {}
+
+    @Injectable()
+    @CapabilityOperationHandlerProvider({
+      capabilityId: 'test.operation-duplicate-handler',
+      operation: 'publish',
+      operationKind: 'command',
+    })
+    class FirstPublishHandler implements CapabilityOperationHandler {
+      readonly capability = 'test.operation-duplicate-handler';
+      readonly operation = 'publish';
+      readonly operationKind = 'command' as const;
+
+      handle(): Promise<{ readonly ok: true; readonly value: string }> {
+        return Promise.resolve({ ok: true, value: 'first' });
+      }
+    }
+
+    @Injectable()
+    @CapabilityOperationHandlerProvider({
+      capabilityId: 'test.operation-duplicate-handler',
+      operation: 'publish',
+      operationKind: 'command',
+    })
+    class SecondPublishHandler implements CapabilityOperationHandler {
+      readonly capability = 'test.operation-duplicate-handler';
+      readonly operation = 'publish';
+      readonly operationKind = 'command' as const;
+
+      handle(): Promise<{ readonly ok: true; readonly value: string }> {
+        return Promise.resolve({ ok: true, value: 'second' });
+      }
+    }
+
+    const module = await buildModule(
+      [DuplicateHandlerCapability, FirstPublishHandler, SecondPublishHandler],
+      'api',
+    );
+    const registry = module.get(CapabilityRegistry);
+
+    expect(registry.validateBootstrap().issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'CAPABILITY_OPERATION_HANDLER_DUPLICATE' }),
+      ]),
+    );
+    await module.close();
+  });
+
+  it('reports process mismatch for operation handlers registered in the wrong process', async () => {
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.operation-process-mismatch',
+      kind: 'business',
+      displayName: 'Test Operation Process Mismatch',
+      version: '0.1.0',
+      processes: ['api'],
+      operations: {
+        queries: [
+          {
+            kind: 'query',
+            name: 'view',
+          },
+        ],
+      },
+    })
+    class ProcessMismatchCapability {}
+
+    @Injectable()
+    @CapabilityOperationHandlerProvider({
+      capabilityId: 'test.operation-process-mismatch',
+      operation: 'view',
+      operationKind: 'query',
+      processes: ['worker'],
+    })
+    class ViewHandler implements CapabilityOperationHandler {
+      readonly capability = 'test.operation-process-mismatch';
+      readonly operation = 'view';
+      readonly operationKind = 'query' as const;
+
+      handle(): Promise<{ readonly ok: true; readonly value: string }> {
+        return Promise.resolve({ ok: true, value: 'view' });
+      }
+    }
+
+    const module = await buildModule([ProcessMismatchCapability, ViewHandler], 'api');
+    const registry = module.get(CapabilityRegistry);
+
+    expect(registry.validateBootstrap().issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'CAPABILITY_OPERATION_HANDLER_PROCESS_MISMATCH' }),
+      ]),
+    );
+    await module.close();
+  });
+
+  it('reports undeclared operation handlers as non-blocking warnings', async () => {
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.operation-warning',
+      kind: 'business',
+      displayName: 'Test Operation Warning',
+      version: '0.1.0',
+      processes: ['api'],
+    })
+    class WarningCapability {}
+
+    @Injectable()
+    @CapabilityOperationHandlerProvider({
+      capabilityId: 'test.operation-warning',
+      operation: 'undeclared',
+      operationKind: 'command',
+    })
+    class UndeclaredHandler implements CapabilityOperationHandler {
+      readonly capability = 'test.operation-warning';
+      readonly operation = 'undeclared';
+      readonly operationKind = 'command' as const;
+
+      handle(): Promise<{ readonly ok: true; readonly value: string }> {
+        return Promise.resolve({ ok: true, value: 'ok' });
+      }
+    }
+
+    const module = await buildModule([WarningCapability, UndeclaredHandler], 'api');
+    const registry = module.get(CapabilityRegistry);
+
+    expect(registry.validateBootstrap().issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'CAPABILITY_OPERATION_HANDLER_NOT_DECLARED',
+          severity: 'warning',
+        }),
+      ]),
+    );
+    expect(() => registry.assertBootstrapValid()).not.toThrow();
+    await module.close();
+  });
+
+  it('resolves queue transport descriptors without enqueueing BullMQ jobs', async () => {
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.operation-queue',
+      kind: 'technical',
+      displayName: 'Test Operation Queue',
+      version: '0.1.0',
+      processes: ['api'],
+      operations: {
+        commands: [
+          {
+            kind: 'command',
+            name: 'generate',
+            sideEffects: 'external',
+            transport: 'queue',
+          },
+        ],
+      },
+      contributions: {
+        queues: [
+          {
+            operation: 'generate',
+            operationKind: 'command',
+            queueName: BULLMQ_QUEUES.AI,
+            jobName: BULLMQ_JOBS.AI.GENERATE,
+            dedupKeyMapping: 'jobId',
+          },
+        ],
+      },
+    })
+    class QueueOperationCapability {}
+
+    @Injectable()
+    @CapabilityQueueBindingProvider({
+      capabilityId: 'test.operation-queue',
+      operation: 'generate',
+      operationKind: 'command',
+      queueName: BULLMQ_QUEUES.AI,
+      jobName: BULLMQ_JOBS.AI.GENERATE,
+      dedupKeyMapping: 'jobId',
+    })
+    class QueueOperationBinding {}
+
+    const module = await buildModule([QueueOperationCapability, QueueOperationBinding], 'api');
+    const registry = module.get(CapabilityRegistry);
+
+    expect(registry.validateBootstrap().issues).toEqual([]);
+    expect(
+      registry.getQueueTransportDescriptor({
+        capabilityId: 'test.operation-queue',
+        operation: 'generate',
+        operationKind: 'command',
+      }),
+    ).toEqual({
+      capabilityId: 'test.operation-queue',
+      operation: 'generate',
+      operationKind: 'command',
+      queueName: BULLMQ_QUEUES.AI,
+      jobName: BULLMQ_JOBS.AI.GENERATE,
+      dedupKeyMapping: 'jobId',
+    });
+    await module.close();
+  });
+
+  it('discovers event subscriber fixtures without dispatching events', async () => {
+    @Injectable()
+    @CapabilityManifestProvider({
+      id: 'test.operation-event',
+      kind: 'business',
+      displayName: 'Test Operation Event',
+      version: '0.1.0',
+      processes: ['api'],
+      operations: {
+        events: [
+          {
+            kind: 'event',
+            name: 'published',
+            eventType: 'fact',
+          },
+        ],
+      },
+    })
+    class EventCapability {}
+
+    @Injectable()
+    @CapabilityEventSubscriberProvider({
+      capabilityId: 'test.operation-event',
+      event: 'published',
+    })
+    class PublishedSubscriber implements CapabilityEventSubscriber {
+      readonly capability = 'test.operation-event';
+      readonly event = 'published';
+
+      handle(): Promise<{ readonly ok: true; readonly value: void }> {
+        return Promise.resolve({ ok: true, value: undefined });
+      }
+    }
+
+    const module = await buildModule([EventCapability, PublishedSubscriber], 'api');
+    const registry = module.get(CapabilityRegistry);
+
+    expect(registry.validateBootstrap().issues).toEqual([]);
+    expect(
+      registry.getEventSubscribers({
+        capabilityId: 'test.operation-event',
+        event: 'published',
+      }),
+    ).toHaveLength(1);
     await module.close();
   });
 

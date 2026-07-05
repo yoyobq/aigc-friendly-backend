@@ -6,6 +6,8 @@ import type { Config } from 'jest';
  * Jest 配置文件 - 单元测试专用
  * 基于并替换 nest 默认在 package.json 中的配置，适用于 NestJS TypeScript 项目
  */
+const isWatchMode = process.argv.some((arg) => arg === '--watch' || arg === '--watchAll');
+
 const config: Config = {
   // 保留原有配置：测试环境
   testEnvironment: 'node',
@@ -56,6 +58,8 @@ const config: Config = {
       },
     ],
   },
+
+  dependencyExtractor: '<rootDir>/test/jest-type-dependency-extractor.js',
 
   // 覆盖率收集
   collectCoverageFrom: [
@@ -130,5 +134,11 @@ const config: Config = {
   // 监听忽略模式
   watchPathIgnorePatterns: ['/node_modules/', '/dist/', '/coverage/', '/test/'],
 };
+
+if (isWatchMode) {
+  // ts-jest can reuse stale semantic diagnostics for erased type-only imports in watch mode.
+  // Keep normal one-shot test runs cached; make watch reloads deterministic.
+  config.cache = false;
+}
 
 export default config;

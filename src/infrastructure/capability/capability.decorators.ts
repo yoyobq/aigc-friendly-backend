@@ -4,6 +4,7 @@ import type {
   CapabilityHealthCheck,
   CapabilityManifest,
   CapabilityOperationKind,
+  CapabilityProcess,
   CapabilityProviderKind,
 } from '@app-types/common/capability.types';
 import { DiscoveryService } from '@nestjs/core';
@@ -26,6 +27,19 @@ export interface CapabilityQueueBindingMetadata {
 export interface CapabilityHealthCheckMetadata {
   readonly capabilityId: CapabilityId;
   readonly name: string;
+}
+
+export interface CapabilityOperationHandlerMetadata {
+  readonly capabilityId: CapabilityId;
+  readonly operation: string;
+  readonly operationKind: Exclude<CapabilityOperationKind, 'event'>;
+  readonly processes?: readonly CapabilityProcess[];
+}
+
+export interface CapabilityEventSubscriberMetadata {
+  readonly capabilityId: CapabilityId;
+  readonly event: string;
+  readonly processes?: readonly CapabilityProcess[];
 }
 
 export interface CapabilitySessionIdentityResolverMetadata {
@@ -51,6 +65,10 @@ export const CAPABILITY_QUEUE_BINDING_DISCOVERABLE =
   DiscoveryService.createDecorator<CapabilityQueueBindingMetadata>();
 export const CAPABILITY_HEALTH_CHECK_DISCOVERABLE =
   DiscoveryService.createDecorator<CapabilityHealthCheckMetadata>();
+export const CAPABILITY_OPERATION_HANDLER_DISCOVERABLE =
+  DiscoveryService.createDecorator<CapabilityOperationHandlerMetadata>();
+export const CAPABILITY_EVENT_SUBSCRIBER_DISCOVERABLE =
+  DiscoveryService.createDecorator<CapabilityEventSubscriberMetadata>();
 export const CAPABILITY_SESSION_IDENTITY_RESOLVER_DISCOVERABLE =
   DiscoveryService.createDecorator<CapabilitySessionIdentityResolverMetadata>();
 export const CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_DISCOVERABLE =
@@ -63,6 +81,10 @@ export const CAPABILITY_PROVIDER_BINDING_METADATA_KEY =
   CAPABILITY_PROVIDER_BINDING_DISCOVERABLE.KEY;
 export const CAPABILITY_QUEUE_BINDING_METADATA_KEY = CAPABILITY_QUEUE_BINDING_DISCOVERABLE.KEY;
 export const CAPABILITY_HEALTH_CHECK_METADATA_KEY = CAPABILITY_HEALTH_CHECK_DISCOVERABLE.KEY;
+export const CAPABILITY_OPERATION_HANDLER_METADATA_KEY =
+  CAPABILITY_OPERATION_HANDLER_DISCOVERABLE.KEY;
+export const CAPABILITY_EVENT_SUBSCRIBER_METADATA_KEY =
+  CAPABILITY_EVENT_SUBSCRIBER_DISCOVERABLE.KEY;
 export const CAPABILITY_SESSION_IDENTITY_RESOLVER_METADATA_KEY =
   CAPABILITY_SESSION_IDENTITY_RESOLVER_DISCOVERABLE.KEY;
 export const CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_METADATA_KEY =
@@ -94,6 +116,20 @@ export function CapabilityHealthCheckProvider(
   metadata: CapabilityHealthCheckMetadata,
 ): ClassDecorator {
   return CAPABILITY_HEALTH_CHECK_DISCOVERABLE(metadata);
+}
+
+// eslint-disable-next-line @typescript-eslint/naming-convention
+export function CapabilityOperationHandlerProvider(
+  metadata: CapabilityOperationHandlerMetadata,
+): ClassDecorator {
+  return CAPABILITY_OPERATION_HANDLER_DISCOVERABLE(metadata);
+}
+
+// eslint-disable-next-line @typescript-eslint/naming-convention
+export function CapabilityEventSubscriberProvider(
+  metadata: CapabilityEventSubscriberMetadata,
+): ClassDecorator {
+  return CAPABILITY_EVENT_SUBSCRIBER_DISCOVERABLE(metadata);
 }
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
