@@ -26,6 +26,7 @@ Source of truth: This file defines stable capability plugin rules. Historical di
 - Capability manifest 由 owner capability 持有；registry / discovery / bootstrap check 属于 infrastructure runtime。
 - Infrastructure registry 不得静态 import `src/modules/**` 或 `src/usecases/**` 的 manifest。
 - Modules 贡献 manifest、provider binding、queue binding 或 session contribution 时，不得反向依赖 runtime registry 实现。
+- Manifest provider 文件应避免 import 副作用；不得在 manifest 声明文件内启动 Nest 容器、连接外部资源、读取业务数据或执行运行时 I/O。
 - `modules/common` 不得因为 capability 化变成所有共享业务能力集中目录；可按域拆出的技术或业务能力应迁入对应 capability。
 
 ## Dispatcher / Bus
@@ -51,6 +52,9 @@ Source of truth: This file defines stable capability plugin rules. Historical di
 - GraphQL code-first schema 必须保持一致；能力关闭时不动态摘 resolver，而是由 guard / resolver helper 返回 `CAPABILITY_DISABLED` 或 `CAPABILITY_OPERATION_DISABLED`。
 - 健康检查失败不自动等同 disabled；是否触发 kill switch 由单独策略决定。
 - Runtime state reader 和 permission checker 的配置读取可先热读；若未来加入 cache，必须先定义刷新 / 失效语义。
+- Capability id 清单必须从 manifest 生成或通过 registry / CLI 观察，不得手写维护为第二真源。
+- 本地查看当前能力时使用 `npm run capability:list`；需要 markdown 快照时使用 `npm run capability:docs` 生成 `docs/generated/capabilities-current.md`。
+- 可用 `npm run capability:docs:check` 校验 generated capability 文档是否与 manifest 同步。
 
 ## Transport
 

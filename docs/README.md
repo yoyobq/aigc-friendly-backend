@@ -8,6 +8,7 @@
   - `docs/api/`: API / GraphQL adapter rules
   - `docs/worker/`: worker / queue / async-consumer rules
   - `docs/project-convention/`: project-specific conventions
+  - `docs/generated/`: generated local observation docs; do not edit manually
   - `docs/frontend/`: optional frontend-facing contract notes and cross-repo alignment drafts, not backend source of truth
   - `docs/deprecated/`: historical design background only, not implementation guidance
   - `plans/`: active plans, priorities, followups and deliverables
@@ -58,6 +59,7 @@
 
   - Capability plugin / ability modularization:
     - `docs/common/capability-plugin.rules.md`
+    - `docs/generated/capabilities-current.md` when you need the current generated capability id list
     - `docs/common/boundary-contract.rules.md` when adding dispatcher / runtime contracts
     - `docs/worker/qm-worker-integration.rules.md` when adding queue transport or worker consumer
     - `docs/api/graphql-error-contract-current.md` when changing capability-aware GraphQL behavior
@@ -119,6 +121,7 @@
 
   - `core.rules`: pure domain only
   - `capability-plugin.rules`: capability plugin boundaries, runtime semantics, transport and contribution rules
+  - `generated/capabilities-current.md`: generated local capability id list
   - `eslint-architecture-rules.md`: executable lint rule map and architecture validation commands
   - `boundary-contract.rules`: layer-owned contract naming and port/contract distinction
   - `aggregate.rules`: aggregate root and child-entity write boundaries

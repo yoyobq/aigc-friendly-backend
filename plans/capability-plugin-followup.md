@@ -54,7 +54,9 @@
 
 ## P2: Tooling / Docs
 
-- 不在当前阶段引入 capability SDK / CLI。
+- 已提供观察型 CLI：`npm run capability:list` 从 manifest metadata 输出当前能力清单，`npm run capability:docs` 生成
+  `docs/generated/capabilities-current.md`，`npm run capability:docs:check` 校验快照是否过期。
+- 不在当前阶段引入 capability SDK 或能力脚手架。
 - 若后续能力生成频繁出现偏移，再设计最小脚手架：
   - 生成 manifest provider。
   - 生成 operation handler skeleton。
