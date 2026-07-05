@@ -89,6 +89,7 @@ direction -> plan -> docs / followup -> delete
 ## 当前计划
 
 - [Capability Plugin Direction](./capability-plugin-direction.md)：能力插拔方向判断。
+- [Capability Plugin Plan](./capability-plugin-plan.md)：能力插拔执行计划，按提交顺序分 P 推进。
 
 ## 已收口背景
 

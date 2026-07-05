@@ -182,6 +182,8 @@ src/types/common/capability.types.ts
 - `CapabilityTransport` / `CapabilityTransportRegistry` 若被 usecase bus / dispatcher 调用，归 usecase-owned boundary contract，由 infrastructure 实现具体 transport。
 - `CapabilityRegistry` 若仅用于启动装配和运行状态查询，可作为平台底座模块的 module-owned contract；若被 usecase 编排直接依赖，应放入 usecase-owned contract。不要为 capability 另建独立的 platform contract layer。
 
+首个实现如果只做 manifest 收集、启动对账和运行状态查询，不应为了对齐文件示例而强行把 `CapabilityRegistry` 放进 `src/usecases/common/ports`。只有当业务 usecase 需要直接依赖 registry 查询或编排时，才提取 usecase-owned narrow contract。
+
 建议文件形态：
 
 ```text
@@ -752,7 +754,14 @@ const sessionContributionExample: CapabilitySessionContributionManifest = {
 };
 ```
 
-`CLIENT` 与 `RESOURCE_MANAGER` 只用于说明接口形态，基线不内置这些 code。真实项目应由具体 capability 定义稳定 principal / authority claim code；`RESOURCE_MANAGER` 不表示全局管理权限，只表示存在某类资源管理资格摘要，最终资源范围仍由 owner capability 的 authorizer 判断。
+`CLIENT` 与 `RESOURCE_MANAGER` 是 reference capability / contract fixture 的样例 code，用来把 session principal / authority claim 的接口形态代码化，避免后续生成 capability 时各自理解偏移。它们不属于默认业务装配，不进入真实账号、权限、菜单、JWT 生产链路，也不拥有业务表或 migration。真实项目应由具体 capability 定义自己的稳定 principal / authority claim code；`RESOURCE_MANAGER` 不表示全局管理权限，只表示存在某类资源管理资格摘要，最终资源范围仍由 owner capability 的 authorizer 判断。
+
+Reference fixture 的目标是“代码即文档”：
+
+- 提供最小 manifest、identity resolver、summary resolver、scope authorizer 和 session projection 示例。
+- 参与 registry / bootstrap / session contribution 单测。
+- 不被 API / Worker 默认加载为真实能力。
+- 不作为业务模板硬编码进 platform.account 或 modules/common。
 
 ### Runtime
 
