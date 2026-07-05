@@ -77,6 +77,38 @@ Add only the contribution types the capability actually owns.
   - `readShared` does not permit bypassing owner query semantics.
   - Cross-capability read should prefer owner query operation or owner usecase / QueryService path according to current layer rules.
 
+## Typed Capability Client Checklist
+
+When a usecase needs to call another capability's operation, create a typed client instead of injecting the raw bus.
+
+### When to create
+
+- Only when a usecase actually calls a cross-capability command / query.
+- Same-domain usecase -> module service / QueryService calls do not need a typed client.
+- Do not pre-generate clients for capabilities that are not yet called cross-domain.
+
+### File placement
+
+| Artifact                                    | Location                                   | Naming                            |
+| ------------------------------------------- | ------------------------------------------ | --------------------------------- |
+| Operation contract (payload / result types) | `src/types/<domain>/` or domain types file | `<domain>-<entity>.types.ts`      |
+| Typed client interface + DI token           | `src/usecases/common/ports/`               | `<capability>-client.contract.ts` |
+| Typed client implementation                 | `src/infrastructure/capability/`           | `<capability>.client.ts`          |
+| Typed client DI module                      | `src/infrastructure/capability/`           | `<capability>-client.module.ts`   |
+
+### Steps
+
+1. Define operation contract types in `src/types/<domain>/` with `as const` capability ID and operations constants.
+2. Create `<capability>-client.contract.ts` in `src/usecases/common/ports/` with a Symbol token and a narrow interface.
+3. Create `<capability>.client.ts` in `src/infrastructure/capability/` that injects `CAPABILITY_COMMAND_BUS` or `CAPABILITY_QUERY_BUS` and calls `execute` / `ask` with typed payload.
+4. Create `<capability>-client.module.ts` that provides the implementation and binds it to the token via `useExisting`.
+5. Consumer usecase injects the typed client token, not the raw bus.
+6. Typed client returns `CapabilityResult<T>`; the consumer usecase checks `.ok` and propagates errors.
+
+### Reference
+
+See `src/usecases/reference/` for a working pilot: `reference.profile` capability, `ReferenceProfileClient` typed client, and `BuildReferenceReportUsecase` as the consumer.
+
 ## Wiring Checklist
 
 - Assemble capability declarations through explicit Nest module imports or providers.

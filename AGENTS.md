@@ -63,6 +63,7 @@ Detailed or fast-changing rules belong in `docs/`.
 - Use QueryService for read-side view normalization and write-after-read output when a stable view exists.
 - Treat outbox as an architectural option, not an existing reusable component.
 - `TransactionRunner` is the current usecase-owned transaction boundary contract; do not introduce parallel `TransactionPort` / `UnitOfWork` aliases.
+- Business usecases call cross-capability operations through typed capability clients (`*.contract.ts` in `usecases/common/ports/`), not raw dispatcher strings; see `docs/common/capability-plugin.rules.md`.
 
 ## Type Placement
 

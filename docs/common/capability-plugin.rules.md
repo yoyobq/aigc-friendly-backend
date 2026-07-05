@@ -42,6 +42,19 @@ Source of truth: This file defines stable capability plugin rules. Historical di
 - 跨 capability command 默认不继承调用方 `TransactionRunner` 事务；不要假设 target capability 写入会随调用方事务回滚。
 - 跨 capability 写默认使用独立事务边界，通过幂等、补偿、状态机、审计记录和最终一致处理一致性。
 
+## Typed Capability Client
+
+- Business usecase 跨 capability 调用应通过 typed capability client 依赖窄接口，不直接写 raw dispatcher 的 `capability + operation + payload` 字符串协议。
+- Typed client 是 usecase-owned boundary contract，放在 `src/usecases/common/ports/<capability>-client.contract.ts`，使用 Symbol DI token。
+- Typed client 实现放在 `infrastructure/capability/`，内部注入 `CapabilityCommandBus` / `CapabilityQueryBus`，组装 envelope input 并调用 bus。
+- Operation contract（payload / result 类型）放在 `src/types/` 或目标域已有 types 文件，通过 `@app-types/*` 引用。
+- Typed client 保留 `CapabilityResult<T>` 返回类型，不自动 unwrap；消费方 usecase 自行检查 `.ok` 并传播 error。
+- Capability ID 和 operation name 使用目标域导出的 `as const` 常量，不用裸字符串。
+- 只在真实存在跨 capability 调用时创建 typed client；同域 usecase -> module service / QueryService 调用不 envelope 化，也不需要 typed client。
+- 不为每个 capability 预生成 client；按需创建，一个 capability 一个 client。
+- Typed client 是 transport adapter，不承担业务编排、事务或补偿语义。
+- Raw dispatcher / bus 仍是底层 runtime boundary，不被业务流程直接当作主要 API 使用。
+
 ## Runtime State
 
 - 当前启停状态分为安装态、部署态、运行态和 kill switch。

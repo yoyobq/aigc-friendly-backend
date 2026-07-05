@@ -175,6 +175,7 @@ adapters -> usecases -> modules -> infrastructure
 - **启动对账**：registry 在启动期检查 manifest、provider binding、queue binding、operation handler、session resolver、GraphQL surface 和资源声明的一致性。
 - **运行态治理**：通过 `CAPABILITY_DISABLED_IDS`、`CAPABILITY_KILL_SWITCH_IDS`、`CAPABILITY_OPERATION_DISABLED_KEYS` 与 guard / dispatcher 返回统一 capability error。
 - **跨进程协作**：API 与 Worker 之间通过 BullMQ queue transport 传递 capability envelope；同进程协作只在 usecase-owned runtime boundary 中使用 dispatcher / bus。
+- **Typed Capability Client**：业务 usecase 跨能力调用通过 typed client 窄接口（`src/usecases/common/ports/*.contract.ts`），不直接写 raw dispatcher 字符串协议；client 实现在 `infrastructure/capability/` 内部封装 bus 调用，保留 `CapabilityResult<T>` 返回类型。
 - **会话扩展**：能力可贡献 session principal / authority claim，平台只理解稳定 code 和投影，不内置具体业务语义。
 - **本地观察**：`npm run capability:list` 查看当前 manifest 清单，`npm run capability:docs` 生成 `docs/generated/capabilities-current.md`，`npm run capability:docs:check` 校验快照是否同步。
 
@@ -309,7 +310,7 @@ MIGRATION_DRILL_CREATE_TEMP_DB=true npm run migration:drill:empty-db
 - **共享类型**: 跨上下文稳定类型放在 `src/types`，通过 `@app-types/*` 引用。
 - **GraphQL**: DTO / Input / Args / Result 保持在 adapter 层；枚举、标量与 schema 初始化放在 `src/adapters/api/graphql/schema/`。
 - **ORM Entity**: 只表达持久化结构，不添加 GraphQL / HTTP / Swagger 等 adapter decorator。
-- **Capability**: manifest 是能力声明真源；generated capability 文档只能由命令生成；dispatcher / bus 只作为 usecase-owned runtime boundary，不替代业务 usecase 编排。
+- **Capability**: manifest 是能力声明真源；generated capability 文档只能由命令生成；dispatcher / bus 只作为 usecase-owned runtime boundary，不替代业务 usecase 编排；业务 usecase 跨能力调用应通过 typed capability client 窄接口，不直接写 raw dispatcher 协议。
 
 ## API 访问
 

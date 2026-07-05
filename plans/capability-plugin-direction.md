@@ -201,6 +201,19 @@ src/usecases/common/ports/capability-registry.contract.ts
 - infrastructure 提供 in-process dispatcher、registry、transport、AsyncLocalStorage context store 和 Nest Discovery 收集实现。
 - modules 不承载跨 capability dispatcher / registry 的平台实现，只暴露自身 capability 需要被注册的 manifest、handler 或 provider。
 
+### Typed Capability Client
+
+Raw dispatcher / bus 是 transport，不是业务 usecase 的主要书写界面。业务 usecase 长期写 `capability + operation + payload` 字符串协议会损失类型、读侧批量能力和可维护性。
+
+建议在 raw bus 之上补 typed capability client：
+
+- Operation contract：目标 capability 对外稳定契约。跨上下文稳定 payload/result 放 `src/types`，或目标域已有稳定 types 文件。
+- Typed client interface：调用方 usecase 需要的窄 contract，属于 usecase 层边界契约（`src/usecases/common/ports/*.contract.ts`），不是新层。
+- Typed client implementation：调用 dispatcher / bus 的适配实现，放在 `infrastructure/capability/`，由 DI 注入。
+- Dispatcher / bus 仍是底层 runtime boundary，不被业务流程直接当作主要 API 使用。
+
+这不会改变层级方向。它只是避免把字符串式运行时协议泄露到所有业务 usecase 里。参考实现见 `src/usecases/reference/`。
+
 ### Manifest 常量
 
 稳定后，Manifest 的类型可以来自 `@app-types/common/capability.types`；首个实现也可以先使用能力底座局部类型。无论类型真源在哪里，manifest 常量都由能力拥有方持有。
@@ -279,12 +292,7 @@ export type CapabilityKind = 'technical' | 'business';
 
 export type CapabilityProcess = 'api' | 'worker';
 
-export type CapabilityEntryPoint =
-  | 'graphql-api'
-  | 'admin-api'
-  | 'worker'
-  | 'system-task'
-  | 'cron';
+export type CapabilityEntryPoint = 'graphql-api' | 'admin-api' | 'worker' | 'system-task' | 'cron';
 
 export type CapabilityVersion = string;
 ```
@@ -513,12 +521,7 @@ export interface CapabilityResourceClaimManifest {
 
 export interface CapabilityResourceClaim {
   readonly name: string;
-  readonly kind:
-    | 'queue'
-    | 'cache'
-    | 'externalResource'
-    | 'artifact'
-    | 'authorizationResource';
+  readonly kind: 'queue' | 'cache' | 'externalResource' | 'artifact' | 'authorizationResource';
   readonly owner: CapabilityId;
   readonly relation: 'owns' | 'dependsOn' | 'contributes';
 }
@@ -802,11 +805,7 @@ export interface CapabilityRateLimitPolicy {
 export type CapabilityInstallState = 'installed' | 'not_installed';
 
 export type CapabilityEnableState =
-  | 'enabled'
-  | 'disabled'
-  | 'dependency_disabled'
-  | 'misconfigured'
-  | 'killed';
+  'enabled' | 'disabled' | 'dependency_disabled' | 'misconfigured' | 'killed';
 
 export interface CapabilityRuntimeState {
   readonly capabilityId: CapabilityId;
@@ -966,9 +965,7 @@ in-process transport 下，优先用 `AsyncLocalStorage` 保存当前 context。
 所有 command / query 返回统一 result。Event 发布默认不要求业务结果，只要求发布是否被底座接受。
 
 ```ts
-export type CapabilityResult<TData> =
-  | CapabilitySuccess<TData>
-  | CapabilityFailure;
+export type CapabilityResult<TData> = CapabilitySuccess<TData> | CapabilityFailure;
 
 export interface CapabilitySuccess<TData> {
   readonly ok: true;
@@ -1045,9 +1042,7 @@ export interface CapabilityCommandBus {
 }
 
 export interface CapabilityQueryBus {
-  ask<TPayload, TResult>(
-    query: CapabilityQuery<TPayload>,
-  ): Promise<CapabilityResult<TResult>>;
+  ask<TPayload, TResult>(query: CapabilityQuery<TPayload>): Promise<CapabilityResult<TResult>>;
 }
 
 export interface CapabilityEventBus {
@@ -1058,9 +1053,7 @@ export interface CapabilityEventBus {
  * Optional infrastructure facade. Business usecases should inject the narrow bus they need.
  */
 export interface CapabilityDispatcherFacade
-  extends CapabilityCommandBus,
-    CapabilityQueryBus,
-    CapabilityEventBus {}
+  extends CapabilityCommandBus, CapabilityQueryBus, CapabilityEventBus {}
 ```
 
 ### Handler
@@ -1077,16 +1070,19 @@ export interface CapabilityOperationHandler<TPayload, TResult> {
   ): Promise<CapabilityResult<TResult>>;
 }
 
-export interface CapabilityCommandHandler<TPayload, TResult>
-  extends CapabilityOperationHandler<TPayload, TResult> {
+export interface CapabilityCommandHandler<TPayload, TResult> extends CapabilityOperationHandler<
+  TPayload,
+  TResult
+> {
   readonly operationKind: 'command';
 }
 
-export interface CapabilityQueryHandler<TPayload, TResult>
-  extends CapabilityOperationHandler<TPayload, TResult> {
+export interface CapabilityQueryHandler<TPayload, TResult> extends CapabilityOperationHandler<
+  TPayload,
+  TResult
+> {
   readonly operationKind: 'query';
 }
-
 ```
 
 Handler 的职责边界：
