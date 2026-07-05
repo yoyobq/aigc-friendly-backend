@@ -18,6 +18,8 @@ This file is generated from `@CapabilityManifestProvider(...)` metadata. The man
 - `notification.email.sendmail` - Notification Email Sendmail Provider (technical; worker)
 - `platform.account` - Platform Account (platform; api, worker)
 - `platform.auth` - Platform Auth (platform; api, worker)
+- `reference.profile` - Reference Profile (business; api)
+- `reference.report` - Reference Report (business; api)
 - `third-party-auth.weapp` - WeApp Third-party Auth (technical; api)
 
 ## Capabilities
@@ -32,5 +34,7 @@ This file is generated from `@CapabilityManifestProvider(...)` metadata. The man
 | notification.email.sendmail | Notification Email Sendmail Provider | technical | worker | email.delivery:sendmail | - | - | src/modules/common/email-capability/email-capability.providers.ts#NotificationEmailSendmailCapabilityDeclaration |
 | platform.account | Platform Account | platform | api, worker | - | - | - | src/infrastructure/capability/platform-capability.declarations.ts#PlatformAccountCapabilityDeclaration |
 | platform.auth | Platform Auth | platform | api, worker | - | - | - | src/infrastructure/capability/platform-capability.declarations.ts#PlatformAuthCapabilityDeclaration |
+| reference.profile | Reference Profile | business | api | - | - | query:listByGroupKeys | src/usecases/reference/reference-capability.providers.ts#ReferenceProfileCapabilityDeclaration |
+| reference.report | Reference Report | business | api | - | - | - | src/usecases/reference/reference-capability.providers.ts#ReferenceReportCapabilityDeclaration |
 | third-party-auth.weapp | WeApp Third-party Auth | technical | api | third-party-auth.provider:weapp | - | - | src/modules/third-party-auth/third-party-auth.capability.ts#ThirdPartyAuthWeappCapabilityDeclaration |
 
