@@ -1,10 +1,10 @@
 // src/types/common/capability.types.ts
 
-export type CapabilityKind = 'platform' | 'technical' | 'business';
-
 export type CapabilityProcess = 'api' | 'worker';
 
 export type CapabilityId = string;
+
+export type CapabilityMode = 'always-on' | 'switchable';
 
 export type CapabilityOperationKind = 'command' | 'query' | 'event';
 
@@ -58,35 +58,11 @@ export interface CapabilityRuntimeDependency {
   readonly mode: 'required' | 'optional';
 }
 
-export interface CapabilityOwnershipManifest {
+export interface CapabilityAnchor {
   readonly capabilityId: CapabilityId;
-  readonly kind: CapabilityKind;
-  readonly semanticScope: string;
-  readonly owns: readonly string[];
-  readonly nonGoals: readonly string[];
-  readonly physicalScopes: readonly CapabilityPhysicalScope[];
-  readonly publicSurfaces: readonly CapabilityPublicSurface[];
-  readonly allowedDependencies: readonly CapabilityId[];
-  readonly foundationClassification:
-    'domain-owned' | 'platform-foundation' | 'shared-technical-foundation';
-  readonly validationEntrypoints: readonly string[];
+  readonly mode: CapabilityMode;
+  readonly decisionRef: string;
 }
-
-export interface CapabilityPhysicalScope {
-  readonly path: string;
-  readonly role: 'primary' | 'transitional' | 'shared-implementation';
-  readonly reason?: string;
-}
-
-export type CapabilityPublicSurface =
-  | {
-      readonly status: 'present';
-      readonly path: string;
-    }
-  | {
-      readonly status: 'deferred' | 'not-required';
-      readonly reason: string;
-    };
 
 export interface CapabilityProviderContribution {
   readonly providerKind: CapabilityProviderKind;
@@ -101,7 +77,7 @@ export interface CapabilityQueueContribution {
   readonly dedupKeyMapping?: 'jobId' | 'bullmq-dedup-option' | 'none';
 }
 
-export interface CapabilityApiContributionManifest {
+export interface CapabilityApiContribution {
   readonly graphqlOperations?: readonly CapabilityGraphqlOperationContribution[];
 }
 
@@ -111,7 +87,7 @@ export interface CapabilityGraphqlOperationContribution {
   readonly requiredPermissions?: readonly string[];
 }
 
-export interface CapabilityOperationManifest {
+export interface CapabilityOperations {
   readonly commands?: readonly CapabilityCommandDefinition[];
   readonly queries?: readonly CapabilityQueryDefinition[];
   readonly events?: readonly CapabilityEventDefinition[];
@@ -157,7 +133,7 @@ export interface CapabilityOperationDescriptor {
   readonly timeoutMs?: number;
 }
 
-export interface CapabilitySessionContributionManifest {
+export interface CapabilitySessionContribution {
   readonly principals?: readonly CapabilitySessionPrincipalContribution[];
   readonly authorityClaims?: readonly CapabilitySessionAuthorityClaimContribution[];
 }
@@ -180,26 +156,24 @@ export interface CapabilitySessionAuthorityClaimContribution {
   readonly sessionProjectionKey?: string;
 }
 
-export interface CapabilityRuntimePolicyManifest {
+export interface CapabilityRuntimePolicy {
   readonly defaultState?: CapabilityEnableState;
-  readonly disableable?: boolean;
   readonly healthCheck?: boolean;
 }
 
-export interface CapabilityContributionManifest {
-  readonly api?: CapabilityApiContributionManifest;
+export interface CapabilityContributions {
+  readonly api?: CapabilityApiContribution;
   readonly providers?: readonly CapabilityProviderContribution[];
   readonly queues?: readonly CapabilityQueueContribution[];
-  readonly session?: CapabilitySessionContributionManifest;
+  readonly session?: CapabilitySessionContribution;
 }
 
-export interface CapabilityRuntimeManifest {
+export interface CapabilityRuntimeContribution {
   readonly capabilityId: CapabilityId;
-  readonly version: string;
   readonly runtimeDependencies?: readonly CapabilityRuntimeDependency[];
-  readonly operations?: CapabilityOperationManifest;
-  readonly runtime?: CapabilityRuntimePolicyManifest;
-  readonly contributions?: CapabilityContributionManifest;
+  readonly operations?: CapabilityOperations;
+  readonly runtime?: CapabilityRuntimePolicy;
+  readonly contributions?: CapabilityContributions;
 }
 
 export interface CapabilityHealthResult {

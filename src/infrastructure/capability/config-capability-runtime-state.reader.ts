@@ -12,6 +12,12 @@ import {
 } from '@src/usecases/common/ports/capability-runtime-state-reader.contract';
 import { CAPABILITY_PROCESS, CapabilityRegistry } from './capability.registry';
 
+export interface CapabilityRuntimeConfigWarning {
+  readonly capabilityId: CapabilityId;
+  readonly source: 'disabled_ids' | 'kill_switch_ids';
+  readonly message: string;
+}
+
 @Injectable()
 export class ConfigCapabilityRuntimeStateReader implements CapabilityRuntimeStateReader {
   constructor(
@@ -23,12 +29,12 @@ export class ConfigCapabilityRuntimeStateReader implements CapabilityRuntimeStat
   ) {}
 
   getCapabilityState(capabilityId: CapabilityId): CapabilityRuntimeState {
-    const manifest = this.capabilityRegistry
-      .getActiveRuntimeManifests()
+    const anchor = this.capabilityRegistry
+      .getActiveCapabilityAnchors()
       .find(
         (item) => normalizeCapabilityId(item.capabilityId) === normalizeCapabilityId(capabilityId),
       );
-    if (!manifest) {
+    if (!anchor) {
       return {
         capabilityId,
         enabled: false,
@@ -36,20 +42,25 @@ export class ConfigCapabilityRuntimeStateReader implements CapabilityRuntimeStat
         reason: 'not_installed',
       };
     }
-    if (manifest.runtime?.disableable === false) {
+    if (anchor.mode === 'always-on') {
       return {
-        capabilityId: manifest.capabilityId,
+        capabilityId: anchor.capabilityId,
         enabled: true,
         process: this.currentProcess,
       };
     }
+    const contribution = this.capabilityRegistry
+      .getActiveRuntimeContributions()
+      .find(
+        (item) => normalizeCapabilityId(item.capabilityId) === normalizeCapabilityId(capabilityId),
+      );
     if (
       this.readCapabilityIdSet('capabilityRuntime.killSwitchIds').has(
-        normalizeCapabilityId(manifest.capabilityId),
+        normalizeCapabilityId(anchor.capabilityId),
       )
     ) {
       return {
-        capabilityId: manifest.capabilityId,
+        capabilityId: anchor.capabilityId,
         enabled: false,
         process: this.currentProcess,
         reason: 'kill_switch',
@@ -57,26 +68,26 @@ export class ConfigCapabilityRuntimeStateReader implements CapabilityRuntimeStat
     }
     if (
       this.readCapabilityIdSet('capabilityRuntime.disabledIds').has(
-        normalizeCapabilityId(manifest.capabilityId),
+        normalizeCapabilityId(anchor.capabilityId),
       )
     ) {
       return {
-        capabilityId: manifest.capabilityId,
+        capabilityId: anchor.capabilityId,
         enabled: false,
         process: this.currentProcess,
         reason: 'runtime_disabled',
       };
     }
-    if (manifest.runtime?.defaultState === 'disabled') {
+    if (contribution?.runtime?.defaultState === 'disabled') {
       return {
-        capabilityId: manifest.capabilityId,
+        capabilityId: anchor.capabilityId,
         enabled: false,
         process: this.currentProcess,
-        reason: 'manifest_default_disabled',
+        reason: 'contribution_default_disabled',
       };
     }
     return {
-      capabilityId: manifest.capabilityId,
+      capabilityId: anchor.capabilityId,
       enabled: true,
       process: this.currentProcess,
     };
@@ -114,7 +125,7 @@ export class ConfigCapabilityRuntimeStateReader implements CapabilityRuntimeStat
         process: this.currentProcess,
         operation: input.operation,
         operationKind: input.operationKind,
-        reason: descriptor ? 'manifest_default_disabled' : 'not_installed',
+        reason: descriptor ? 'contribution_default_disabled' : 'not_installed',
       };
     }
     return {
@@ -124,6 +135,47 @@ export class ConfigCapabilityRuntimeStateReader implements CapabilityRuntimeStat
       operation: input.operation,
       operationKind: input.operationKind,
     };
+  }
+
+  getConfigurationWarnings(): readonly CapabilityRuntimeConfigWarning[] {
+    const anchorsById = new Map(
+      this.capabilityRegistry
+        .getActiveCapabilityAnchors()
+        .map((anchor) => [normalizeCapabilityId(anchor.capabilityId), anchor] as const),
+    );
+    const configuredIds = [
+      ...[...this.readCapabilityIdSet('capabilityRuntime.disabledIds')].map((capabilityId) => ({
+        capabilityId,
+        source: 'disabled_ids' as const,
+      })),
+      ...[...this.readCapabilityIdSet('capabilityRuntime.killSwitchIds')].map((capabilityId) => ({
+        capabilityId,
+        source: 'kill_switch_ids' as const,
+      })),
+    ];
+
+    return configuredIds.flatMap(({ capabilityId, source }) => {
+      const anchor = anchorsById.get(capabilityId);
+      if (!anchor) {
+        return [
+          {
+            capabilityId,
+            source,
+            message: `capability_config_not_installed:${this.currentProcess}:${source}:${capabilityId}`,
+          },
+        ];
+      }
+      if (anchor.mode === 'always-on') {
+        return [
+          {
+            capabilityId: anchor.capabilityId,
+            source,
+            message: `capability_config_ignored_always_on:${this.currentProcess}:${source}:${anchor.capabilityId}`,
+          },
+        ];
+      }
+      return [];
+    });
   }
 
   private readCapabilityIdSet(configKey: string): ReadonlySet<string> {

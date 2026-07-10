@@ -30,8 +30,11 @@ import {
 } from '@src/usecases/common/ports/capability-request-context-store.contract';
 import { CapabilityBootstrapCheck } from './capability-bootstrap-check';
 import {
+  CAPABILITY_ANCHOR_METADATA_KEY,
+  CAPABILITY_RUNTIME_CONTRIBUTION_METADATA_KEY,
+  CapabilityAnchorProvider,
   CapabilityEventSubscriberProvider,
-  CapabilityRuntimeManifestProvider,
+  CapabilityRuntimeContributionProvider,
   CapabilityOperationHandlerProvider,
   CapabilityQueueBindingProvider,
 } from './capability.decorators';
@@ -40,14 +43,14 @@ import { CapabilityModule } from './capability.module';
 describe('CapabilityDispatcher', () => {
   it('dispatches command and query handlers with inherited request context', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.dispatch',
-      version: '0.1.0',
       operations: {
         commands: [
           {
             kind: 'command',
             name: 'publish',
+            version: '1.2.3',
             sideEffects: 'internal',
           },
         ],
@@ -141,6 +144,7 @@ describe('CapabilityDispatcher', () => {
     });
 
     expect(publishHandler.lastEnvelope?.context).toBe(context);
+    expect(publishHandler.lastEnvelope?.operationVersion).toBe('1.2.3');
     expect(viewHandler.lastEnvelope?.context).toBe(context);
     await module.close();
   });
@@ -167,9 +171,8 @@ describe('CapabilityDispatcher', () => {
 
   it('returns permission denied before invoking the handler', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.permission',
-      version: '0.1.0',
       operations: {
         commands: [
           {
@@ -228,9 +231,8 @@ describe('CapabilityDispatcher', () => {
 
   it('folds thrown DomainError into CapabilityError', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.domain-error',
-      version: '0.1.0',
       operations: {
         commands: [
           {
@@ -283,9 +285,8 @@ describe('CapabilityDispatcher', () => {
 
   it('enqueues queue transport commands through BullMQ producer', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.queue-dispatch',
-      version: '0.1.0',
       operations: {
         commands: [
           {
@@ -366,9 +367,8 @@ describe('CapabilityDispatcher', () => {
 
   it('consumes queued commands by invoking the worker-local handler', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.queue-consume',
-      version: '0.1.0',
       operations: {
         commands: [
           {
@@ -452,9 +452,8 @@ describe('CapabilityDispatcher', () => {
 
   it('publishes in-process events without bubbling subscriber failures', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.event-runtime',
-      version: '0.1.0',
       operations: {
         events: [{ kind: 'event', name: 'published', eventType: 'fact' }],
       },
@@ -501,9 +500,8 @@ describe('CapabilityDispatcher', () => {
 
   it('returns disabled result when publishing event for disabled capability', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.event-disabled',
-      version: '0.1.0',
       runtime: { defaultState: 'disabled' },
       operations: {
         events: [{ kind: 'event', name: 'published', eventType: 'fact' }],
@@ -558,7 +556,7 @@ async function buildModule(
 ): Promise<TestingModule> {
   const builder = Test.createTestingModule({
     imports: [CapabilityModule.forRoot({ process })],
-    providers: [...providers],
+    providers: [...providers, ...buildTestAnchorProviders(providers)],
   })
     .overrideProvider(CapabilityBootstrapCheck)
     .useValue({ onApplicationBootstrap: jest.fn() });
@@ -568,4 +566,41 @@ async function buildModule(
   }
 
   return await builder.compile();
+}
+
+function buildTestAnchorProviders(providers: readonly Provider[]): readonly (new () => object)[] {
+  const providerTypes = providers.filter(
+    (provider): provider is new (...args: never[]) => object => typeof provider === 'function',
+  );
+  const declaredAnchorIds = new Set(
+    providerTypes.flatMap((provider) => {
+      const anchor = Reflect.getMetadata(CAPABILITY_ANCHOR_METADATA_KEY, provider) as
+        { readonly capabilityId: string } | undefined;
+      return anchor ? [anchor.capabilityId] : [];
+    }),
+  );
+  const runtimeIds = new Set(
+    providerTypes.flatMap((provider) => {
+      const contribution = Reflect.getMetadata(
+        CAPABILITY_RUNTIME_CONTRIBUTION_METADATA_KEY,
+        provider,
+      ) as { readonly capabilityId: string } | undefined;
+      return contribution ? [contribution.capabilityId] : [];
+    }),
+  );
+  return [...runtimeIds]
+    .filter((capabilityId) => !declaredAnchorIds.has(capabilityId))
+    .map((capabilityId) => createTestAnchorProvider(capabilityId));
+}
+
+function createTestAnchorProvider(capabilityId: string): new () => object {
+  @Injectable()
+  @CapabilityAnchorProvider({
+    capabilityId,
+    mode: 'switchable',
+    decisionRef: 'docs/capabilities/current.md',
+  })
+  class TestCapabilityAnchor {}
+
+  return TestCapabilityAnchor;
 }

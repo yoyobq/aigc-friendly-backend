@@ -88,12 +88,12 @@ direction -> plan -> docs / followup -> delete
 
 ## 当前计划
 
-- [Capability Governance Direction](./capability-governance-direction.md)：横向分层与纵向 capability ownership/runtime 的当前方向。
+当前没有 capability 治理计划；稳定边界见 `docs/common/capability.rules.md` 与 `docs/capabilities/current.md`。
 
 ## 已收口背景
 
 - 已完成计划统一归档到 [docs/deprecated](../docs/deprecated/README.md)。
 - [Capability Plugin Plan](../docs/deprecated/capability-plugin-plan.md) 已完成并归档；旧的单 manifest 模型仅保留为历史背景。
-- 稳定规则见 [capability-ownership.rules.md](../docs/common/capability-ownership.rules.md) 与
-  [capability-runtime.rules.md](../docs/common/capability-runtime.rules.md)。
+- 稳定规则见 [capability.rules.md](../docs/common/capability.rules.md)，当前语义决策见
+  [capabilities/current.md](../docs/capabilities/current.md)。
 - [AI Workflow 基线补强计划](../docs/deprecated/ai-workflow-baseline-plan.md) 已完成并归档。

@@ -63,7 +63,7 @@ Detailed or fast-changing rules belong in `docs/`.
 - Use QueryService for read-side view normalization and write-after-read output when a stable view exists.
 - Treat outbox as an architectural option, not an existing reusable component.
 - `TransactionRunner` is the current usecase-owned transaction boundary contract; do not introduce parallel `TransactionPort` / `UnitOfWork` aliases.
-- Business usecases call cross-capability operations through typed capability clients (`*.contract.ts` in `usecases/common/ports/`), not raw dispatcher strings; see `docs/common/capability-runtime.rules.md`.
+- Business usecases call cross-capability operations through typed capability clients (`*.contract.ts` in `usecases/common/ports/`), not raw dispatcher strings; see `docs/common/capability.rules.md`.
 
 ## Type Placement
 
@@ -80,8 +80,7 @@ Use `docs/README.md` as the source of task routing. Common routes:
 - Layer or dependency changes: `docs/common/*.rules.md` plus `docs/api/adapters.rules.md` when GraphQL entry code changes.
 - GraphQL error/auth/session response contract: `docs/api/graphql-error-contract-current.md` plus `docs/api/adapters.rules.md`.
 - Boundary contract or port/contract naming: `docs/common/boundary-contract.rules.md`.
-- Capability identity or ownership: `docs/common/capability-ownership.rules.md`.
-- Capability runtime, dispatcher, providers, or queues: `docs/common/capability-runtime.rules.md`.
+- Capability identity, anchors, runtime, dispatcher, providers, or queues: `docs/common/capability.rules.md` plus the referenced decision under `docs/capabilities/`.
 - QueryService or shared type placement: `docs/common/queryservice.rules.md` and `docs/common/type.rules.md`.
 - Worker queues or async consumers: `docs/worker/*.rules.md` and queue/audit project conventions.
 - Input or time normalization: `docs/project-convention/input-*.md` or `docs/project-convention/time-*.md`.

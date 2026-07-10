@@ -15,16 +15,16 @@ import { CapabilityBootstrapCheck } from './capability-bootstrap-check';
 import {
   CapabilityEventSubscriberProvider,
   CapabilityHealthCheckProvider,
-  CapabilityOwnershipProvider,
-  CapabilityRuntimeManifestProvider,
+  CapabilityAnchorProvider,
+  CapabilityRuntimeContributionProvider,
   CapabilityOperationHandlerProvider,
   CapabilityProviderBindingProvider,
   CapabilityQueueBindingProvider,
   CapabilitySessionAuthorityScopeAuthorizerProvider,
   CapabilitySessionAuthoritySummaryResolverProvider,
   CapabilitySessionIdentityResolverProvider,
-  CAPABILITY_OWNERSHIP_METADATA_KEY,
-  CAPABILITY_RUNTIME_MANIFEST_METADATA_KEY,
+  CAPABILITY_ANCHOR_METADATA_KEY,
+  CAPABILITY_RUNTIME_CONTRIBUTION_METADATA_KEY,
 } from './capability.decorators';
 import { CapabilityModule } from './capability.module';
 import { CapabilityBootstrapError, CapabilityRegistry } from './capability.registry';
@@ -34,11 +34,10 @@ describe('CapabilityRegistry', () => {
     jest.restoreAllMocks();
   });
 
-  it('collects active manifests, provider bindings and queue bindings through Discovery', async () => {
+  it('collects active runtimeContributions, provider bindings and queue bindings through Discovery', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.provider',
-      version: '0.1.0',
       runtime: { healthCheck: true },
       contributions: {
         providers: [{ providerKind: 'test.provider', providerName: 'mock' }],
@@ -69,9 +68,8 @@ describe('CapabilityRegistry', () => {
     }
 
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.queue',
-      version: '0.1.0',
       contributions: {
         queues: [
           {
@@ -106,9 +104,11 @@ describe('CapabilityRegistry', () => {
     const registry = module.get(CapabilityRegistry);
 
     expect(registry.validateBootstrap().issues).toEqual([]);
-    expect(registry.getActiveRuntimeManifests().map((manifest) => manifest.capabilityId)).toEqual(
-      expect.arrayContaining(['test.provider', 'test.queue']),
-    );
+    expect(
+      registry
+        .getActiveRuntimeContributions()
+        .map((runtimeContribution) => runtimeContribution.capabilityId),
+    ).toEqual(expect.arrayContaining(['test.provider', 'test.queue']));
     expect(
       registry.getProviderClient<{ readonly name: string }>({
         providerKind: 'test.provider',
@@ -132,9 +132,8 @@ describe('CapabilityRegistry', () => {
     const providerAlias = Symbol('STACKED_PROVIDER_ALIAS');
 
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.stacked-provider',
-      version: '0.1.0',
       runtime: { healthCheck: true },
       contributions: {
         providers: [{ providerKind: 'test.provider', providerName: 'stacked' }],
@@ -164,7 +163,7 @@ describe('CapabilityRegistry', () => {
       providers: [
         StackedProvider,
         { provide: providerAlias, useExisting: StackedProvider },
-        createTestOwnershipProvider('test.stacked-provider'),
+        createTestAnchorProvider('test.stacked-provider'),
       ],
     })
       .overrideProvider(CapabilityBootstrapCheck)
@@ -175,8 +174,10 @@ describe('CapabilityRegistry', () => {
     expect(registry.validateBootstrap().issues).toEqual([]);
     expect(
       registry
-        .getActiveRuntimeManifests()
-        .filter((manifest) => manifest.capabilityId === 'test.stacked-provider'),
+        .getActiveRuntimeContributions()
+        .filter(
+          (runtimeContribution) => runtimeContribution.capabilityId === 'test.stacked-provider',
+        ),
     ).toHaveLength(1);
     expect(
       registry.getProviderClient({
@@ -194,29 +195,29 @@ describe('CapabilityRegistry', () => {
     await module.close();
   });
 
-  it('discovers runtime manifests installed in the current Nest container', async () => {
+  it('discovers runtime contributions installed in the current Nest container', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.worker-only',
-      version: '0.1.0',
     })
     class WorkerOnlyCapability {}
 
     const module = await buildModule([WorkerOnlyCapability], 'api');
     const registry = module.get(CapabilityRegistry);
 
-    expect(registry.getActiveRuntimeManifests().map((manifest) => manifest.capabilityId)).toContain(
-      'test.worker-only',
-    );
+    expect(
+      registry
+        .getActiveRuntimeContributions()
+        .map((runtimeContribution) => runtimeContribution.capabilityId),
+    ).toContain('test.worker-only');
     expect(registry.validateBootstrap().issues).toEqual([]);
     await module.close();
   });
 
   it('fails validation when a declared provider binding is missing', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.missing-provider',
-      version: '0.1.0',
       contributions: {
         providers: [{ providerKind: 'test.provider', providerName: 'missing' }],
       },
@@ -237,17 +238,15 @@ describe('CapabilityRegistry', () => {
 
   it('fails validation when required capability dependencies form a cycle', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.cycle-a',
-      version: '0.1.0',
       runtimeDependencies: [{ capabilityId: 'test.cycle-b', mode: 'required' }],
     })
     class CycleACapability {}
 
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.cycle-b',
-      version: '0.1.0',
       runtimeDependencies: [{ capabilityId: 'test.cycle-a', mode: 'required' }],
     })
     class CycleBCapability {}
@@ -263,17 +262,15 @@ describe('CapabilityRegistry', () => {
 
   it('allows linear required capability dependencies', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.linear-a',
-      version: '0.1.0',
       runtimeDependencies: [{ capabilityId: 'test.linear-b', mode: 'required' }],
     })
     class LinearACapability {}
 
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.linear-b',
-      version: '0.1.0',
     })
     class LinearBCapability {}
 
@@ -286,9 +283,8 @@ describe('CapabilityRegistry', () => {
 
   it('collects GraphQL API surface from runtime contributions', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.surface-owner',
-      version: '0.1.0',
       contributions: {
         api: {
           graphqlOperations: [
@@ -322,9 +318,8 @@ describe('CapabilityRegistry', () => {
 
   it('reports invalid GraphQL API contributions as bootstrap issues', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.invalid-surface',
-      version: '0.1.0',
       contributions: {
         api: {
           graphqlOperations: [{ operationName: ' ', operationKind: 'query' }],
@@ -346,9 +341,8 @@ describe('CapabilityRegistry', () => {
 
   it('fails validation when a declared queue job is not registered', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.invalid-queue',
-      version: '0.1.0',
       contributions: {
         queues: [
           {
@@ -383,9 +377,8 @@ describe('CapabilityRegistry', () => {
 
   it('fails validation when a declared health check is missing', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.missing-health',
-      version: '0.1.0',
       runtime: { healthCheck: true },
     })
     class MissingHealthCapability {}
@@ -404,9 +397,8 @@ describe('CapabilityRegistry', () => {
 
   it('fails validation when a declared in-process operation lacks a handler', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.operation-missing-handler',
-      version: '0.1.0',
       operations: {
         commands: [
           {
@@ -432,9 +424,8 @@ describe('CapabilityRegistry', () => {
 
   it('fails validation when operation handlers are duplicated', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.operation-duplicate-handler',
-      version: '0.1.0',
       operations: {
         commands: [
           {
@@ -495,9 +486,8 @@ describe('CapabilityRegistry', () => {
 
   it('reports process mismatch for operation handlers registered in the wrong process', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.operation-process-mismatch',
-      version: '0.1.0',
       operations: {
         queries: [
           {
@@ -539,9 +529,8 @@ describe('CapabilityRegistry', () => {
 
   it('reports undeclared operation handlers as non-blocking warnings', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.operation-warning',
-      version: '0.1.0',
     })
     class WarningCapability {}
 
@@ -578,9 +567,8 @@ describe('CapabilityRegistry', () => {
 
   it('resolves queue transport descriptors without enqueueing BullMQ jobs', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.operation-queue',
-      version: '0.1.0',
       operations: {
         commands: [
           {
@@ -639,9 +627,8 @@ describe('CapabilityRegistry', () => {
 
   it('discovers event subscriber fixtures without dispatching events', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.operation-event',
-      version: '0.1.0',
       operations: {
         events: [
           {
@@ -686,9 +673,11 @@ describe('CapabilityRegistry', () => {
     const registry = module.get(CapabilityRegistry);
 
     expect(registry.validateBootstrap().issues).toEqual([]);
-    expect(registry.getActiveRuntimeManifests().map((manifest) => manifest.capabilityId)).toContain(
-      SESSION_REFERENCE_CAPABILITY_ID,
-    );
+    expect(
+      registry
+        .getActiveRuntimeContributions()
+        .map((runtimeContribution) => runtimeContribution.capabilityId),
+    ).toContain(SESSION_REFERENCE_CAPABILITY_ID);
     await module.close();
   });
 
@@ -697,16 +686,17 @@ describe('CapabilityRegistry', () => {
     const registry = module.get(CapabilityRegistry);
 
     expect(
-      registry.getActiveRuntimeManifests().map((manifest) => manifest.capabilityId),
+      registry
+        .getActiveRuntimeContributions()
+        .map((runtimeContribution) => runtimeContribution.capabilityId),
     ).not.toContain(SESSION_REFERENCE_CAPABILITY_ID);
     await module.close();
   });
 
   it('fails validation when a declared session principal lacks identity resolver binding', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.session-missing-identity',
-      version: '0.1.0',
       contributions: {
         session: {
           principals: [
@@ -733,9 +723,8 @@ describe('CapabilityRegistry', () => {
 
   it('fails validation when a decorated session identity resolver is not callable', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.session-invalid-identity',
-      version: '0.1.0',
       contributions: {
         session: {
           principals: [
@@ -772,9 +761,8 @@ describe('CapabilityRegistry', () => {
 
   it('reports structured issues for blank session contribution fields', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.session-blank-fields',
-      version: '0.1.0',
       contributions: {
         session: {
           principals: [
@@ -818,9 +806,8 @@ describe('CapabilityRegistry', () => {
 
   it('fails validation when a declared authority claim lacks summary resolver or scope authorizer', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.session-missing-authority',
-      version: '0.1.0',
       contributions: {
         session: {
           principals: [
@@ -870,9 +857,8 @@ describe('CapabilityRegistry', () => {
 
   it('fails validation when decorated authority resolver or authorizer is not callable', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.session-invalid-authority',
-      version: '0.1.0',
       contributions: {
         session: {
           principals: [
@@ -945,9 +931,8 @@ describe('CapabilityRegistry', () => {
 
   it('fails validation when an authority claim references an unknown subject principal', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.session-missing-subject',
-      version: '0.1.0',
       contributions: {
         session: {
           authorityClaims: [
@@ -1001,9 +986,8 @@ describe('CapabilityRegistry', () => {
 
   it('fails validation when an authority claim references another capability principal without a runtime dependency', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.session-principal-owner',
-      version: '0.1.0',
       contributions: {
         session: {
           principals: [
@@ -1029,9 +1013,8 @@ describe('CapabilityRegistry', () => {
     }
 
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.session-claim-owner',
-      version: '0.1.0',
       contributions: {
         session: {
           authorityClaims: [
@@ -1093,9 +1076,8 @@ describe('CapabilityRegistry', () => {
 
   it('allows an authority claim to reference another capability principal when a runtime dependency is declared', async () => {
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.session-principal-dependency-owner',
-      version: '0.1.0',
       contributions: {
         session: {
           principals: [
@@ -1121,9 +1103,8 @@ describe('CapabilityRegistry', () => {
     }
 
     @Injectable()
-    @CapabilityRuntimeManifestProvider({
+    @CapabilityRuntimeContributionProvider({
       capabilityId: 'test.session-claim-dependency-owner',
-      version: '0.1.0',
       runtimeDependencies: [
         { capabilityId: 'test.session-principal-dependency-owner', mode: 'required' },
       ],
@@ -1205,52 +1186,45 @@ async function buildModule(
 ): Promise<TestingModule> {
   return Test.createTestingModule({
     imports: [CapabilityModule.forRoot({ process })],
-    providers: [...providers, ...buildTestOwnershipProviders(providers)],
+    providers: [...providers, ...buildTestAnchorProviders(providers)],
   })
     .overrideProvider(CapabilityBootstrapCheck)
     .useValue({ onApplicationBootstrap: jest.fn() })
     .compile();
 }
 
-function buildTestOwnershipProviders(
+function buildTestAnchorProviders(
   providers: readonly (new (...args: never[]) => object)[],
 ): readonly (new () => object)[] {
-  const declaredOwnershipIds = new Set(
+  const declaredAnchorIds = new Set(
     providers.flatMap((provider) => {
-      const ownership = Reflect.getMetadata(CAPABILITY_OWNERSHIP_METADATA_KEY, provider) as
+      const anchor = Reflect.getMetadata(CAPABILITY_ANCHOR_METADATA_KEY, provider) as
         { readonly capabilityId: string } | undefined;
-      return ownership ? [ownership.capabilityId] : [];
+      return anchor ? [anchor.capabilityId] : [];
     }),
   );
   const runtimeIds = new Set(
     providers.flatMap((provider) => {
-      const runtime = Reflect.getMetadata(CAPABILITY_RUNTIME_MANIFEST_METADATA_KEY, provider) as
-        { readonly capabilityId: string } | undefined;
+      const runtime = Reflect.getMetadata(
+        CAPABILITY_RUNTIME_CONTRIBUTION_METADATA_KEY,
+        provider,
+      ) as { readonly capabilityId: string } | undefined;
       return runtime ? [runtime.capabilityId] : [];
     }),
   );
   return [...runtimeIds]
-    .filter((capabilityId) => !declaredOwnershipIds.has(capabilityId))
-    .map((capabilityId) => createTestOwnershipProvider(capabilityId));
+    .filter((capabilityId) => !declaredAnchorIds.has(capabilityId))
+    .map((capabilityId) => createTestAnchorProvider(capabilityId));
 }
 
-function createTestOwnershipProvider(capabilityId: string): new () => object {
+function createTestAnchorProvider(capabilityId: string): new () => object {
   @Injectable()
-  @CapabilityOwnershipProvider({
+  @CapabilityAnchorProvider({
     capabilityId,
-    kind: 'technical',
-    semanticScope: `Test ownership for ${capabilityId}.`,
-    owns: [`Test runtime facts for ${capabilityId}.`],
-    nonGoals: ['Production capability ownership.'],
-    physicalScopes: [
-      { path: 'src/infrastructure/capability/capability.registry.spec.ts', role: 'primary' },
-    ],
-    publicSurfaces: [{ status: 'not-required', reason: 'Registry test fixture.' }],
-    allowedDependencies: [],
-    foundationClassification: 'domain-owned',
-    validationEntrypoints: ['src/infrastructure/capability/capability.registry.spec.ts'],
+    mode: 'switchable',
+    decisionRef: 'docs/capabilities/current.md',
   })
-  class TestCapabilityOwnership {}
+  class TestCapabilityAnchor {}
 
-  return TestCapabilityOwnership;
+  return TestCapabilityAnchor;
 }

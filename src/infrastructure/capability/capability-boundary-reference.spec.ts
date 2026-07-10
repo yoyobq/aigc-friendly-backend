@@ -10,8 +10,8 @@ import {
 } from '../../usecases/common/ports/capability-request-context-store.contract';
 import { CapabilityBootstrapCheck } from './capability-bootstrap-check';
 import {
-  CAPABILITY_OWNERSHIP_METADATA_KEY,
-  CAPABILITY_RUNTIME_MANIFEST_METADATA_KEY,
+  CAPABILITY_ANCHOR_METADATA_KEY,
+  CAPABILITY_RUNTIME_CONTRIBUTION_METADATA_KEY,
 } from './capability.decorators';
 import { CapabilityModule } from './capability.module';
 import { CapabilityRegistry } from './capability.registry';
@@ -34,11 +34,14 @@ describe('Capability boundary reference', () => {
   });
 
   it('keeps a typed-client composition usecase outside capability ownership', async () => {
+    expect(Reflect.getMetadata(CAPABILITY_ANCHOR_METADATA_KEY, BuildReferenceReportUsecase)).toBe(
+      undefined,
+    );
     expect(
-      Reflect.getMetadata(CAPABILITY_OWNERSHIP_METADATA_KEY, BuildReferenceReportUsecase),
-    ).toBe(undefined);
-    expect(
-      Reflect.getMetadata(CAPABILITY_RUNTIME_MANIFEST_METADATA_KEY, BuildReferenceReportUsecase),
+      Reflect.getMetadata(
+        CAPABILITY_RUNTIME_CONTRIBUTION_METADATA_KEY,
+        BuildReferenceReportUsecase,
+      ),
     ).toBe(undefined);
 
     const registry = module.get(CapabilityRegistry);

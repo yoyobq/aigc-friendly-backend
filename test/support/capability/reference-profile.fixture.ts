@@ -2,8 +2,8 @@ import type { CapabilityQuery, CapabilityResult } from '@app-types/common/capabi
 import { Inject, Injectable } from '@nestjs/common';
 import {
   CapabilityOperationHandlerProvider,
-  CapabilityOwnershipProvider,
-  CapabilityRuntimeManifestProvider,
+  CapabilityAnchorProvider,
+  CapabilityRuntimeContributionProvider,
 } from '@src/infrastructure/capability/capability.decorators';
 import {
   CAPABILITY_QUERY_BUS,
@@ -38,28 +38,13 @@ export interface ReferenceReportView {
 }
 
 @Injectable()
-@CapabilityOwnershipProvider({
+@CapabilityAnchorProvider({
   capabilityId: REFERENCE_PROFILE_CAPABILITY_ID,
-  kind: 'business',
-  semanticScope: 'Test-only reference profile facts and group membership.',
-  owns: ['Reference profile facts and their group membership.'],
-  nonGoals: ['Reports and other consumer-specific compositions.'],
-  physicalScopes: [
-    { path: 'test/support/capability/reference-profile.fixture.ts', role: 'primary' },
-  ],
-  publicSurfaces: [
-    { status: 'not-required', reason: 'The reference capability exists only as a test fixture.' },
-  ],
-  allowedDependencies: [],
-  foundationClassification: 'domain-owned',
-  validationEntrypoints: ['src/infrastructure/capability/capability-boundary-reference.spec.ts'],
+  mode: 'switchable',
+  decisionRef: 'docs/capabilities/reference-fixtures.md',
 })
-export class ReferenceProfileCapabilityOwnership {}
-
-@Injectable()
-@CapabilityRuntimeManifestProvider({
+@CapabilityRuntimeContributionProvider({
   capabilityId: REFERENCE_PROFILE_CAPABILITY_ID,
-  version: '0.1.0',
   operations: {
     queries: [
       {
@@ -70,7 +55,7 @@ export class ReferenceProfileCapabilityOwnership {}
     ],
   },
 })
-export class ReferenceProfileRuntimeManifest {}
+export class ReferenceProfileCapabilityAnchor {}
 
 const REFERENCE_PROFILES: readonly ReferenceProfileSummary[] = [
   { profileKey: 'profile-alpha-1', groupKey: 'alpha', displayName: 'Alpha One' },
@@ -154,8 +139,7 @@ export class BuildReferenceReportUsecase {
 }
 
 export const REFERENCE_PROFILE_FIXTURE_PROVIDERS = [
-  ReferenceProfileCapabilityOwnership,
-  ReferenceProfileRuntimeManifest,
+  ReferenceProfileCapabilityAnchor,
   ReferenceProfileListHandler,
   DispatcherReferenceProfileClient,
   BuildReferenceReportUsecase,

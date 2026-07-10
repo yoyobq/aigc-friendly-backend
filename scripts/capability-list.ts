@@ -6,9 +6,9 @@ import 'reflect-metadata';
 
 import type {
   CapabilityId,
-  CapabilityOwnershipManifest,
+  CapabilityAnchor,
   CapabilityProcess,
-  CapabilityRuntimeManifest,
+  CapabilityRuntimeContribution,
 } from '@app-types/common/capability.types';
 import { MODULE_METADATA } from '@nestjs/common/constants';
 import type { DynamicModule, Provider, Type } from '@nestjs/common';
@@ -17,10 +17,10 @@ import { WorkerModule } from '@src/bootstraps/worker/worker.module';
 import {
   CAPABILITY_HEALTH_CHECK_METADATA_KEY,
   CAPABILITY_OPERATION_HANDLER_METADATA_KEY,
-  CAPABILITY_OWNERSHIP_METADATA_KEY,
+  CAPABILITY_ANCHOR_METADATA_KEY,
   CAPABILITY_PROVIDER_BINDING_METADATA_KEY,
   CAPABILITY_QUEUE_BINDING_METADATA_KEY,
-  CAPABILITY_RUNTIME_MANIFEST_METADATA_KEY,
+  CAPABILITY_RUNTIME_CONTRIBUTION_METADATA_KEY,
   CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_METADATA_KEY,
   CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_METADATA_KEY,
   CAPABILITY_SESSION_IDENTITY_RESOLVER_METADATA_KEY,
@@ -36,7 +36,7 @@ import {
   validateCapabilityProcessTopology,
   type CapabilityProcessTopology,
 } from '@src/infrastructure/capability/capability-topology.validator';
-import { existsSync, promises as fs } from 'node:fs';
+import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
 type Command = 'list' | 'docs' | 'check';
@@ -48,9 +48,10 @@ interface ProviderObservation {
 }
 
 export interface CapabilityViewEntry {
-  readonly ownership: CapabilityOwnershipManifest;
-  readonly declarationModules: readonly string[];
-  readonly runtimeManifest: CapabilityRuntimeManifest | null;
+  readonly anchor: CapabilityAnchor;
+  readonly entryModule: string;
+  readonly installedProcesses: readonly CapabilityProcess[];
+  readonly runtimeContribution: CapabilityRuntimeContribution | null;
   readonly runtimeProcesses: readonly CapabilityProcess[];
 }
 
@@ -94,10 +95,10 @@ export async function collectCapabilityView(): Promise<readonly CapabilityViewEn
     collectProviderObservations({ process: 'worker', rootModule: WorkerModule }),
   ]);
   const observations = [...apiObservations, ...workerObservations];
-  const ownershipById = collectOwnership(observations);
-  const runtimeById = collectRuntime(observations);
+  const anchorsById = collectAnchors(observations);
+  const runtimeById = collectRuntimeContributions(observations);
 
-  const issues = validateOwnershipView(ownershipById);
+  const issues = await validateAnchors(anchorsById);
   const topologyIssues = PROCESS_ORDER.flatMap((process) =>
     validateCapabilityProcessTopology(buildProcessTopology({ process, observations })).filter(
       (issue) => issue.severity !== 'warning',
@@ -108,17 +109,18 @@ export async function collectCapabilityView(): Promise<readonly CapabilityViewEn
     throw new Error(`Capability governance validation failed\n- ${allIssues.join('\n- ')}`);
   }
 
-  return [...ownershipById.entries()]
-    .map(([capabilityId, ownership]) => {
+  return [...anchorsById.entries()]
+    .map(([capabilityId, item]) => {
       const runtime = runtimeById.get(capabilityId);
       return {
-        ownership: ownership.manifest,
-        declarationModules: [...ownership.modules].sort(),
-        runtimeManifest: runtime?.manifest ?? null,
+        anchor: item.anchor,
+        entryModule: [...item.modules][0] ?? '',
+        installedProcesses: sortProcesses(item.processes),
+        runtimeContribution: runtime?.contribution ?? null,
         runtimeProcesses: sortProcesses(runtime?.processes ?? new Set()),
       };
     })
-    .sort((left, right) => left.ownership.capabilityId.localeCompare(right.ownership.capabilityId));
+    .sort((left, right) => left.anchor.capabilityId.localeCompare(right.anchor.capabilityId));
 }
 
 async function collectProviderObservations(input: {
@@ -192,68 +194,78 @@ async function collectProviderObservations(input: {
   return dedupeProviderObservations(observations);
 }
 
-function collectOwnership(
-  observations: readonly ProviderObservation[],
-): Map<
+function collectAnchors(observations: readonly ProviderObservation[]): Map<
   CapabilityId,
-  { readonly manifest: CapabilityOwnershipManifest; readonly modules: Set<string> }
-> {
-  const ownershipById = new Map<
-    CapabilityId,
-    { readonly manifest: CapabilityOwnershipManifest; readonly modules: Set<string> }
-  >();
-  for (const observation of observations) {
-    const manifest = Reflect.getMetadata(
-      CAPABILITY_OWNERSHIP_METADATA_KEY,
-      observation.providerType,
-    ) as CapabilityOwnershipManifest | undefined;
-    if (!manifest) {
-      continue;
-    }
-    const current = ownershipById.get(manifest.capabilityId);
-    if (!current) {
-      ownershipById.set(manifest.capabilityId, {
-        manifest,
-        modules: new Set([observation.moduleName]),
-      });
-      continue;
-    }
-    if (!metadataEquals(current.manifest, manifest)) {
-      throw new Error(`Conflicting capability ownership declarations: ${manifest.capabilityId}`);
-    }
-    current.modules.add(observation.moduleName);
+  {
+    readonly anchor: CapabilityAnchor;
+    readonly modules: Set<string>;
+    readonly processes: Set<CapabilityProcess>;
   }
-  return ownershipById;
-}
-
-function collectRuntime(
-  observations: readonly ProviderObservation[],
-): Map<
-  CapabilityId,
-  { readonly manifest: CapabilityRuntimeManifest; readonly processes: Set<CapabilityProcess> }
 > {
-  const runtimeById = new Map<
+  const anchorsById = new Map<
     CapabilityId,
-    { readonly manifest: CapabilityRuntimeManifest; readonly processes: Set<CapabilityProcess> }
+    {
+      readonly anchor: CapabilityAnchor;
+      readonly modules: Set<string>;
+      readonly processes: Set<CapabilityProcess>;
+    }
   >();
   for (const observation of observations) {
-    const manifest = Reflect.getMetadata(
-      CAPABILITY_RUNTIME_MANIFEST_METADATA_KEY,
-      observation.providerType,
-    ) as CapabilityRuntimeManifest | undefined;
-    if (!manifest) {
+    const anchor = Reflect.getMetadata(CAPABILITY_ANCHOR_METADATA_KEY, observation.providerType) as
+      CapabilityAnchor | undefined;
+    if (!anchor) {
       continue;
     }
-    const current = runtimeById.get(manifest.capabilityId);
+    const current = anchorsById.get(anchor.capabilityId);
     if (!current) {
-      runtimeById.set(manifest.capabilityId, {
-        manifest,
+      anchorsById.set(anchor.capabilityId, {
+        anchor,
+        modules: new Set([observation.moduleName]),
         processes: new Set([observation.process]),
       });
       continue;
     }
-    if (!metadataEquals(current.manifest, manifest)) {
-      throw new Error(`Conflicting capability runtime manifests: ${manifest.capabilityId}`);
+    if (!metadataEquals(current.anchor, anchor)) {
+      throw new Error(`Conflicting capability anchors: ${anchor.capabilityId}`);
+    }
+    current.modules.add(observation.moduleName);
+    current.processes.add(observation.process);
+  }
+  return anchorsById;
+}
+
+function collectRuntimeContributions(observations: readonly ProviderObservation[]): Map<
+  CapabilityId,
+  {
+    readonly contribution: CapabilityRuntimeContribution;
+    readonly processes: Set<CapabilityProcess>;
+  }
+> {
+  const runtimeById = new Map<
+    CapabilityId,
+    {
+      readonly contribution: CapabilityRuntimeContribution;
+      readonly processes: Set<CapabilityProcess>;
+    }
+  >();
+  for (const observation of observations) {
+    const contribution = Reflect.getMetadata(
+      CAPABILITY_RUNTIME_CONTRIBUTION_METADATA_KEY,
+      observation.providerType,
+    ) as CapabilityRuntimeContribution | undefined;
+    if (!contribution) {
+      continue;
+    }
+    const current = runtimeById.get(contribution.capabilityId);
+    if (!current) {
+      runtimeById.set(contribution.capabilityId, {
+        contribution,
+        processes: new Set([observation.process]),
+      });
+      continue;
+    }
+    if (!metadataEquals(current.contribution, contribution)) {
+      throw new Error(`Conflicting capability runtime contributions: ${contribution.capabilityId}`);
     }
     current.processes.add(observation.process);
   }
@@ -269,13 +281,13 @@ function buildProcessTopology(input: {
   );
   return {
     process: input.process,
-    ownerships: collectProviderMetadata<CapabilityOwnershipManifest>(
+    anchors: collectProviderMetadata<CapabilityAnchor>(
       observations,
-      CAPABILITY_OWNERSHIP_METADATA_KEY,
+      CAPABILITY_ANCHOR_METADATA_KEY,
     ),
-    runtimeManifests: collectProviderMetadata<CapabilityRuntimeManifest>(
+    runtimeContributions: collectProviderMetadata<CapabilityRuntimeContribution>(
       observations,
-      CAPABILITY_RUNTIME_MANIFEST_METADATA_KEY,
+      CAPABILITY_RUNTIME_CONTRIBUTION_METADATA_KEY,
     ),
     providerBindings: collectProviderMetadata<CapabilityProviderBindingMetadata>(
       observations,
@@ -320,161 +332,85 @@ function collectProviderMetadata<T>(
   });
 }
 
-function validateOwnershipView(
-  ownershipById: ReadonlyMap<CapabilityId, { readonly manifest: CapabilityOwnershipManifest }>,
-): readonly string[] {
-  const issues = [...ownershipById.entries()].flatMap(([capabilityId, item]) =>
-    validateOwnershipManifest({ capabilityId, manifest: item.manifest, ownershipById }),
-  );
-  const primaryScopes = [...ownershipById.entries()].flatMap(([capabilityId, item]) =>
-    item.manifest.physicalScopes
-      .filter((scope) => scope.role === 'primary')
-      .map((scope) => ({ capabilityId, path: scope.path })),
-  );
-  return [...issues, ...validatePrimaryScopeOverlaps(primaryScopes)];
-}
-
-function validateOwnershipManifest(input: {
-  readonly capabilityId: CapabilityId;
-  readonly manifest: CapabilityOwnershipManifest;
-  readonly ownershipById: ReadonlyMap<
+async function validateAnchors(
+  anchorsById: ReadonlyMap<
     CapabilityId,
-    { readonly manifest: CapabilityOwnershipManifest }
-  >;
-}): readonly string[] {
-  return [
-    ...validateOwnershipSummary(input.capabilityId, input.manifest),
-    ...validateOwnershipDependencies(input.capabilityId, input.manifest, input.ownershipById),
-    ...validateOwnershipScopes(input.capabilityId, input.manifest),
-    ...validateOwnershipPublicSurfaces(input.capabilityId, input.manifest),
-    ...validateOwnershipEntrypoints(input.capabilityId, input.manifest),
-  ];
-}
-
-function validateOwnershipSummary(
-  capabilityId: CapabilityId,
-  manifest: CapabilityOwnershipManifest,
-): readonly string[] {
-  const issues: string[] = [];
-  if (!CAPABILITY_ID_PATTERN.test(capabilityId)) {
-    issues.push(`invalid_ownership_id:${capabilityId}`);
-  }
-  if (
-    !manifest.semanticScope.trim() ||
-    !hasNonBlankItems(manifest.owns) ||
-    !hasNonBlankItems(manifest.nonGoals) ||
-    manifest.physicalScopes.length === 0 ||
-    manifest.publicSurfaces.length === 0 ||
-    manifest.validationEntrypoints.length === 0
-  ) {
-    issues.push(`incomplete_ownership:${capabilityId}`);
-  }
-  if (manifest.kind === 'platform' && manifest.foundationClassification !== 'platform-foundation') {
-    issues.push(`invalid_foundation_classification:${capabilityId}`);
-  }
-  return issues;
-}
-
-function validateOwnershipDependencies(
-  capabilityId: CapabilityId,
-  manifest: CapabilityOwnershipManifest,
-  ownershipById: ReadonlyMap<CapabilityId, unknown>,
-): readonly string[] {
-  return manifest.allowedDependencies.flatMap((dependency) =>
-    dependency === capabilityId || !ownershipById.has(dependency)
-      ? [`ownership_dependency_invalid:${capabilityId}:${dependency}`]
-      : [],
-  );
-}
-
-function validateOwnershipScopes(
-  capabilityId: CapabilityId,
-  manifest: CapabilityOwnershipManifest,
-): readonly string[] {
-  const issues: string[] = [];
-  for (const scope of manifest.physicalScopes) {
-    if (!isValidProjectPath(scope.path) || !existsSync(path.resolve(PROJECT_ROOT, scope.path))) {
-      issues.push(`ownership_scope_missing:${capabilityId}:${scope.path}`);
+    {
+      readonly anchor: CapabilityAnchor;
+      readonly modules: ReadonlySet<string>;
     }
-    if (scope.role !== 'primary' && !scope.reason?.trim()) {
-      issues.push(`ownership_scope_reason_missing:${capabilityId}:${scope.path}`);
-    }
-  }
-  if (!manifest.physicalScopes.some((scope) => scope.role === 'primary')) {
-    issues.push(`ownership_primary_scope_missing:${capabilityId}`);
-  }
-  return issues;
-}
-
-function validateOwnershipPublicSurfaces(
-  capabilityId: CapabilityId,
-  manifest: CapabilityOwnershipManifest,
-): readonly string[] {
+  >,
+): Promise<readonly string[]> {
+  const decisionDocuments = new Map<string, string>();
   const issues: string[] = [];
-  for (const surface of manifest.publicSurfaces) {
-    if (surface.status !== 'present') {
-      if (!surface.reason.trim()) {
-        issues.push(`ownership_public_surface_reason_missing:${capabilityId}:${surface.status}`);
-      }
-      continue;
+  for (const [capabilityId, item] of anchorsById) {
+    if (!CAPABILITY_ID_PATTERN.test(capabilityId)) {
+      issues.push(`capability_anchor_id_invalid:${capabilityId}`);
     }
-    const isInsideScope = manifest.physicalScopes.some((scope) =>
-      containsPath(scope.path, surface.path),
+    if (item.modules.size !== 1) {
+      issues.push(
+        `capability_anchor_entry_module_ambiguous:${capabilityId}:${[...item.modules].sort().join(',')}`,
+      );
+    }
+    issues.push(
+      ...(await validateCapabilityDecisionRef({
+        capabilityId,
+        decisionRef: item.anchor.decisionRef,
+        decisionDocuments,
+      })),
     );
-    if (
-      !isValidProjectPath(surface.path) ||
-      !existsSync(path.resolve(PROJECT_ROOT, surface.path)) ||
-      !isInsideScope
-    ) {
-      issues.push(`ownership_public_surface_invalid:${capabilityId}:${surface.path}`);
-    }
   }
   return issues;
 }
 
-function validateOwnershipEntrypoints(
-  capabilityId: CapabilityId,
-  manifest: CapabilityOwnershipManifest,
-): readonly string[] {
-  return manifest.validationEntrypoints.flatMap((entrypoint) =>
-    !isValidProjectPath(entrypoint) || !existsSync(path.resolve(PROJECT_ROOT, entrypoint))
-      ? [`ownership_validation_entrypoint_missing:${capabilityId}:${entrypoint}`]
-      : [],
+export async function validateCapabilityDecisionRef(input: {
+  readonly capabilityId: CapabilityId;
+  readonly decisionRef: string;
+  readonly decisionDocuments?: Map<string, string>;
+}): Promise<readonly string[]> {
+  const decisionRef = normalizeProjectPath(input.decisionRef.trim());
+  if (!isCapabilityDecisionPath(decisionRef)) {
+    return [`capability_decision_ref_invalid:${input.capabilityId}:${input.decisionRef}`];
+  }
+
+  const decisionDocuments = input.decisionDocuments ?? new Map<string, string>();
+  let content = decisionDocuments.get(decisionRef);
+  if (content === undefined) {
+    try {
+      content = await fs.readFile(path.resolve(PROJECT_ROOT, decisionRef), 'utf8');
+      decisionDocuments.set(decisionRef, content);
+    } catch {
+      return [`capability_decision_ref_missing:${input.capabilityId}:${decisionRef}`];
+    }
+  }
+
+  const capabilityHeading = new RegExp('^## `' + escapeRegExp(input.capabilityId) + '`\\s*$', 'm');
+  return capabilityHeading.test(content)
+    ? []
+    : [`capability_decision_ref_capability_missing:${input.capabilityId}:${decisionRef}`];
+}
+
+function isCapabilityDecisionPath(value: string): boolean {
+  return (
+    value.startsWith('docs/capabilities/') &&
+    value.endsWith('.md') &&
+    !value.split('/').includes('..') &&
+    !path.isAbsolute(value)
   );
-}
-
-function validatePrimaryScopeOverlaps(
-  primaryScopes: readonly { readonly capabilityId: CapabilityId; readonly path: string }[],
-): readonly string[] {
-  const issues: string[] = [];
-  for (let leftIndex = 0; leftIndex < primaryScopes.length; leftIndex += 1) {
-    for (let rightIndex = leftIndex + 1; rightIndex < primaryScopes.length; rightIndex += 1) {
-      const left = primaryScopes[leftIndex];
-      const right = primaryScopes[rightIndex];
-      if (
-        left &&
-        right &&
-        left.capabilityId !== right.capabilityId &&
-        pathsOverlap(left.path, right.path)
-      ) {
-        issues.push(
-          `ownership_primary_scope_overlap:${left.capabilityId}:${right.capabilityId}:${left.path}:${right.path}`,
-        );
-      }
-    }
-  }
-  return issues;
 }
 
 function renderTable(entries: readonly CapabilityViewEntry[]): string {
   const rows = [
-    ['ID', 'Kind', 'Semantic scope', 'Primary scope', 'Runtime'],
+    ['ID', 'Mode', 'Default', 'Entry module', 'Installed', 'Runtime', 'Resources', 'Decision'],
     ...entries.map((entry) => [
-      entry.ownership.capabilityId,
-      entry.ownership.kind,
-      entry.ownership.semanticScope,
-      summarizePrimaryScopeForTable(entry.ownership),
-      entry.runtimeProcesses.length > 0 ? entry.runtimeProcesses.join(',') : '-',
+      entry.anchor.capabilityId,
+      entry.anchor.mode,
+      resolveDefaultState(entry),
+      entry.entryModule,
+      entry.installedProcesses.join(',') || '-',
+      entry.runtimeProcesses.join(',') || '-',
+      summarizeRuntimeResources(entry.runtimeContribution),
+      entry.anchor.decisionRef,
     ]),
   ];
   const widths = rows[0].map((_, index) =>
@@ -496,46 +432,24 @@ function renderMarkdown(entries: readonly CapabilityViewEntry[]): string {
     '',
     '# Current Capabilities',
     '',
-    'This document joins Nest ownership metadata with runtime manifests observed from the API and Worker module graphs.',
+    'This shallow projection is derived from the Nest API and Worker module graphs. Entry Module is a navigation seed, not a file-level ownership claim. Semantic decisions live at Decision Ref.',
     '',
-    '## Ownership Summary',
-    '',
-    '| ID | Kind | Semantic Scope | Owns | Non-goals | Physical Scopes | Public Surfaces | Allowed Dependencies | Foundation | Runtime | Declaration Modules |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| ID | Mode | Default State | Entry Module | Installed Processes | Runtime Processes | Runtime Resources | Decision Ref |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- |',
     ...entries.map((entry) =>
       markdownRow([
-        entry.ownership.capabilityId,
-        entry.ownership.kind,
-        entry.ownership.semanticScope,
-        entry.ownership.owns.join('; '),
-        entry.ownership.nonGoals.join('; '),
-        summarizePhysicalScopes(entry.ownership),
-        summarizePublicSurfaces(entry.ownership),
-        entry.ownership.allowedDependencies.join(', ') || '-',
-        entry.ownership.foundationClassification,
+        entry.anchor.capabilityId,
+        entry.anchor.mode,
+        resolveDefaultState(entry),
+        entry.entryModule,
+        entry.installedProcesses.join(', ') || '-',
         entry.runtimeProcesses.join(', ') || '-',
-        entry.declarationModules.join(', '),
+        summarizeRuntimeResources(entry.runtimeContribution),
+        markdownDecisionLink(entry.anchor.decisionRef),
       ]),
     ),
     '',
-    '## Runtime Projection',
-    '',
-    '| ID | Processes | Dependencies | Providers | Queues | Operations |',
-    '| --- | --- | --- | --- | --- | --- |',
-    ...entries
-      .filter((entry) => entry.runtimeManifest !== null)
-      .map((entry) =>
-        markdownRow([
-          entry.ownership.capabilityId,
-          entry.runtimeProcesses.join(', '),
-          summarizeDependencies(entry.runtimeManifest),
-          summarizeProviders(entry.runtimeManifest),
-          summarizeQueues(entry.runtimeManifest),
-          summarizeOperations(entry.runtimeManifest),
-        ]),
-      ),
-    '',
-    'Validation: ownership scopes and surfaces resolve; allowed dependencies exist; every runtime manifest and contribution is complete in its process; required runtime dependencies form no cycle.',
+    'Validation: anchor IDs and decision references are valid; runtime contributions and bindings are complete in each installed process; required runtime dependencies form no cycle.',
     '',
   ];
   return lines.join('\n');
@@ -605,86 +519,98 @@ function sortProcesses(processes: ReadonlySet<CapabilityProcess>): readonly Capa
   return PROCESS_ORDER.filter((process) => processes.has(process));
 }
 
-function summarizeDependencies(manifest: CapabilityRuntimeManifest | null): string {
-  return (
-    manifest?.runtimeDependencies
-      ?.map((dependency) => `${dependency.mode}:${dependency.capabilityId}`)
-      .join('; ') || '-'
+function resolveDefaultState(entry: CapabilityViewEntry): 'enabled' | 'disabled' {
+  if (entry.anchor.mode === 'always-on') {
+    return 'enabled';
+  }
+  return entry.runtimeContribution?.runtime?.defaultState ?? 'enabled';
+}
+
+function summarizeRuntimeResources(contribution: CapabilityRuntimeContribution | null): string {
+  if (!contribution) {
+    return '-';
+  }
+  const resources = [
+    ...summarizeRuntimeDependencyResources(contribution),
+    ...summarizeProviderResources(contribution),
+    ...summarizeQueueResources(contribution),
+    ...summarizeOperationResources(contribution),
+    ...summarizeApiResources(contribution),
+    ...summarizeSessionResources(contribution),
+    ...summarizeHealthResources(contribution),
+  ];
+  return resources.join('; ') || '-';
+}
+
+function summarizeRuntimeDependencyResources(
+  contribution: CapabilityRuntimeContribution,
+): readonly string[] {
+  return (contribution.runtimeDependencies ?? []).map(
+    (dependency) => `dependency:${dependency.mode}:${dependency.capabilityId}`,
   );
 }
 
-function summarizeProviders(manifest: CapabilityRuntimeManifest | null): string {
-  return (
-    manifest?.contributions?.providers
-      ?.map((provider) => `${provider.providerKind}:${provider.providerName}`)
-      .join('; ') || '-'
+function summarizeProviderResources(
+  contribution: CapabilityRuntimeContribution,
+): readonly string[] {
+  return (contribution.contributions?.providers ?? []).map(
+    (provider) => `provider:${provider.providerKind}:${provider.providerName}`,
   );
 }
 
-function summarizeQueues(manifest: CapabilityRuntimeManifest | null): string {
-  return (
-    manifest?.contributions?.queues
-      ?.map(
-        (queue) => `${queue.operationKind}:${queue.operation}->${queue.queueName}/${queue.jobName}`,
-      )
-      .join('; ') || '-'
+function summarizeQueueResources(contribution: CapabilityRuntimeContribution): readonly string[] {
+  return (contribution.contributions?.queues ?? []).map(
+    (queue) =>
+      `queue:${queue.operationKind}:${queue.operation}->${queue.queueName}/${queue.jobName}`,
   );
 }
 
-function summarizeOperations(manifest: CapabilityRuntimeManifest | null): string {
-  if (!manifest?.operations) return '-';
+function summarizeOperationResources(
+  contribution: CapabilityRuntimeContribution,
+): readonly string[] {
   return [
-    ...(manifest.operations.commands ?? []).map((operation) => `command:${operation.name}`),
-    ...(manifest.operations.queries ?? []).map((operation) => `query:${operation.name}`),
-    ...(manifest.operations.events ?? []).map((operation) => `event:${operation.name}`),
-  ].join('; ');
+    ...(contribution.operations?.commands ?? []).map(
+      (operation) => `operation:command:${operation.name}`,
+    ),
+    ...(contribution.operations?.queries ?? []).map(
+      (operation) => `operation:query:${operation.name}`,
+    ),
+    ...(contribution.operations?.events ?? []).map(
+      (operation) => `operation:event:${operation.name}`,
+    ),
+  ];
 }
 
-function summarizePhysicalScopes(manifest: CapabilityOwnershipManifest): string {
-  return manifest.physicalScopes.map((scope) => `${scope.role}:${scope.path}`).join('; ');
+function summarizeApiResources(contribution: CapabilityRuntimeContribution): readonly string[] {
+  const graphqlOperationCount = contribution.contributions?.api?.graphqlOperations?.length ?? 0;
+  return graphqlOperationCount > 0 ? [`api:${graphqlOperationCount}`] : [];
 }
 
-function summarizePrimaryScopeForTable(manifest: CapabilityOwnershipManifest): string {
-  const scopes = manifest.physicalScopes.filter((scope) => scope.role === 'primary');
-  const first = scopes[0]?.path ?? '-';
-  return scopes.length > 1 ? `${first} (+${scopes.length - 1})` : first;
+function summarizeSessionResources(contribution: CapabilityRuntimeContribution): readonly string[] {
+  const principalCount = contribution.contributions?.session?.principals?.length ?? 0;
+  const authorityClaimCount = contribution.contributions?.session?.authorityClaims?.length ?? 0;
+  return principalCount > 0 || authorityClaimCount > 0
+    ? [`session:${principalCount}/${authorityClaimCount}`]
+    : [];
 }
 
-function summarizePublicSurfaces(manifest: CapabilityOwnershipManifest): string {
-  return manifest.publicSurfaces
-    .map((surface) =>
-      surface.status === 'present'
-        ? `present:${surface.path}`
-        : `${surface.status}:${surface.reason}`,
-    )
-    .join('; ');
+function summarizeHealthResources(contribution: CapabilityRuntimeContribution): readonly string[] {
+  return contribution.runtime?.healthCheck ? ['health'] : [];
 }
 
-function hasNonBlankItems(values: readonly string[]): boolean {
-  return values.length > 0 && values.every((value) => value.trim().length > 0);
-}
-
-function isValidProjectPath(value: string): boolean {
-  const normalized = value.replaceAll('\\', '/').trim();
-  return (
-    (normalized.startsWith('src/') || normalized.startsWith('test/')) &&
-    !normalized.includes('../') &&
-    !path.isAbsolute(normalized)
-  );
-}
-
-function containsPath(scopePath: string, candidatePath: string): boolean {
-  const scope = normalizeProjectPath(scopePath);
-  const candidate = normalizeProjectPath(candidatePath);
-  return candidate === scope || candidate.startsWith(`${scope}/`);
-}
-
-function pathsOverlap(leftPath: string, rightPath: string): boolean {
-  return containsPath(leftPath, rightPath) || containsPath(rightPath, leftPath);
+function markdownDecisionLink(decisionRef: string): string {
+  const relativePath = path
+    .relative(path.dirname(GENERATED_DOC_PATH), path.resolve(PROJECT_ROOT, decisionRef))
+    .replaceAll(path.sep, '/');
+  return `[${decisionRef}](${relativePath})`;
 }
 
 function normalizeProjectPath(value: string): string {
   return value.replaceAll('\\', '/').replace(/\/$/, '');
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function markdownRow(cells: readonly string[]): string {

@@ -47,10 +47,10 @@ export class RegistryCapabilitySessionContextBuilder implements CapabilitySessio
 
   private async resolvePrincipalCodes(actor: CapabilityActorContext): Promise<readonly string[]> {
     const codes: string[] = [];
-    for (const manifest of this.capabilityRegistry.getActiveRuntimeManifests()) {
-      for (const principal of manifest.contributions?.session?.principals ?? []) {
+    for (const runtimeContribution of this.capabilityRegistry.getActiveRuntimeContributions()) {
+      for (const principal of runtimeContribution.contributions?.session?.principals ?? []) {
         const resolver = this.capabilityRegistry.getSessionIdentityResolver({
-          capabilityId: manifest.capabilityId,
+          capabilityId: runtimeContribution.capabilityId,
           resolverName: principal.identityResolver,
         });
         if (!resolver) {
@@ -67,10 +67,10 @@ export class RegistryCapabilitySessionContextBuilder implements CapabilitySessio
 
   private async resolveAuthorityClaims(actor: CapabilityActorContext): Promise<readonly string[]> {
     const codes: string[] = [];
-    for (const manifest of this.capabilityRegistry.getActiveRuntimeManifests()) {
-      for (const claim of manifest.contributions?.session?.authorityClaims ?? []) {
+    for (const runtimeContribution of this.capabilityRegistry.getActiveRuntimeContributions()) {
+      for (const claim of runtimeContribution.contributions?.session?.authorityClaims ?? []) {
         const resolver = this.capabilityRegistry.getSessionAuthoritySummaryResolver({
-          capabilityId: manifest.capabilityId,
+          capabilityId: runtimeContribution.capabilityId,
           resolverName: claim.summaryResolver,
         });
         if (!resolver) {

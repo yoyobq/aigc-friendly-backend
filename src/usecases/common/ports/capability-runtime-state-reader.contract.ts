@@ -11,7 +11,7 @@ export type CapabilityRuntimeDisableReason =
   | 'kill_switch'
   | 'runtime_disabled'
   | 'operation_disabled'
-  | 'manifest_default_disabled';
+  | 'contribution_default_disabled';
 
 export interface CapabilityRuntimeState {
   readonly capabilityId: CapabilityId;

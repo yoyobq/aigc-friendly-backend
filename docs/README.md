@@ -5,6 +5,7 @@
   ## Folders
 
   - `docs/common/`: global architecture and shared conventions
+  - `docs/capabilities/`: stable semantic capability decisions referenced by code anchors
   - `docs/api/`: API / GraphQL adapter rules
   - `docs/worker/`: worker / queue / async-consumer rules
   - `docs/project-convention/`: project-specific conventions
@@ -57,12 +58,11 @@
   - Boundary contract or port/contract naming:
     - `docs/common/boundary-contract.rules.md`
 
-  - Capability ownership or runtime governance:
-    - `docs/common/capability-ownership.rules.md` when deciding identity, scope, or ownership
-    - `docs/common/capability-runtime.rules.md` when changing runtime manifests, operations, providers, queues, or state
-    - `docs/common/capability-authoring.guide.md` when adding, reviewing, or merging capability code
+  - Capability semantics, anchors, or runtime governance:
+    - `docs/common/capability.rules.md` for the complete stable rule set
+    - `docs/capabilities/current.md` for current semantic boundaries
     - `docs/common/capability-boundary-examples.md` when a composition usecase looks like a capability
-    - `docs/generated/capabilities-current.md` when you need the current generated capability id list
+    - `docs/generated/capabilities-current.md` for the generated module-graph projection
     - `docs/common/boundary-contract.rules.md` when adding dispatcher / runtime contracts
     - `docs/worker/qm-worker-integration.rules.md` when adding queue transport or worker consumer
     - `docs/api/graphql-error-contract-current.md` when changing capability-aware GraphQL behavior
@@ -123,10 +123,9 @@
   ## One-Line Meanings
 
   - `core.rules`: pure domain only
-  - `capability-ownership.rules`: semantic identity, physical scopes, public surfaces, dependencies, and non-goals
-  - `capability-runtime.rules`: runtime manifest, installation, state, transport, and contribution rules
-  - `capability-authoring.guide.md`: capability authoring and validation checklist for AI agents
-  - `generated/capabilities-current.md`: generated joined ownership and runtime projection
+  - `capability.rules`: semantic decisions, minimal anchors, runtime contributions, state, and observation rules
+  - `capabilities/current.md`: stable current semantic capability boundaries
+  - `generated/capabilities-current.md`: generated shallow projection from the API/Worker module graphs
   - `eslint-architecture-rules.md`: executable lint rule map and architecture validation commands
   - `boundary-contract.rules`: layer-owned contract naming and port/contract distinction
   - `aggregate.rules`: aggregate root and child-entity write boundaries

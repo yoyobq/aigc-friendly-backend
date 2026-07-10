@@ -8,10 +8,7 @@ import {
   WeAppProviderContract,
 } from './contracts/third-party-provider.contract';
 import { ThirdPartyAuthQueryService } from './queries/third-party-auth.query.service';
-import {
-  ThirdPartyAuthBindingCapabilityOwnership,
-  ThirdPartyAuthWeappCapabilityOwnership,
-} from './third-party-auth.capability';
+import { ThirdPartyAuthBindingCapabilityAnchor } from './third-party-auth.capability';
 import { ThirdPartyAuthEntity } from './third-party-auth.entity';
 import { PROVIDER_MAP, ThirdPartyAuthService } from './third-party-auth.service';
 import { ThirdPartyAuthInfrastructureModule } from '@src/infrastructure/third-party-auth/third-party-auth-infrastructure.module';
@@ -41,8 +38,7 @@ const providerMapFactory: Provider = {
 @Module({
   imports: [TypeOrmModule.forFeature([ThirdPartyAuthEntity]), ThirdPartyAuthInfrastructureModule],
   providers: [
-    ThirdPartyAuthBindingCapabilityOwnership,
-    ThirdPartyAuthWeappCapabilityOwnership,
+    ThirdPartyAuthBindingCapabilityAnchor,
     providerMapFactory,
     ThirdPartyAuthService,
     ThirdPartyAuthQueryService,

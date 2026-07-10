@@ -1,6 +1,6 @@
 import type {
-  CapabilityOwnershipManifest,
-  CapabilityRuntimeManifest,
+  CapabilityAnchor,
+  CapabilityRuntimeContribution,
 } from '@app-types/common/capability.types';
 import {
   validateCapabilityProcessTopology,
@@ -8,16 +8,15 @@ import {
 } from './capability-topology.validator';
 
 describe('validateCapabilityProcessTopology', () => {
-  it('allows an ownership-only capability', () => {
+  it('allows an anchor without runtime contributions', () => {
     expect(
-      validateCapabilityProcessTopology(buildTopology({ ownerships: [owner('test.owner')] })),
+      validateCapabilityProcessTopology(buildTopology({ anchors: [anchor('test.owner')] })),
     ).toEqual([]);
   });
 
-  it('reports runtime ownership, provider binding, and health gaps together', () => {
-    const runtime: CapabilityRuntimeManifest = {
+  it('reports runtime anchor, provider binding, and health gaps together', () => {
+    const runtime: CapabilityRuntimeContribution = {
       capabilityId: 'test.provider',
-      version: '0.1.0',
       runtime: { healthCheck: true },
       contributions: {
         providers: [{ providerKind: 'test.provider', providerName: 'missing' }],
@@ -25,20 +24,19 @@ describe('validateCapabilityProcessTopology', () => {
     };
 
     expect(
-      validateCapabilityProcessTopology(buildTopology({ runtimeManifests: [runtime] })),
+      validateCapabilityProcessTopology(buildTopology({ runtimeContributions: [runtime] })),
     ).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ code: 'CAPABILITY_RUNTIME_OWNERSHIP_MISSING' }),
+        expect.objectContaining({ code: 'CAPABILITY_RUNTIME_ANCHOR_MISSING' }),
         expect.objectContaining({ code: 'CAPABILITY_PROVIDER_BINDING_MISSING' }),
         expect.objectContaining({ code: 'CAPABILITY_HEALTH_CHECK_MISSING' }),
       ]),
     );
   });
 
-  it('accepts a provider runtime installed with its owner, binding, and health check', () => {
-    const runtime: CapabilityRuntimeManifest = {
+  it('accepts a provider runtime contribution installed with its anchor, binding, and health check', () => {
+    const runtime: CapabilityRuntimeContribution = {
       capabilityId: 'test.provider',
-      version: '0.1.0',
       runtime: { healthCheck: true },
       contributions: {
         providers: [{ providerKind: 'test.provider', providerName: 'ready' }],
@@ -48,8 +46,8 @@ describe('validateCapabilityProcessTopology', () => {
     expect(
       validateCapabilityProcessTopology(
         buildTopology({
-          ownerships: [owner('test.provider')],
-          runtimeManifests: [runtime],
+          anchors: [anchor('test.provider')],
+          runtimeContributions: [runtime],
           providerBindings: [
             {
               capabilityId: 'test.provider',
@@ -63,16 +61,38 @@ describe('validateCapabilityProcessTopology', () => {
     ).toEqual([]);
   });
 
+  it('allows a multi-process anchor to contribute runtime resources in only one process', () => {
+    const sharedAnchor: CapabilityAnchor = {
+      capabilityId: 'test.partial-runtime',
+      mode: 'switchable',
+      decisionRef: 'docs/capabilities/current.md',
+    };
+    const workerContribution: CapabilityRuntimeContribution = {
+      capabilityId: 'test.partial-runtime',
+    };
+
+    expect(
+      validateCapabilityProcessTopology(buildTopology({ process: 'api', anchors: [sharedAnchor] })),
+    ).toEqual([]);
+    expect(
+      validateCapabilityProcessTopology(
+        buildTopology({
+          process: 'worker',
+          anchors: [sharedAnchor],
+          runtimeContributions: [workerContribution],
+        }),
+      ),
+    ).toEqual([]);
+  });
+
   it('reports required runtime dependency cycles', () => {
-    const runtimeManifests: readonly CapabilityRuntimeManifest[] = [
+    const runtimeContributions: readonly CapabilityRuntimeContribution[] = [
       {
         capabilityId: 'test.a',
-        version: '0.1.0',
         runtimeDependencies: [{ capabilityId: 'test.b', mode: 'required' }],
       },
       {
         capabilityId: 'test.b',
-        version: '0.1.0',
         runtimeDependencies: [{ capabilityId: 'test.a', mode: 'required' }],
       },
     ];
@@ -80,8 +100,8 @@ describe('validateCapabilityProcessTopology', () => {
     expect(
       validateCapabilityProcessTopology(
         buildTopology({
-          ownerships: [owner('test.a'), owner('test.b')],
-          runtimeManifests,
+          anchors: [anchor('test.a'), anchor('test.b')],
+          runtimeContributions,
         }),
       ),
     ).toEqual(
@@ -93,8 +113,8 @@ describe('validateCapabilityProcessTopology', () => {
 function buildTopology(overrides: Partial<CapabilityProcessTopology>): CapabilityProcessTopology {
   return {
     process: 'worker',
-    ownerships: [],
-    runtimeManifests: [],
+    anchors: [],
+    runtimeContributions: [],
     providerBindings: [],
     queueBindings: [],
     healthChecks: [],
@@ -106,22 +126,10 @@ function buildTopology(overrides: Partial<CapabilityProcessTopology>): Capabilit
   };
 }
 
-function owner(capabilityId: string): CapabilityOwnershipManifest {
+function anchor(capabilityId: string): CapabilityAnchor {
   return {
     capabilityId,
-    kind: 'technical',
-    semanticScope: `Test scope for ${capabilityId}.`,
-    owns: [`Test facts for ${capabilityId}.`],
-    nonGoals: ['Production ownership.'],
-    physicalScopes: [
-      {
-        path: 'src/infrastructure/capability/capability-topology.validator.spec.ts',
-        role: 'primary',
-      },
-    ],
-    publicSurfaces: [{ status: 'not-required', reason: 'Test fixture.' }],
-    allowedDependencies: [],
-    foundationClassification: 'domain-owned',
-    validationEntrypoints: ['src/infrastructure/capability/capability-topology.validator.spec.ts'],
+    mode: 'always-on',
+    decisionRef: 'docs/capabilities/current.md',
   };
 }

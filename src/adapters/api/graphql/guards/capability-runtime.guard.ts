@@ -35,7 +35,7 @@ export class CapabilityRuntimeGuard implements CanActivate {
       return true;
     }
     const errorCode =
-      state.reason === 'operation_disabled' || state.reason === 'manifest_default_disabled'
+      state.reason === 'operation_disabled' || state.reason === 'contribution_default_disabled'
         ? 'CAPABILITY_OPERATION_DISABLED'
         : 'CAPABILITY_DISABLED';
     throw new DomainError(

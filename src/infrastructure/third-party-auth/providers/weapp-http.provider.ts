@@ -16,9 +16,10 @@ import {
 import { HttpService } from '@nestjs/axios';
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  CapabilityAnchorProvider,
   CapabilityHealthCheckProvider,
   CapabilityProviderBindingProvider,
-  CapabilityRuntimeManifestProvider,
+  CapabilityRuntimeContributionProvider,
 } from '@src/infrastructure/capability/capability.decorators';
 import { PinoLogger } from 'nestjs-pino';
 import { WEAPP_PROVIDER_OPTIONS, type WeAppProviderOptions } from '../weapp-provider.options';
@@ -28,9 +29,13 @@ import { WEAPP_PROVIDER_OPTIONS, type WeAppProviderOptions } from '../weapp-prov
  * 实现微信小程序 js_code 换取 session_key 和 openid 的认证流程
  */
 @Injectable()
-@CapabilityRuntimeManifestProvider({
+@CapabilityAnchorProvider({
   capabilityId: 'third-party-auth.weapp',
-  version: '0.1.0',
+  mode: 'switchable',
+  decisionRef: 'docs/capabilities/current.md',
+})
+@CapabilityRuntimeContributionProvider({
+  capabilityId: 'third-party-auth.weapp',
   runtime: { healthCheck: true },
   contributions: {
     providers: [{ providerKind: 'third-party-auth.provider', providerName: 'weapp' }],

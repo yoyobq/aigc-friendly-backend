@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import type { CapabilityRuntimeManifest } from '@app-types/common/capability.types';
+import type { CapabilityRuntimeContribution } from '@app-types/common/capability.types';
 import {
-  CapabilityOwnershipProvider,
-  CapabilityRuntimeManifestProvider,
+  CapabilityAnchorProvider,
+  CapabilityRuntimeContributionProvider,
   CapabilitySessionAuthorityScopeAuthorizerProvider,
   CapabilitySessionAuthoritySummaryResolverProvider,
   CapabilitySessionIdentityResolverProvider,
@@ -21,28 +21,8 @@ import type {
 
 export const SESSION_REFERENCE_CAPABILITY_ID = 'reference.session';
 
-@Injectable()
-@CapabilityOwnershipProvider({
+export const SESSION_REFERENCE_RUNTIME_CONTRIBUTION: CapabilityRuntimeContribution = {
   capabilityId: SESSION_REFERENCE_CAPABILITY_ID,
-  kind: 'business',
-  semanticScope: 'Test-only session principal and authority contribution.',
-  owns: ['Reference session principal and authority contribution semantics.'],
-  nonGoals: ['Production session ownership.'],
-  physicalScopes: [
-    { path: 'test/support/capability/session-reference.fixture.ts', role: 'primary' },
-  ],
-  publicSurfaces: [{ status: 'not-required', reason: 'Test-only session fixture.' }],
-  allowedDependencies: [],
-  foundationClassification: 'domain-owned',
-  validationEntrypoints: [
-    'src/infrastructure/capability/capability-session-context.builder.spec.ts',
-  ],
-})
-export class ReferenceSessionCapabilityOwnership {}
-
-export const SESSION_REFERENCE_CAPABILITY_MANIFEST: CapabilityRuntimeManifest = {
-  capabilityId: SESSION_REFERENCE_CAPABILITY_ID,
-  version: '0.1.0',
   contributions: {
     api: {
       graphqlOperations: [
@@ -76,7 +56,12 @@ export const SESSION_REFERENCE_CAPABILITY_MANIFEST: CapabilityRuntimeManifest = 
 };
 
 @Injectable()
-@CapabilityRuntimeManifestProvider(SESSION_REFERENCE_CAPABILITY_MANIFEST)
+@CapabilityAnchorProvider({
+  capabilityId: SESSION_REFERENCE_CAPABILITY_ID,
+  mode: 'switchable',
+  decisionRef: 'docs/capabilities/reference-fixtures.md',
+})
+@CapabilityRuntimeContributionProvider(SESSION_REFERENCE_RUNTIME_CONTRIBUTION)
 export class ReferenceSessionCapability {}
 
 @Injectable()
@@ -129,7 +114,6 @@ export class ResourceManagerScopeAuthorizer implements CapabilitySessionAuthorit
 }
 
 export const SESSION_REFERENCE_CAPABILITY_PROVIDERS = [
-  ReferenceSessionCapabilityOwnership,
   ReferenceSessionCapability,
   ClientIdentityResolver,
   ResourceManagerSummaryResolver,

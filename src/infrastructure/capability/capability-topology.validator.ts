@@ -1,8 +1,8 @@
 import type {
   CapabilityId,
-  CapabilityOwnershipManifest,
+  CapabilityAnchor,
   CapabilityProcess,
-  CapabilityRuntimeManifest,
+  CapabilityRuntimeContribution,
   CapabilitySessionAuthorityClaimContribution,
 } from '@app-types/common/capability.types';
 import type {
@@ -17,8 +17,8 @@ import type {
 
 export interface CapabilityProcessTopology {
   readonly process: CapabilityProcess;
-  readonly ownerships: readonly CapabilityOwnershipManifest[];
-  readonly runtimeManifests: readonly CapabilityRuntimeManifest[];
+  readonly anchors: readonly CapabilityAnchor[];
+  readonly runtimeContributions: readonly CapabilityRuntimeContribution[];
   readonly providerBindings: readonly CapabilityProviderBindingMetadata[];
   readonly queueBindings: readonly CapabilityQueueBindingMetadata[];
   readonly healthChecks: readonly CapabilityHealthCheckMetadata[];
@@ -44,35 +44,37 @@ export function validateCapabilityProcessTopology(
   topology: CapabilityProcessTopology,
 ): readonly CapabilityTopologyIssue[] {
   const issues: CapabilityTopologyIssue[] = [];
-  const ownershipIds = new Set(topology.ownerships.map((item) => item.capabilityId));
+  const anchorIds = new Set(topology.anchors.map((item) => item.capabilityId));
   const runtimeById = new Map(
-    topology.runtimeManifests.map((manifest) => [manifest.capabilityId, manifest] as const),
+    topology.runtimeContributions.map(
+      (runtimeContribution) => [runtimeContribution.capabilityId, runtimeContribution] as const,
+    ),
   );
 
-  for (const manifest of topology.runtimeManifests) {
-    if (!ownershipIds.has(manifest.capabilityId)) {
+  for (const runtimeContribution of topology.runtimeContributions) {
+    if (!anchorIds.has(runtimeContribution.capabilityId)) {
       issues.push({
-        code: 'CAPABILITY_RUNTIME_OWNERSHIP_MISSING',
-        capabilityId: manifest.capabilityId,
-        message: `capability_runtime_ownership_missing:${topology.process}:${manifest.capabilityId}`,
+        code: 'CAPABILITY_RUNTIME_ANCHOR_MISSING',
+        capabilityId: runtimeContribution.capabilityId,
+        message: `capability_runtime_anchor_missing:${topology.process}:${runtimeContribution.capabilityId}`,
       });
     }
-    for (const dependency of manifest.runtimeDependencies ?? []) {
+    for (const dependency of runtimeContribution.runtimeDependencies ?? []) {
       if (dependency.mode === 'required' && !runtimeById.has(dependency.capabilityId)) {
         issues.push({
           code: 'CAPABILITY_DEPENDENCY_MISSING',
-          capabilityId: manifest.capabilityId,
-          message: `capability_dependency_missing:${manifest.capabilityId}:${dependency.capabilityId}`,
+          capabilityId: runtimeContribution.capabilityId,
+          message: `capability_dependency_missing:${runtimeContribution.capabilityId}:${dependency.capabilityId}`,
         });
       }
     }
   }
 
-  issues.push(...detectRuntimeDependencyCycles(topology.runtimeManifests));
+  issues.push(...detectRuntimeDependencyCycles(topology.runtimeContributions));
   issues.push(...validateProviderContributions(topology));
   issues.push(...validateQueueContributions(topology));
   issues.push(...validateHealthChecks(topology));
-  issues.push(...validateApiContributions(topology.runtimeManifests));
+  issues.push(...validateApiContributions(topology.runtimeContributions));
   issues.push(...validateOperations(topology));
   issues.push(...validateSessionContributions(topology));
   return dedupeTopologyIssues(issues);
@@ -89,16 +91,16 @@ function validateProviderContributions(
     ),
   );
   const issues: CapabilityTopologyIssue[] = [];
-  for (const manifest of topology.runtimeManifests) {
-    for (const provider of manifest.contributions?.providers ?? []) {
-      const key = [manifest.capabilityId, provider.providerKind, provider.providerName]
+  for (const runtimeContribution of topology.runtimeContributions) {
+    for (const provider of runtimeContribution.contributions?.providers ?? []) {
+      const key = [runtimeContribution.capabilityId, provider.providerKind, provider.providerName]
         .map(normalizeText)
         .join(':');
       if (!bindings.has(key)) {
         issues.push({
           code: 'CAPABILITY_PROVIDER_BINDING_MISSING',
-          capabilityId: manifest.capabilityId,
-          message: `capability_provider_binding_missing:${manifest.capabilityId}:${provider.providerKind}:${provider.providerName}`,
+          capabilityId: runtimeContribution.capabilityId,
+          message: `capability_provider_binding_missing:${runtimeContribution.capabilityId}:${provider.providerKind}:${provider.providerName}`,
         });
       }
     }
@@ -111,14 +113,17 @@ function validateQueueContributions(
 ): readonly CapabilityTopologyIssue[] {
   const bindings = new Set(topology.queueBindings.map(buildQueueBindingKey));
   const issues: CapabilityTopologyIssue[] = [];
-  for (const manifest of topology.runtimeManifests) {
-    for (const queue of manifest.contributions?.queues ?? []) {
-      const key = buildQueueBindingKey({ capabilityId: manifest.capabilityId, ...queue });
+  for (const runtimeContribution of topology.runtimeContributions) {
+    for (const queue of runtimeContribution.contributions?.queues ?? []) {
+      const key = buildQueueBindingKey({
+        capabilityId: runtimeContribution.capabilityId,
+        ...queue,
+      });
       if (!bindings.has(key)) {
         issues.push({
           code: 'CAPABILITY_QUEUE_BINDING_MISSING',
-          capabilityId: manifest.capabilityId,
-          message: `capability_queue_binding_missing:${manifest.capabilityId}:${queue.operation}:${queue.queueName}/${queue.jobName}`,
+          capabilityId: runtimeContribution.capabilityId,
+          message: `capability_queue_binding_missing:${runtimeContribution.capabilityId}:${queue.operation}:${queue.queueName}/${queue.jobName}`,
         });
       }
     }
@@ -132,14 +137,14 @@ function validateHealthChecks(
   const capabilityIds = new Set(
     topology.healthChecks.map((item) => normalizeText(item.capabilityId)),
   );
-  return topology.runtimeManifests.flatMap((manifest) =>
-    manifest.runtime?.healthCheck === true &&
-    !capabilityIds.has(normalizeText(manifest.capabilityId))
+  return topology.runtimeContributions.flatMap((runtimeContribution) =>
+    runtimeContribution.runtime?.healthCheck === true &&
+    !capabilityIds.has(normalizeText(runtimeContribution.capabilityId))
       ? [
           {
             code: 'CAPABILITY_HEALTH_CHECK_MISSING',
-            capabilityId: manifest.capabilityId,
-            message: `capability_health_check_missing:${manifest.capabilityId}`,
+            capabilityId: runtimeContribution.capabilityId,
+            message: `capability_health_check_missing:${runtimeContribution.capabilityId}`,
           },
         ]
       : [],
@@ -147,19 +152,19 @@ function validateHealthChecks(
 }
 
 function validateApiContributions(
-  manifests: readonly CapabilityRuntimeManifest[],
+  runtimeContributions: readonly CapabilityRuntimeContribution[],
 ): readonly CapabilityTopologyIssue[] {
   const issues: CapabilityTopologyIssue[] = [];
-  for (const manifest of manifests) {
-    for (const operation of manifest.contributions?.api?.graphqlOperations ?? []) {
+  for (const runtimeContribution of runtimeContributions) {
+    for (const operation of runtimeContribution.contributions?.api?.graphqlOperations ?? []) {
       if (
         !operation.operationName.trim() ||
         !['query', 'mutation', 'subscription'].includes(operation.operationKind)
       ) {
         issues.push({
           code: 'CAPABILITY_GRAPHQL_OPERATION_INVALID',
-          capabilityId: manifest.capabilityId,
-          message: `capability_graphql_operation_invalid:${manifest.capabilityId}:${operation.operationKind}:${operation.operationName}`,
+          capabilityId: runtimeContribution.capabilityId,
+          message: `capability_graphql_operation_invalid:${runtimeContribution.capabilityId}:${operation.operationKind}:${operation.operationName}`,
         });
       }
     }
@@ -170,7 +175,7 @@ function validateApiContributions(
 function validateOperations(
   topology: CapabilityProcessTopology,
 ): readonly CapabilityTopologyIssue[] {
-  const declared = collectDeclaredOperations(topology.runtimeManifests);
+  const declared = collectDeclaredOperations(topology.runtimeContributions);
   const queueOperationKeys = new Set(
     topology.queueBindings.map((binding) =>
       buildOperationKey(binding.capabilityId, binding.operationKind, binding.operation),
@@ -184,18 +189,21 @@ function validateOperations(
 }
 
 function collectDeclaredOperations(
-  manifests: readonly CapabilityRuntimeManifest[],
+  runtimeContributions: readonly CapabilityRuntimeContribution[],
 ): ReadonlyMap<string, DeclaredOperation> {
   const declared = new Map<string, DeclaredOperation>();
-  for (const manifest of manifests) {
+  for (const runtimeContribution of runtimeContributions) {
     for (const operation of [
-      ...(manifest.operations?.commands ?? []),
-      ...(manifest.operations?.queries ?? []),
+      ...(runtimeContribution.operations?.commands ?? []),
+      ...(runtimeContribution.operations?.queries ?? []),
     ]) {
-      declared.set(buildOperationKey(manifest.capabilityId, operation.kind, operation.name), {
-        capabilityId: manifest.capabilityId,
-        transport: operation.transport ?? 'in-process',
-      });
+      declared.set(
+        buildOperationKey(runtimeContribution.capabilityId, operation.kind, operation.name),
+        {
+          capabilityId: runtimeContribution.capabilityId,
+          transport: operation.transport ?? 'in-process',
+        },
+      );
     }
   }
   return declared;
@@ -294,12 +302,12 @@ function validateSessionContributions(
       buildSessionKey(item.capabilityId, item.authorizerName),
     ),
   );
-  const principalOwners = collectSessionPrincipalOwners(topology.runtimeManifests);
-  return topology.runtimeManifests.flatMap((manifest) => [
-    ...validateSessionPrincipals(manifest, identityKeys),
-    ...(manifest.contributions?.session?.authorityClaims ?? []).flatMap((claim) =>
+  const principalOwners = collectSessionPrincipalOwners(topology.runtimeContributions);
+  return topology.runtimeContributions.flatMap((runtimeContribution) => [
+    ...validateSessionPrincipals(runtimeContribution, identityKeys),
+    ...(runtimeContribution.contributions?.session?.authorityClaims ?? []).flatMap((claim) =>
       validateSessionClaim({
-        manifest,
+        runtimeContribution,
         claim,
         summaryKeys,
         authorizerKeys,
@@ -310,13 +318,16 @@ function validateSessionContributions(
 }
 
 function collectSessionPrincipalOwners(
-  manifests: readonly CapabilityRuntimeManifest[],
+  runtimeContributions: readonly CapabilityRuntimeContribution[],
 ): ReadonlyMap<string, CapabilityId> {
   const principalOwners = new Map<string, CapabilityId>();
-  for (const manifest of manifests) {
-    for (const principal of manifest.contributions?.session?.principals ?? []) {
+  for (const runtimeContribution of runtimeContributions) {
+    for (const principal of runtimeContribution.contributions?.session?.principals ?? []) {
       if (principal.principalCode.trim()) {
-        principalOwners.set(principal.principalCode.trim().toUpperCase(), manifest.capabilityId);
+        principalOwners.set(
+          principal.principalCode.trim().toUpperCase(),
+          runtimeContribution.capabilityId,
+        );
       }
     }
   }
@@ -324,17 +335,26 @@ function collectSessionPrincipalOwners(
 }
 
 function validateSessionPrincipals(
-  manifest: CapabilityRuntimeManifest,
+  runtimeContribution: CapabilityRuntimeContribution,
   identityKeys: ReadonlySet<string>,
 ): readonly CapabilityTopologyIssue[] {
   const issues: CapabilityTopologyIssue[] = [];
-  for (const principal of manifest.contributions?.session?.principals ?? []) {
+  for (const principal of runtimeContribution.contributions?.session?.principals ?? []) {
     if (!principal.principalCode.trim()) {
-      issues.push(sessionIssue('CAPABILITY_SESSION_PRINCIPAL_CODE_INVALID', manifest.capabilityId));
-    }
-    if (!identityKeys.has(buildSessionKey(manifest.capabilityId, principal.identityResolver))) {
       issues.push(
-        sessionIssue('CAPABILITY_SESSION_IDENTITY_RESOLVER_MISSING', manifest.capabilityId),
+        sessionIssue('CAPABILITY_SESSION_PRINCIPAL_CODE_INVALID', runtimeContribution.capabilityId),
+      );
+    }
+    if (
+      !identityKeys.has(
+        buildSessionKey(runtimeContribution.capabilityId, principal.identityResolver),
+      )
+    ) {
+      issues.push(
+        sessionIssue(
+          'CAPABILITY_SESSION_IDENTITY_RESOLVER_MISSING',
+          runtimeContribution.capabilityId,
+        ),
       );
     }
   }
@@ -342,7 +362,7 @@ function validateSessionPrincipals(
 }
 
 function validateSessionClaim(input: {
-  readonly manifest: CapabilityRuntimeManifest;
+  readonly runtimeContribution: CapabilityRuntimeContribution;
   readonly claim: CapabilitySessionAuthorityClaimContribution;
   readonly summaryKeys: ReadonlySet<string>;
   readonly authorizerKeys: ReadonlySet<string>;
@@ -351,31 +371,34 @@ function validateSessionClaim(input: {
   const issues: CapabilityTopologyIssue[] = [];
   if (!input.claim.claimCode.trim()) {
     issues.push(
-      sessionIssue('CAPABILITY_SESSION_AUTHORITY_CLAIM_CODE_INVALID', input.manifest.capabilityId),
+      sessionIssue(
+        'CAPABILITY_SESSION_AUTHORITY_CLAIM_CODE_INVALID',
+        input.runtimeContribution.capabilityId,
+      ),
     );
   }
   if (
     !input.summaryKeys.has(
-      buildSessionKey(input.manifest.capabilityId, input.claim.summaryResolver),
+      buildSessionKey(input.runtimeContribution.capabilityId, input.claim.summaryResolver),
     )
   ) {
     issues.push(
       sessionIssue(
         'CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_MISSING',
-        input.manifest.capabilityId,
+        input.runtimeContribution.capabilityId,
       ),
     );
   }
   if (
     !input.claim.scopeAuthorizer?.trim() ||
     !input.authorizerKeys.has(
-      buildSessionKey(input.manifest.capabilityId, input.claim.scopeAuthorizer),
+      buildSessionKey(input.runtimeContribution.capabilityId, input.claim.scopeAuthorizer),
     )
   ) {
     issues.push(
       sessionIssue(
         'CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_MISSING',
-        input.manifest.capabilityId,
+        input.runtimeContribution.capabilityId,
       ),
     );
   }
@@ -384,18 +407,21 @@ function validateSessionClaim(input: {
   const owner = input.principalOwners.get(subjectCode);
   if (!owner) {
     issues.push(
-      sessionIssue('CAPABILITY_SESSION_SUBJECT_PRINCIPAL_MISSING', input.manifest.capabilityId),
+      sessionIssue(
+        'CAPABILITY_SESSION_SUBJECT_PRINCIPAL_MISSING',
+        input.runtimeContribution.capabilityId,
+      ),
     );
   } else if (
-    owner !== input.manifest.capabilityId &&
-    !(input.manifest.runtimeDependencies ?? []).some(
+    owner !== input.runtimeContribution.capabilityId &&
+    !(input.runtimeContribution.runtimeDependencies ?? []).some(
       (dependency) => dependency.capabilityId === owner,
     )
   ) {
     issues.push(
       sessionIssue(
         'CAPABILITY_SESSION_SUBJECT_PRINCIPAL_DEPENDENCY_MISSING',
-        input.manifest.capabilityId,
+        input.runtimeContribution.capabilityId,
       ),
     );
   }
@@ -403,14 +429,14 @@ function validateSessionClaim(input: {
 }
 
 function detectRuntimeDependencyCycles(
-  manifests: readonly CapabilityRuntimeManifest[],
+  runtimeContributions: readonly CapabilityRuntimeContribution[],
 ): readonly CapabilityTopologyIssue[] {
   const graph = new Map(
-    manifests.map(
-      (manifest) =>
+    runtimeContributions.map(
+      (runtimeContribution) =>
         [
-          manifest.capabilityId,
-          (manifest.runtimeDependencies ?? [])
+          runtimeContribution.capabilityId,
+          (runtimeContribution.runtimeDependencies ?? [])
             .filter((dependency) => dependency.mode === 'required')
             .map((dependency) => dependency.capabilityId),
         ] as const,

@@ -336,7 +336,7 @@ function failure<TResult>(error: CapabilityError): CapabilityResult<TResult> {
 
 function buildDisabledError(state: CapabilityOperationRuntimeState): CapabilityError {
   const code =
-    state.reason === 'operation_disabled' || state.reason === 'manifest_default_disabled'
+    state.reason === 'operation_disabled' || state.reason === 'contribution_default_disabled'
       ? 'CAPABILITY_OPERATION_DISABLED'
       : 'CAPABILITY_DISABLED';
   return {

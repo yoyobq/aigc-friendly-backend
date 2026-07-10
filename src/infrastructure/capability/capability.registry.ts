@@ -4,8 +4,8 @@ import type {
   CapabilityHealthCheck,
   CapabilityHealthReport,
   CapabilityId,
-  CapabilityOwnershipManifest,
-  CapabilityRuntimeManifest,
+  CapabilityAnchor,
+  CapabilityRuntimeContribution,
   CapabilityOperationDefinition,
   CapabilityOperationDescriptor,
   CapabilityProcess,
@@ -22,8 +22,8 @@ import type {
   CapabilitySessionIdentityResolver,
 } from '@src/usecases/common/ports/capability-session-context-builder.contract';
 import {
-  CAPABILITY_OWNERSHIP_DISCOVERABLE,
-  CAPABILITY_RUNTIME_MANIFEST_DISCOVERABLE,
+  CAPABILITY_ANCHOR_DISCOVERABLE,
+  CAPABILITY_RUNTIME_CONTRIBUTION_DISCOVERABLE,
   CAPABILITY_EVENT_SUBSCRIBER_DISCOVERABLE,
   CAPABILITY_HEALTH_CHECK_DISCOVERABLE,
   CAPABILITY_OPERATION_HANDLER_DISCOVERABLE,
@@ -94,7 +94,7 @@ export interface CapabilityBootstrapIssue {
   readonly code:
     | 'CAPABILITY_ID_INVALID'
     | 'CAPABILITY_ID_DUPLICATE'
-    | 'CAPABILITY_RUNTIME_OWNERSHIP_MISSING'
+    | 'CAPABILITY_RUNTIME_ANCHOR_MISSING'
     | 'CAPABILITY_DEPENDENCY_MISSING'
     | 'CAPABILITY_DEPENDENCY_CYCLE'
     | 'CAPABILITY_PROVIDER_BINDING_MISSING'
@@ -126,8 +126,8 @@ export interface CapabilityBootstrapValidationResult {
 }
 
 interface CapabilitySnapshot {
-  readonly ownerships: readonly CapabilityOwnershipManifest[];
-  readonly manifests: readonly CapabilityRuntimeManifest[];
+  readonly anchors: readonly CapabilityAnchor[];
+  readonly runtimeContributions: readonly CapabilityRuntimeContribution[];
   readonly providerBindings: readonly CapabilityProviderBinding[];
   readonly queueBindings: readonly CapabilityQueueBindingMetadata[];
   readonly healthChecks: readonly CapabilityHealthCheckBinding[];
@@ -153,8 +153,12 @@ export class CapabilityRegistry {
     private readonly discoveryService: DiscoveryService,
   ) {}
 
-  getActiveRuntimeManifests(): readonly CapabilityRuntimeManifest[] {
-    return this.resolveSnapshot().manifests;
+  getActiveCapabilityAnchors(): readonly CapabilityAnchor[] {
+    return this.resolveSnapshot().anchors;
+  }
+
+  getActiveRuntimeContributions(): readonly CapabilityRuntimeContribution[] {
+    return this.resolveSnapshot().runtimeContributions;
   }
 
   getProviderClient<TClient>(input: {
@@ -176,15 +180,15 @@ export class CapabilityRegistry {
     readonly operation: string;
     readonly operationKind: 'command' | 'query';
   }): CapabilityOperationDescriptor | null {
-    const manifest = this.resolveSnapshot().manifests.find(
+    const runtimeContribution = this.resolveSnapshot().runtimeContributions.find(
       (item) =>
         normalizeRequiredText(item.capabilityId) === normalizeRequiredText(input.capabilityId),
     );
-    if (!manifest) {
+    if (!runtimeContribution) {
       return null;
     }
     const definition = findOperationDefinition({
-      manifest,
+      runtimeContribution,
       operation: input.operation,
       operationKind: input.operationKind,
     });
@@ -192,7 +196,7 @@ export class CapabilityRegistry {
       return null;
     }
     return buildOperationDescriptor({
-      manifest,
+      runtimeContribution,
       definition,
     });
   }
@@ -256,9 +260,9 @@ export class CapabilityRegistry {
   }
 
   getGraphqlOperationContributions(): readonly CapabilityGraphqlOperationBinding[] {
-    return this.resolveSnapshot().manifests.flatMap((manifest) =>
-      (manifest.contributions?.api?.graphqlOperations ?? []).map((operation) => ({
-        capabilityId: manifest.capabilityId,
+    return this.resolveSnapshot().runtimeContributions.flatMap((runtimeContribution) =>
+      (runtimeContribution.contributions?.api?.graphqlOperations ?? []).map((operation) => ({
+        capabilityId: runtimeContribution.capabilityId,
         operationName: operation.operationName,
         operationKind: operation.operationKind,
         ...(operation.requiredPermissions === undefined
@@ -370,8 +374,8 @@ export class CapabilityRegistry {
     const snapshot = this.resolveSnapshot();
     const topologyIssues = validateCapabilityProcessTopology({
       process: this.currentProcess,
-      ownerships: snapshot.ownerships,
-      runtimeManifests: snapshot.manifests,
+      anchors: snapshot.anchors,
+      runtimeContributions: snapshot.runtimeContributions,
       providerBindings: snapshot.providerBindings.map((binding) => binding.metadata),
       queueBindings: snapshot.queueBindings,
       healthChecks: snapshot.healthChecks.map((binding) => binding.metadata),
@@ -388,30 +392,31 @@ export class CapabilityRegistry {
     }).map(toBootstrapIssue);
     const issues = dedupeBootstrapIssues([
       ...topologyIssues,
-      ...validateManifestIds(snapshot.manifests),
-      ...validateDependencies(snapshot.manifests),
+      ...validateContributionIds(snapshot.anchors),
+      ...validateContributionIds(snapshot.runtimeContributions),
+      ...validateDependencies(snapshot.runtimeContributions),
       ...validateProviderContributions({
-        manifests: snapshot.manifests,
+        runtimeContributions: snapshot.runtimeContributions,
         providerBindings: snapshot.providerBindings,
       }),
       ...validateQueueContributions({
-        manifests: snapshot.manifests,
+        runtimeContributions: snapshot.runtimeContributions,
         queueBindings: snapshot.queueBindings,
       }),
       ...validateQueueRuntime(snapshot.queueBindings),
       ...validateHealthChecks({
-        manifests: snapshot.manifests,
+        runtimeContributions: snapshot.runtimeContributions,
         healthChecks: snapshot.healthChecks,
       }),
-      ...validateApiContributions(snapshot.manifests),
+      ...validateApiContributions(snapshot.runtimeContributions),
       ...validateOperationHandlers({
-        manifests: snapshot.manifests,
+        runtimeContributions: snapshot.runtimeContributions,
         operationHandlers: snapshot.operationHandlers,
         queueBindings: snapshot.queueBindings,
         currentProcess: this.currentProcess,
       }),
       ...validateSessionContributions({
-        manifests: snapshot.manifests,
+        runtimeContributions: snapshot.runtimeContributions,
         identityResolvers: snapshot.sessionIdentityResolvers,
         summaryResolvers: snapshot.sessionAuthoritySummaryResolvers,
         scopeAuthorizers: snapshot.sessionAuthorityScopeAuthorizers,
@@ -430,58 +435,66 @@ export class CapabilityRegistry {
 
   private resolveSnapshot(): CapabilitySnapshot {
     if (!this.snapshot) {
-      const ownerships = this.discoverOwnershipManifests();
-      const manifests = this.discoverRuntimeManifests();
+      const anchors = this.discoverCapabilityAnchors();
+      const runtimeContributions = this.discoverRuntimeContributions();
       this.snapshot = {
-        ownerships,
-        manifests,
-        providerBindings: this.discoverProviderBindings(manifests),
-        queueBindings: this.discoverQueueBindings(manifests),
-        healthChecks: this.discoverHealthChecks(manifests),
-        operationHandlers: this.discoverOperationHandlers(manifests),
-        eventSubscribers: this.discoverEventSubscribers(manifests),
-        sessionIdentityResolvers: this.discoverSessionIdentityResolvers(manifests),
-        sessionAuthoritySummaryResolvers: this.discoverSessionAuthoritySummaryResolvers(manifests),
-        sessionAuthorityScopeAuthorizers: this.discoverSessionAuthorityScopeAuthorizers(manifests),
+        anchors,
+        runtimeContributions,
+        providerBindings: this.discoverProviderBindings(runtimeContributions),
+        queueBindings: this.discoverQueueBindings(runtimeContributions),
+        healthChecks: this.discoverHealthChecks(runtimeContributions),
+        operationHandlers: this.discoverOperationHandlers(runtimeContributions),
+        eventSubscribers: this.discoverEventSubscribers(runtimeContributions),
+        sessionIdentityResolvers: this.discoverSessionIdentityResolvers(runtimeContributions),
+        sessionAuthoritySummaryResolvers:
+          this.discoverSessionAuthoritySummaryResolvers(runtimeContributions),
+        sessionAuthorityScopeAuthorizers:
+          this.discoverSessionAuthorityScopeAuthorizers(runtimeContributions),
       };
     }
     return this.snapshot;
   }
 
-  private discoverOwnershipManifests(): readonly CapabilityOwnershipManifest[] {
-    return this.discoverDecoratedProviders(CAPABILITY_OWNERSHIP_DISCOVERABLE).map(
+  private discoverCapabilityAnchors(): readonly CapabilityAnchor[] {
+    return this.discoverDecoratedProviders(CAPABILITY_ANCHOR_DISCOVERABLE).map(
       ({ metadata }) => metadata,
     );
   }
 
-  private discoverRuntimeManifests(): readonly CapabilityRuntimeManifest[] {
-    return this.discoverDecoratedProviders(CAPABILITY_RUNTIME_MANIFEST_DISCOVERABLE).map(
+  private discoverRuntimeContributions(): readonly CapabilityRuntimeContribution[] {
+    return this.discoverDecoratedProviders(CAPABILITY_RUNTIME_CONTRIBUTION_DISCOVERABLE).map(
       ({ metadata }) => metadata,
     );
   }
 
   private discoverProviderBindings(
-    activeManifests: readonly CapabilityRuntimeManifest[],
+    activeRuntimeContributions: readonly CapabilityRuntimeContribution[],
   ): readonly CapabilityProviderBinding[] {
-    const activeCapabilityIds = new Set(activeManifests.map((manifest) => manifest.capabilityId));
+    const activeCapabilityIds = new Set(
+      activeRuntimeContributions.map((runtimeContribution) => runtimeContribution.capabilityId),
+    );
     return this.discoverDecoratedProviders(CAPABILITY_PROVIDER_BINDING_DISCOVERABLE).filter(
       ({ metadata }) => activeCapabilityIds.has(metadata.capabilityId),
     );
   }
 
   private discoverQueueBindings(
-    activeManifests: readonly CapabilityRuntimeManifest[],
+    activeRuntimeContributions: readonly CapabilityRuntimeContribution[],
   ): readonly CapabilityQueueBindingMetadata[] {
-    const activeCapabilityIds = new Set(activeManifests.map((manifest) => manifest.capabilityId));
+    const activeCapabilityIds = new Set(
+      activeRuntimeContributions.map((runtimeContribution) => runtimeContribution.capabilityId),
+    );
     return this.discoverDecoratedProviders(CAPABILITY_QUEUE_BINDING_DISCOVERABLE)
       .map(({ metadata }) => metadata)
       .filter((metadata) => activeCapabilityIds.has(metadata.capabilityId));
   }
 
   private discoverHealthChecks(
-    activeManifests: readonly CapabilityRuntimeManifest[],
+    activeRuntimeContributions: readonly CapabilityRuntimeContribution[],
   ): readonly CapabilityHealthCheckBinding[] {
-    const activeCapabilityIds = new Set(activeManifests.map((manifest) => manifest.capabilityId));
+    const activeCapabilityIds = new Set(
+      activeRuntimeContributions.map((runtimeContribution) => runtimeContribution.capabilityId),
+    );
     return this.discoverDecoratedProviders(CAPABILITY_HEALTH_CHECK_DISCOVERABLE)
       .map(({ metadata, instance }): CapabilityHealthCheckBinding | null => {
         if (!activeCapabilityIds.has(metadata.capabilityId) || !isCapabilityHealthCheck(instance)) {
@@ -493,9 +506,11 @@ export class CapabilityRegistry {
   }
 
   private discoverOperationHandlers(
-    activeManifests: readonly CapabilityRuntimeManifest[],
+    activeRuntimeContributions: readonly CapabilityRuntimeContribution[],
   ): readonly CapabilityOperationHandlerBinding[] {
-    const activeCapabilityIds = new Set(activeManifests.map((manifest) => manifest.capabilityId));
+    const activeCapabilityIds = new Set(
+      activeRuntimeContributions.map((runtimeContribution) => runtimeContribution.capabilityId),
+    );
     return this.discoverDecoratedProviders(CAPABILITY_OPERATION_HANDLER_DISCOVERABLE)
       .map(({ metadata, instance }): CapabilityOperationHandlerBinding | null => {
         if (!activeCapabilityIds.has(metadata.capabilityId)) {
@@ -510,9 +525,11 @@ export class CapabilityRegistry {
   }
 
   private discoverEventSubscribers(
-    activeManifests: readonly CapabilityRuntimeManifest[],
+    activeRuntimeContributions: readonly CapabilityRuntimeContribution[],
   ): readonly CapabilityEventSubscriberBinding[] {
-    const activeCapabilityIds = new Set(activeManifests.map((manifest) => manifest.capabilityId));
+    const activeCapabilityIds = new Set(
+      activeRuntimeContributions.map((runtimeContribution) => runtimeContribution.capabilityId),
+    );
     return this.discoverDecoratedProviders(CAPABILITY_EVENT_SUBSCRIBER_DISCOVERABLE)
       .map(({ metadata, instance }): CapabilityEventSubscriberBinding | null => {
         if (!activeCapabilityIds.has(metadata.capabilityId)) {
@@ -527,9 +544,11 @@ export class CapabilityRegistry {
   }
 
   private discoverSessionIdentityResolvers(
-    activeManifests: readonly CapabilityRuntimeManifest[],
+    activeRuntimeContributions: readonly CapabilityRuntimeContribution[],
   ): readonly CapabilitySessionIdentityResolverBinding[] {
-    const activeCapabilityIds = new Set(activeManifests.map((manifest) => manifest.capabilityId));
+    const activeCapabilityIds = new Set(
+      activeRuntimeContributions.map((runtimeContribution) => runtimeContribution.capabilityId),
+    );
     return this.discoverDecoratedProviders(CAPABILITY_SESSION_IDENTITY_RESOLVER_DISCOVERABLE)
       .map(({ metadata, instance }): CapabilitySessionIdentityResolverBinding | null => {
         if (!activeCapabilityIds.has(metadata.capabilityId)) {
@@ -544,9 +563,11 @@ export class CapabilityRegistry {
   }
 
   private discoverSessionAuthoritySummaryResolvers(
-    activeManifests: readonly CapabilityRuntimeManifest[],
+    activeRuntimeContributions: readonly CapabilityRuntimeContribution[],
   ): readonly CapabilitySessionAuthoritySummaryResolverBinding[] {
-    const activeCapabilityIds = new Set(activeManifests.map((manifest) => manifest.capabilityId));
+    const activeCapabilityIds = new Set(
+      activeRuntimeContributions.map((runtimeContribution) => runtimeContribution.capabilityId),
+    );
     return this.discoverDecoratedProviders(
       CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_DISCOVERABLE,
     )
@@ -565,9 +586,11 @@ export class CapabilityRegistry {
   }
 
   private discoverSessionAuthorityScopeAuthorizers(
-    activeManifests: readonly CapabilityRuntimeManifest[],
+    activeRuntimeContributions: readonly CapabilityRuntimeContribution[],
   ): readonly CapabilitySessionAuthorityScopeAuthorizerBinding[] {
-    const activeCapabilityIds = new Set(activeManifests.map((manifest) => manifest.capabilityId));
+    const activeCapabilityIds = new Set(
+      activeRuntimeContributions.map((runtimeContribution) => runtimeContribution.capabilityId),
+    );
     return this.discoverDecoratedProviders(
       CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_DISCOVERABLE,
     )
@@ -615,53 +638,55 @@ export class CapabilityBootstrapError extends Error {
   }
 }
 
-function validateManifestIds(
-  manifests: readonly CapabilityRuntimeManifest[],
+function validateContributionIds(
+  runtimeContributions: readonly { readonly capabilityId: CapabilityId }[],
 ): readonly CapabilityBootstrapIssue[] {
   const issues: CapabilityBootstrapIssue[] = [];
   const seen = new Set<CapabilityId>();
-  for (const manifest of manifests) {
-    if (!isValidCapabilityId(manifest.capabilityId)) {
+  for (const runtimeContribution of runtimeContributions) {
+    if (!isValidCapabilityId(runtimeContribution.capabilityId)) {
       issues.push({
         code: 'CAPABILITY_ID_INVALID',
-        capabilityId: manifest.capabilityId,
-        message: `invalid_capability_id:${manifest.capabilityId}`,
+        capabilityId: runtimeContribution.capabilityId,
+        message: `invalid_capability_id:${runtimeContribution.capabilityId}`,
       });
     }
-    if (seen.has(manifest.capabilityId)) {
+    if (seen.has(runtimeContribution.capabilityId)) {
       issues.push({
         code: 'CAPABILITY_ID_DUPLICATE',
-        capabilityId: manifest.capabilityId,
-        message: `duplicate_capability_id:${manifest.capabilityId}`,
+        capabilityId: runtimeContribution.capabilityId,
+        message: `duplicate_capability_id:${runtimeContribution.capabilityId}`,
       });
     }
-    seen.add(manifest.capabilityId);
+    seen.add(runtimeContribution.capabilityId);
   }
   return issues;
 }
 
 function validateDependencies(
-  manifests: readonly CapabilityRuntimeManifest[],
+  runtimeContributions: readonly CapabilityRuntimeContribution[],
 ): readonly CapabilityBootstrapIssue[] {
-  const capabilityIds = new Set(manifests.map((manifest) => manifest.capabilityId));
+  const capabilityIds = new Set(
+    runtimeContributions.map((runtimeContribution) => runtimeContribution.capabilityId),
+  );
   const issues: CapabilityBootstrapIssue[] = [];
-  for (const manifest of manifests) {
-    for (const dependency of manifest.runtimeDependencies ?? []) {
+  for (const runtimeContribution of runtimeContributions) {
+    for (const dependency of runtimeContribution.runtimeDependencies ?? []) {
       if (dependency.mode === 'required' && !capabilityIds.has(dependency.capabilityId)) {
         issues.push({
           code: 'CAPABILITY_DEPENDENCY_MISSING',
-          capabilityId: manifest.capabilityId,
-          message: `capability_dependency_missing:${manifest.capabilityId}:${dependency.capabilityId}`,
+          capabilityId: runtimeContribution.capabilityId,
+          message: `capability_dependency_missing:${runtimeContribution.capabilityId}:${dependency.capabilityId}`,
         });
       }
     }
   }
-  issues.push(...detectDependencyCycles(manifests));
+  issues.push(...detectDependencyCycles(runtimeContributions));
   return issues;
 }
 
 function validateProviderContributions(input: {
-  readonly manifests: readonly CapabilityRuntimeManifest[];
+  readonly runtimeContributions: readonly CapabilityRuntimeContribution[];
   readonly providerBindings: readonly CapabilityProviderBinding[];
 }): readonly CapabilityBootstrapIssue[] {
   const bindingKeys = new Set(
@@ -674,18 +699,18 @@ function validateProviderContributions(input: {
     ),
   );
   const issues: CapabilityBootstrapIssue[] = [];
-  for (const manifest of input.manifests) {
-    for (const contribution of manifest.contributions?.providers ?? []) {
+  for (const runtimeContribution of input.runtimeContributions) {
+    for (const contribution of runtimeContribution.contributions?.providers ?? []) {
       const key = buildProviderBindingKey({
-        capabilityId: manifest.capabilityId,
+        capabilityId: runtimeContribution.capabilityId,
         providerKind: contribution.providerKind,
         providerName: contribution.providerName,
       });
       if (!bindingKeys.has(key)) {
         issues.push({
           code: 'CAPABILITY_PROVIDER_BINDING_MISSING',
-          capabilityId: manifest.capabilityId,
-          message: `capability_provider_binding_missing:${manifest.capabilityId}:${contribution.providerKind}:${contribution.providerName}`,
+          capabilityId: runtimeContribution.capabilityId,
+          message: `capability_provider_binding_missing:${runtimeContribution.capabilityId}:${contribution.providerKind}:${contribution.providerName}`,
         });
       }
     }
@@ -694,7 +719,7 @@ function validateProviderContributions(input: {
 }
 
 function validateQueueContributions(input: {
-  readonly manifests: readonly CapabilityRuntimeManifest[];
+  readonly runtimeContributions: readonly CapabilityRuntimeContribution[];
   readonly queueBindings: readonly CapabilityQueueBindingMetadata[];
 }): readonly CapabilityBootstrapIssue[] {
   const bindingKeys = new Set(
@@ -709,10 +734,10 @@ function validateQueueContributions(input: {
     ),
   );
   const issues: CapabilityBootstrapIssue[] = [];
-  for (const manifest of input.manifests) {
-    for (const contribution of manifest.contributions?.queues ?? []) {
+  for (const runtimeContribution of input.runtimeContributions) {
+    for (const contribution of runtimeContribution.contributions?.queues ?? []) {
       const key = buildQueueBindingKey({
-        capabilityId: manifest.capabilityId,
+        capabilityId: runtimeContribution.capabilityId,
         operation: contribution.operation,
         operationKind: contribution.operationKind,
         queueName: contribution.queueName,
@@ -721,8 +746,8 @@ function validateQueueContributions(input: {
       if (!bindingKeys.has(key)) {
         issues.push({
           code: 'CAPABILITY_QUEUE_BINDING_MISSING',
-          capabilityId: manifest.capabilityId,
-          message: `capability_queue_binding_missing:${manifest.capabilityId}:${contribution.operation}:${contribution.queueName}/${contribution.jobName}`,
+          capabilityId: runtimeContribution.capabilityId,
+          message: `capability_queue_binding_missing:${runtimeContribution.capabilityId}:${contribution.operation}:${contribution.queueName}/${contribution.jobName}`,
         });
       }
     }
@@ -755,22 +780,22 @@ function validateQueueRuntime(
 }
 
 function validateHealthChecks(input: {
-  readonly manifests: readonly CapabilityRuntimeManifest[];
+  readonly runtimeContributions: readonly CapabilityRuntimeContribution[];
   readonly healthChecks: readonly CapabilityHealthCheckBinding[];
 }): readonly CapabilityBootstrapIssue[] {
   const healthCheckCapabilityIds = new Set(
     input.healthChecks.map((binding) => normalizeRequiredText(binding.metadata.capabilityId)),
   );
   const issues: CapabilityBootstrapIssue[] = [];
-  for (const manifest of input.manifests) {
+  for (const runtimeContribution of input.runtimeContributions) {
     if (
-      manifest.runtime?.healthCheck === true &&
-      !healthCheckCapabilityIds.has(normalizeRequiredText(manifest.capabilityId))
+      runtimeContribution.runtime?.healthCheck === true &&
+      !healthCheckCapabilityIds.has(normalizeRequiredText(runtimeContribution.capabilityId))
     ) {
       issues.push({
         code: 'CAPABILITY_HEALTH_CHECK_MISSING',
-        capabilityId: manifest.capabilityId,
-        message: `capability_health_check_missing:${manifest.capabilityId}`,
+        capabilityId: runtimeContribution.capabilityId,
+        message: `capability_health_check_missing:${runtimeContribution.capabilityId}`,
       });
     }
   }
@@ -778,16 +803,16 @@ function validateHealthChecks(input: {
 }
 
 function validateApiContributions(
-  manifests: readonly CapabilityRuntimeManifest[],
+  runtimeContributions: readonly CapabilityRuntimeContribution[],
 ): readonly CapabilityBootstrapIssue[] {
   const issues: CapabilityBootstrapIssue[] = [];
-  for (const manifest of manifests) {
-    for (const operation of manifest.contributions?.api?.graphqlOperations ?? []) {
+  for (const runtimeContribution of runtimeContributions) {
+    for (const operation of runtimeContribution.contributions?.api?.graphqlOperations ?? []) {
       if (!operation.operationName.trim() || !isGraphqlOperationKind(operation.operationKind)) {
         issues.push({
           code: 'CAPABILITY_GRAPHQL_OPERATION_INVALID',
-          capabilityId: manifest.capabilityId,
-          message: `capability_graphql_operation_invalid:${manifest.capabilityId}:${operation.operationKind}:${operation.operationName}`,
+          capabilityId: runtimeContribution.capabilityId,
+          message: `capability_graphql_operation_invalid:${runtimeContribution.capabilityId}:${operation.operationKind}:${operation.operationName}`,
         });
       }
     }
@@ -796,12 +821,12 @@ function validateApiContributions(
 }
 
 function validateOperationHandlers(input: {
-  readonly manifests: readonly CapabilityRuntimeManifest[];
+  readonly runtimeContributions: readonly CapabilityRuntimeContribution[];
   readonly operationHandlers: readonly CapabilityOperationHandlerBinding[];
   readonly queueBindings: readonly CapabilityQueueBindingMetadata[];
   readonly currentProcess: CapabilityProcess;
 }): readonly CapabilityBootstrapIssue[] {
-  const declaredOperations = buildDeclaredOperationMap(input.manifests);
+  const declaredOperations = buildDeclaredOperationMap(input.runtimeContributions);
   const enabledHandlerCounts = buildEnabledOperationHandlerCounts({
     handlers: input.operationHandlers,
     currentProcess: input.currentProcess,
@@ -822,15 +847,15 @@ function validateOperationHandlers(input: {
       continue;
     }
     const descriptor = buildOperationDescriptor({
-      manifest: item.manifest,
+      runtimeContribution: item.runtimeContribution,
       definition: item.definition,
     });
     if (descriptor.transport === 'queue') {
       if (!queueBindingKeys.has(key)) {
         issues.push({
           code: 'CAPABILITY_OPERATION_QUEUE_BINDING_MISSING',
-          capabilityId: item.manifest.capabilityId,
-          message: `capability_operation_queue_binding_missing:${item.manifest.capabilityId}:${item.definition.kind}:${item.definition.name}`,
+          capabilityId: item.runtimeContribution.capabilityId,
+          message: `capability_operation_queue_binding_missing:${item.runtimeContribution.capabilityId}:${item.definition.kind}:${item.definition.name}`,
         });
       }
       continue;
@@ -840,16 +865,16 @@ function validateOperationHandlers(input: {
     if (handlerCount === 0) {
       issues.push({
         code: 'CAPABILITY_OPERATION_HANDLER_MISSING',
-        capabilityId: item.manifest.capabilityId,
-        message: `capability_operation_handler_missing:${item.manifest.capabilityId}:${item.definition.kind}:${item.definition.name}`,
+        capabilityId: item.runtimeContribution.capabilityId,
+        message: `capability_operation_handler_missing:${item.runtimeContribution.capabilityId}:${item.definition.kind}:${item.definition.name}`,
       });
       continue;
     }
     if (handlerCount > 1) {
       issues.push({
         code: 'CAPABILITY_OPERATION_HANDLER_DUPLICATE',
-        capabilityId: item.manifest.capabilityId,
-        message: `capability_operation_handler_duplicate:${item.manifest.capabilityId}:${item.definition.kind}:${item.definition.name}`,
+        capabilityId: item.runtimeContribution.capabilityId,
+        message: `capability_operation_handler_duplicate:${item.runtimeContribution.capabilityId}:${item.definition.kind}:${item.definition.name}`,
       });
     }
   }
@@ -886,7 +911,7 @@ function validateOperationHandlers(input: {
 }
 
 function validateSessionContributions(input: {
-  readonly manifests: readonly CapabilityRuntimeManifest[];
+  readonly runtimeContributions: readonly CapabilityRuntimeContribution[];
   readonly identityResolvers: readonly CapabilitySessionIdentityResolverBinding[];
   readonly summaryResolvers: readonly CapabilitySessionAuthoritySummaryResolverBinding[];
   readonly scopeAuthorizers: readonly CapabilitySessionAuthorityScopeAuthorizerBinding[];
@@ -894,24 +919,24 @@ function validateSessionContributions(input: {
   const identityResolverKeys = buildSessionIdentityResolverKeys(input.identityResolvers);
   const summaryResolverKeys = buildSessionAuthoritySummaryResolverKeys(input.summaryResolvers);
   const scopeAuthorizerKeys = buildSessionAuthorityScopeAuthorizerKeys(input.scopeAuthorizers);
-  const principalOwners = buildSessionPrincipalOwnerMap(input.manifests);
+  const principalOwners = buildSessionPrincipalOwnerMap(input.runtimeContributions);
   const issues: CapabilityBootstrapIssue[] = [];
 
-  for (const manifest of input.manifests) {
-    for (const principal of manifest.contributions?.session?.principals ?? []) {
+  for (const runtimeContribution of input.runtimeContributions) {
+    for (const principal of runtimeContribution.contributions?.session?.principals ?? []) {
       issues.push(
         ...validateSessionPrincipalContribution({
-          manifest,
+          runtimeContribution,
           principal,
           identityResolverKeys,
         }),
       );
     }
 
-    for (const claim of manifest.contributions?.session?.authorityClaims ?? []) {
+    for (const claim of runtimeContribution.contributions?.session?.authorityClaims ?? []) {
       issues.push(
         ...validateSessionAuthorityClaimContribution({
-          manifest,
+          runtimeContribution,
           claim,
           summaryResolverKeys,
           scopeAuthorizerKeys,
@@ -964,7 +989,7 @@ function buildSessionAuthorityScopeAuthorizerKeys(
 }
 
 function validateSessionPrincipalContribution(input: {
-  readonly manifest: CapabilityRuntimeManifest;
+  readonly runtimeContribution: CapabilityRuntimeContribution;
   readonly principal: CapabilitySessionPrincipalContribution;
   readonly identityResolverKeys: ReadonlySet<string>;
 }): readonly CapabilityBootstrapIssue[] {
@@ -972,21 +997,21 @@ function validateSessionPrincipalContribution(input: {
   if (!input.principal.principalCode.trim()) {
     issues.push({
       code: 'CAPABILITY_SESSION_PRINCIPAL_CODE_INVALID',
-      capabilityId: input.manifest.capabilityId,
-      message: `capability_session_principal_code_invalid:${input.manifest.capabilityId}`,
+      capabilityId: input.runtimeContribution.capabilityId,
+      message: `capability_session_principal_code_invalid:${input.runtimeContribution.capabilityId}`,
     });
   }
   if (!input.principal.identityResolver.trim()) {
     issues.push({
       code: 'CAPABILITY_SESSION_IDENTITY_RESOLVER_MISSING',
-      capabilityId: input.manifest.capabilityId,
-      message: `capability_session_identity_resolver_missing:${input.manifest.capabilityId}:${input.principal.principalCode}:${input.principal.identityResolver}`,
+      capabilityId: input.runtimeContribution.capabilityId,
+      message: `capability_session_identity_resolver_missing:${input.runtimeContribution.capabilityId}:${input.principal.principalCode}:${input.principal.identityResolver}`,
     });
     return issues;
   }
 
   const key = buildSessionBindingKey({
-    capabilityId: input.manifest.capabilityId,
+    capabilityId: input.runtimeContribution.capabilityId,
     name: input.principal.identityResolver,
   });
   if (input.identityResolverKeys.has(key)) {
@@ -994,14 +1019,14 @@ function validateSessionPrincipalContribution(input: {
   }
   issues.push({
     code: 'CAPABILITY_SESSION_IDENTITY_RESOLVER_MISSING',
-    capabilityId: input.manifest.capabilityId,
-    message: `capability_session_identity_resolver_missing:${input.manifest.capabilityId}:${input.principal.principalCode}:${input.principal.identityResolver}`,
+    capabilityId: input.runtimeContribution.capabilityId,
+    message: `capability_session_identity_resolver_missing:${input.runtimeContribution.capabilityId}:${input.principal.principalCode}:${input.principal.identityResolver}`,
   });
   return issues;
 }
 
 function validateSessionAuthorityClaimContribution(input: {
-  readonly manifest: CapabilityRuntimeManifest;
+  readonly runtimeContribution: CapabilityRuntimeContribution;
   readonly claim: CapabilitySessionAuthorityClaimContribution;
   readonly summaryResolverKeys: ReadonlySet<string>;
   readonly scopeAuthorizerKeys: ReadonlySet<string>;
@@ -1016,7 +1041,7 @@ function validateSessionAuthorityClaimContribution(input: {
 }
 
 function validateSessionAuthorityClaimCode(input: {
-  readonly manifest: CapabilityRuntimeManifest;
+  readonly runtimeContribution: CapabilityRuntimeContribution;
   readonly claim: CapabilitySessionAuthorityClaimContribution;
 }): readonly CapabilityBootstrapIssue[] {
   if (input.claim.claimCode.trim()) {
@@ -1025,14 +1050,14 @@ function validateSessionAuthorityClaimCode(input: {
   return [
     {
       code: 'CAPABILITY_SESSION_AUTHORITY_CLAIM_CODE_INVALID',
-      capabilityId: input.manifest.capabilityId,
-      message: `capability_session_authority_claim_code_invalid:${input.manifest.capabilityId}`,
+      capabilityId: input.runtimeContribution.capabilityId,
+      message: `capability_session_authority_claim_code_invalid:${input.runtimeContribution.capabilityId}`,
     },
   ];
 }
 
 function validateSessionAuthoritySummaryResolver(input: {
-  readonly manifest: CapabilityRuntimeManifest;
+  readonly runtimeContribution: CapabilityRuntimeContribution;
   readonly claim: CapabilitySessionAuthorityClaimContribution;
   readonly summaryResolverKeys: ReadonlySet<string>;
 }): readonly CapabilityBootstrapIssue[] {
@@ -1040,14 +1065,14 @@ function validateSessionAuthoritySummaryResolver(input: {
     return [
       {
         code: 'CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_MISSING',
-        capabilityId: input.manifest.capabilityId,
-        message: `capability_session_authority_summary_resolver_missing:${input.manifest.capabilityId}:${input.claim.claimCode}:${input.claim.summaryResolver}`,
+        capabilityId: input.runtimeContribution.capabilityId,
+        message: `capability_session_authority_summary_resolver_missing:${input.runtimeContribution.capabilityId}:${input.claim.claimCode}:${input.claim.summaryResolver}`,
       },
     ];
   }
 
   const key = buildSessionBindingKey({
-    capabilityId: input.manifest.capabilityId,
+    capabilityId: input.runtimeContribution.capabilityId,
     name: input.claim.summaryResolver,
   });
   if (input.summaryResolverKeys.has(key)) {
@@ -1056,14 +1081,14 @@ function validateSessionAuthoritySummaryResolver(input: {
   return [
     {
       code: 'CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_MISSING',
-      capabilityId: input.manifest.capabilityId,
-      message: `capability_session_authority_summary_resolver_missing:${input.manifest.capabilityId}:${input.claim.claimCode}:${input.claim.summaryResolver}`,
+      capabilityId: input.runtimeContribution.capabilityId,
+      message: `capability_session_authority_summary_resolver_missing:${input.runtimeContribution.capabilityId}:${input.claim.claimCode}:${input.claim.summaryResolver}`,
     },
   ];
 }
 
 function validateSessionAuthorityScopeAuthorizer(input: {
-  readonly manifest: CapabilityRuntimeManifest;
+  readonly runtimeContribution: CapabilityRuntimeContribution;
   readonly claim: CapabilitySessionAuthorityClaimContribution;
   readonly scopeAuthorizerKeys: ReadonlySet<string>;
 }): readonly CapabilityBootstrapIssue[] {
@@ -1071,14 +1096,14 @@ function validateSessionAuthorityScopeAuthorizer(input: {
     return [
       {
         code: 'CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_MISSING',
-        capabilityId: input.manifest.capabilityId,
-        message: `capability_session_authority_scope_authorizer_missing:${input.manifest.capabilityId}:${input.claim.claimCode}`,
+        capabilityId: input.runtimeContribution.capabilityId,
+        message: `capability_session_authority_scope_authorizer_missing:${input.runtimeContribution.capabilityId}:${input.claim.claimCode}`,
       },
     ];
   }
 
   const key = buildSessionBindingKey({
-    capabilityId: input.manifest.capabilityId,
+    capabilityId: input.runtimeContribution.capabilityId,
     name: input.claim.scopeAuthorizer,
   });
   if (input.scopeAuthorizerKeys.has(key)) {
@@ -1087,14 +1112,14 @@ function validateSessionAuthorityScopeAuthorizer(input: {
   return [
     {
       code: 'CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_MISSING',
-      capabilityId: input.manifest.capabilityId,
-      message: `capability_session_authority_scope_authorizer_missing:${input.manifest.capabilityId}:${input.claim.claimCode}:${input.claim.scopeAuthorizer}`,
+      capabilityId: input.runtimeContribution.capabilityId,
+      message: `capability_session_authority_scope_authorizer_missing:${input.runtimeContribution.capabilityId}:${input.claim.claimCode}:${input.claim.scopeAuthorizer}`,
     },
   ];
 }
 
 function validateSessionAuthoritySubjectPrincipal(input: {
-  readonly manifest: CapabilityRuntimeManifest;
+  readonly runtimeContribution: CapabilityRuntimeContribution;
   readonly claim: CapabilitySessionAuthorityClaimContribution;
   readonly principalOwners: ReadonlyMap<string, CapabilityId>;
 }): readonly CapabilityBootstrapIssue[] {
@@ -1109,74 +1134,80 @@ function validateSessionAuthoritySubjectPrincipal(input: {
     return [
       {
         code: 'CAPABILITY_SESSION_SUBJECT_PRINCIPAL_MISSING',
-        capabilityId: input.manifest.capabilityId,
-        message: `capability_session_subject_principal_missing:${input.manifest.capabilityId}:${input.claim.claimCode}:${input.claim.subjectPrincipalCode}`,
+        capabilityId: input.runtimeContribution.capabilityId,
+        message: `capability_session_subject_principal_missing:${input.runtimeContribution.capabilityId}:${input.claim.claimCode}:${input.claim.subjectPrincipalCode}`,
       },
     ];
   }
   if (
-    normalizeRequiredText(principalOwner) === normalizeRequiredText(input.manifest.capabilityId) ||
-    hasDeclaredCapabilityDependency({ manifest: input.manifest, capabilityId: principalOwner })
+    normalizeRequiredText(principalOwner) ===
+      normalizeRequiredText(input.runtimeContribution.capabilityId) ||
+    hasDeclaredCapabilityDependency({
+      runtimeContribution: input.runtimeContribution,
+      capabilityId: principalOwner,
+    })
   ) {
     return [];
   }
   return [
     {
       code: 'CAPABILITY_SESSION_SUBJECT_PRINCIPAL_DEPENDENCY_MISSING',
-      capabilityId: input.manifest.capabilityId,
-      message: `capability_session_subject_principal_dependency_missing:${input.manifest.capabilityId}:${input.claim.claimCode}:${input.claim.subjectPrincipalCode}:${principalOwner}`,
+      capabilityId: input.runtimeContribution.capabilityId,
+      message: `capability_session_subject_principal_dependency_missing:${input.runtimeContribution.capabilityId}:${input.claim.claimCode}:${input.claim.subjectPrincipalCode}:${principalOwner}`,
     },
   ];
 }
 
 function buildSessionPrincipalOwnerMap(
-  manifests: readonly CapabilityRuntimeManifest[],
+  runtimeContributions: readonly CapabilityRuntimeContribution[],
 ): ReadonlyMap<string, CapabilityId> {
   const owners = new Map<string, CapabilityId>();
-  for (const manifest of manifests) {
-    for (const principal of manifest.contributions?.session?.principals ?? []) {
+  for (const runtimeContribution of runtimeContributions) {
+    for (const principal of runtimeContribution.contributions?.session?.principals ?? []) {
       if (!principal.principalCode.trim()) {
         continue;
       }
-      owners.set(normalizeSessionCode(principal.principalCode), manifest.capabilityId);
+      owners.set(normalizeSessionCode(principal.principalCode), runtimeContribution.capabilityId);
     }
   }
   return owners;
 }
 
 function hasDeclaredCapabilityDependency(input: {
-  readonly manifest: CapabilityRuntimeManifest;
+  readonly runtimeContribution: CapabilityRuntimeContribution;
   readonly capabilityId: CapabilityId;
 }): boolean {
   const normalizedCapabilityId = normalizeRequiredText(input.capabilityId);
-  return (input.manifest.runtimeDependencies ?? []).some(
+  return (input.runtimeContribution.runtimeDependencies ?? []).some(
     (dependency) => normalizeRequiredText(dependency.capabilityId) === normalizedCapabilityId,
   );
 }
 
-function buildDeclaredOperationMap(manifests: readonly CapabilityRuntimeManifest[]): ReadonlyMap<
+function buildDeclaredOperationMap(
+  runtimeContributions: readonly CapabilityRuntimeContribution[],
+): ReadonlyMap<
   string,
   {
-    readonly manifest: CapabilityRuntimeManifest;
+    readonly runtimeContribution: CapabilityRuntimeContribution;
     readonly definition: CapabilityOperationDefinition;
   }
 > {
   const operations = new Map<
     string,
     {
-      readonly manifest: CapabilityRuntimeManifest;
+      readonly runtimeContribution: CapabilityRuntimeContribution;
       readonly definition: CapabilityOperationDefinition;
     }
   >();
-  for (const manifest of manifests) {
-    for (const definition of getManifestOperationDefinitions(manifest)) {
+  for (const runtimeContribution of runtimeContributions) {
+    for (const definition of getContributionOperationDefinitions(runtimeContribution)) {
       operations.set(
         buildOperationKey({
-          capabilityId: manifest.capabilityId,
+          capabilityId: runtimeContribution.capabilityId,
           operation: definition.name,
           operationKind: definition.kind,
         }),
-        { manifest, definition },
+        { runtimeContribution, definition },
       );
     }
   }
@@ -1208,20 +1239,20 @@ function buildEnabledOperationHandlerCounts(input: {
 }
 
 function findOperationDefinition(input: {
-  readonly manifest: CapabilityRuntimeManifest;
+  readonly runtimeContribution: CapabilityRuntimeContribution;
   readonly operation: string;
   readonly operationKind: 'command' | 'query';
 }): CapabilityOperationDefinition | null {
   const key = buildOperationKey({
-    capabilityId: input.manifest.capabilityId,
+    capabilityId: input.runtimeContribution.capabilityId,
     operation: input.operation,
     operationKind: input.operationKind,
   });
   return (
-    getManifestOperationDefinitions(input.manifest).find(
+    getContributionOperationDefinitions(input.runtimeContribution).find(
       (definition) =>
         buildOperationKey({
-          capabilityId: input.manifest.capabilityId,
+          capabilityId: input.runtimeContribution.capabilityId,
           operation: definition.name,
           operationKind: definition.kind,
         }) === key,
@@ -1229,22 +1260,22 @@ function findOperationDefinition(input: {
   );
 }
 
-function getManifestOperationDefinitions(
-  manifest: CapabilityRuntimeManifest,
+function getContributionOperationDefinitions(
+  runtimeContribution: CapabilityRuntimeContribution,
 ): readonly CapabilityOperationDefinition[] {
   return [
-    ...(manifest.operations?.commands ?? []),
-    ...(manifest.operations?.queries ?? []),
-    ...(manifest.operations?.events ?? []),
+    ...(runtimeContribution.operations?.commands ?? []),
+    ...(runtimeContribution.operations?.queries ?? []),
+    ...(runtimeContribution.operations?.events ?? []),
   ];
 }
 
 function buildOperationDescriptor(input: {
-  readonly manifest: CapabilityRuntimeManifest;
+  readonly runtimeContribution: CapabilityRuntimeContribution;
   readonly definition: CapabilityOperationDefinition;
 }): CapabilityOperationDescriptor {
   return {
-    capabilityId: input.manifest.capabilityId,
+    capabilityId: input.runtimeContribution.capabilityId,
     operation: input.definition.name,
     operationKind: input.definition.kind,
     transport: input.definition.transport ?? 'in-process',
@@ -1267,13 +1298,13 @@ function isMetadataEnabledForProcess(input: {
 }
 
 function detectDependencyCycles(
-  manifests: readonly CapabilityRuntimeManifest[],
+  runtimeContributions: readonly CapabilityRuntimeContribution[],
 ): readonly CapabilityBootstrapIssue[] {
   const graph = new Map<CapabilityId, readonly CapabilityId[]>();
-  for (const manifest of manifests) {
+  for (const runtimeContribution of runtimeContributions) {
     graph.set(
-      manifest.capabilityId,
-      (manifest.runtimeDependencies ?? [])
+      runtimeContribution.capabilityId,
+      (runtimeContribution.runtimeDependencies ?? [])
         .filter((dependency) => dependency.mode === 'required')
         .map((dependency) => dependency.capabilityId),
     );

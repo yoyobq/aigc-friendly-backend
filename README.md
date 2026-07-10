@@ -36,7 +36,7 @@ For AI/Agent: read `docs/README.md` first.
 
 项目面向可复用后端基础设施与分层架构治理场景，提供账号与会话鉴权、分页 / 排序 / 搜索、错误映射、输入规范化、事务边界与数据库基线交付能力，并内置基于 QM Worker 的 AI / Email 异步队列、任务审计与调试查询能力。它既是可直接扩展的基础框架，也是一套经过实践验证的 DDD 轻量级落地实现。
 
-当前 `v1.5.0` 基线在严格横向分层之上建立纵向 capability 治理：Ownership metadata 表达语义边界，Runtime Manifest 表达装配、启停、operation、transport 与 contribution，两者通过 Nest module graph 和统一命令组合观察。具体业务域仍不进入默认模板，业务能力应在明确事实与生命周期后接入。
+当前 `v1.6.0` 基线在严格横向分层之上提供轻量纵向 capability 治理：稳定 decision 文档定义语义边界，最小 Anchor 让边界在代码与运行时可指认，Runtime Contribution 只保留实际执行或校验的装配事实。进程与入口模块由 Nest module graph 推导，不维护平行 Catalog。
 
 ## 技术栈
 
@@ -133,9 +133,8 @@ adapters -> usecases -> modules -> infrastructure
 - [Boundary Contract Rules](docs/common/boundary-contract.rules.md)
 - [Type Rules](docs/common/type.rules.md)
 - [Infrastructure Rules](docs/common/infrastructure.rules.md)
-- [Capability Ownership Rules](docs/common/capability-ownership.rules.md)
-- [Capability Runtime Rules](docs/common/capability-runtime.rules.md)
-- [Capability Authoring Guide](docs/common/capability-authoring.guide.md)
+- [Capability Rules](docs/common/capability.rules.md)
+- [Current Capability Decisions](docs/capabilities/current.md)
 - [ESLint Architecture Rules](docs/common/eslint-architecture-rules.md)
 - [Queue Identifiers Rules](docs/common/queue-identifiers.rules.md)
 - [AI Task Lifecycle Audit Rules](docs/common/ai-task-lifecycle-audit.rules.md)
@@ -153,7 +152,7 @@ adapters -> usecases -> modules -> infrastructure
 - ✅ **Data Access**: 分页 / 排序 / 搜索通用能力、数据库事务支持
 - ✅ **Observability**: 结构化日志 (Pino)、配置管理
 - ✅ **QM Worker Base**: 统一 AI / Email 队列接入、消费链路与模块装配模式
-- ✅ **Capability Runtime**: 能力 manifest、启动对账、运行态启停、dispatcher / bus、queue transport、GraphQL guard 与 generated capability 清单
+- ✅ **Capability Runtime**: 能力 Anchor、启动对账、运行态启停、dispatcher / bus、queue transport、GraphQL guard 与 generated capability 清单
 - ✅ **AI Provider Call Record**: 记录 provider 调用链路、请求响应快照与耗时指标，支撑审计与排障
 
 ### 基础域能力
@@ -170,22 +169,23 @@ adapters -> usecases -> modules -> infrastructure
 
 ## Capability 治理基线
 
-Capability 是既有 `adapters -> usecases -> modules -> infrastructure` 分层上的纵向功能 ownership，不是新的分层或服务拆分方案。语义 ownership 与 runtime 装配明确分开，并通过同一个观察命令组合展示。
+Capability 是既有 `adapters -> usecases -> modules -> infrastructure` 分层上的纵向功能边界，不是新的分层或服务拆分方案。治理遵循“能推导的推导、只声明会执行的决策、散文回文档”。
 
-- **语义 ownership**：`@CapabilityOwnershipProvider(...)` 声明 id、kind、semantic scope、owns、non-goals、physical scopes、public surfaces 与 allowed dependencies；组合 usecase、报表或 runtime consumer 不会因此自动成为 capability。
-- **Runtime Manifest**：`@CapabilityRuntimeManifestProvider(...)` 只声明 version、runtime dependencies、operations、state policy 以及 provider / queue / session / API contribution；process 从 API/Worker Nest module graph 推导。
-- **启动对账**：registry 在启动期检查 runtime manifest、provider binding、queue binding、operation handler、session resolver 和 GraphQL surface 的一致性。
-- **运行态治理**：通过 `CAPABILITY_DISABLED_IDS`、`CAPABILITY_KILL_SWITCH_IDS`、`CAPABILITY_OPERATION_DISABLED_KEYS` 与 guard / dispatcher 返回统一 capability error。
+- **语义决策**：`docs/capabilities/*.md` 定义 capability 拥有什么、边界在哪里；组合 usecase、报表或 runtime consumer 不会因依赖关系自动成为 capability。
+- **Capability Anchor**：`@CapabilityAnchorProvider(...)` 只声明 `capabilityId`、`mode` 与 `decisionRef`，作为代码和运行时的垂直锚点。
+- **Runtime Contribution**：`@CapabilityRuntimeContributionProvider(...)` 可选，只声明 registry 实际执行或校验的 dependency、operation、state policy 以及 provider / queue / session / API contribution。
+- **推导装配**：入口模块和 API/Worker 安装进程从 Nest module graph 推导，不手写 process、physical scope 或文件清单。
+- **启动对账**：registry 在启动期检查 anchor、runtime contribution、provider binding、queue binding、operation handler、session resolver 和 GraphQL surface 的一致性，并提示无效关闭配置。
+- **运行态治理**：`switchable` 能力通过 `CAPABILITY_DISABLED_IDS`、`CAPABILITY_KILL_SWITCH_IDS`、`CAPABILITY_OPERATION_DISABLED_KEYS` 与 guard / dispatcher 返回统一 capability error；`always-on` 不接受关闭配置。
 - **跨进程协作**：API 与 Worker 之间通过 BullMQ queue transport 传递 capability envelope；同进程协作只在 usecase-owned runtime boundary 中使用 dispatcher / bus。
 - **Typed Capability Client**：业务 usecase 跨能力调用通过 typed client 窄接口（`src/usecases/common/ports/*.contract.ts`），不直接写 raw dispatcher 字符串协议；client 实现在 `infrastructure/capability/` 内部封装 bus 调用，保留 `CapabilityResult<T>` 返回类型。
 - **会话扩展**：能力可贡献 session principal / authority claim，平台只理解稳定 code 和投影，不内置具体业务语义。
-- **本地观察**：`npm run capability:list` 查看 ownership + runtime 组合视图，`npm run capability:docs` 生成唯一快照 `docs/generated/capabilities-current.md`，`npm run capability:docs:check` 校验同步。
+- **本地观察**：`npm run capability:list` 查看从模块图计算出的浅投影，`npm run capability:docs` 生成 `docs/generated/capabilities-current.md`，`npm run capability:docs:check` 校验同步。入口模块只是代码导航起点，不声称提供文件级 ownership 视图。
 
 新增或合并 capability 代码时，先读：
 
-- [Capability Ownership Rules](docs/common/capability-ownership.rules.md)
-- [Capability Runtime Rules](docs/common/capability-runtime.rules.md)
-- [Capability Authoring Guide](docs/common/capability-authoring.guide.md)
+- [Capability Rules](docs/common/capability.rules.md)
+- [Current Capability Decisions](docs/capabilities/current.md)
 - [Current Capability Projection](docs/generated/capabilities-current.md)
 
 ## 快速开始
