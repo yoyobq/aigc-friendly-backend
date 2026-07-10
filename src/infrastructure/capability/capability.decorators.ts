@@ -2,10 +2,11 @@
 import type {
   CapabilityId,
   CapabilityHealthCheck,
-  CapabilityManifest,
+  CapabilityOwnershipManifest,
   CapabilityOperationKind,
   CapabilityProcess,
   CapabilityProviderKind,
+  CapabilityRuntimeManifest,
 } from '@app-types/common/capability.types';
 import { DiscoveryService } from '@nestjs/core';
 
@@ -57,8 +58,10 @@ export interface CapabilitySessionAuthorityScopeAuthorizerMetadata {
   readonly authorizerName: string;
 }
 
-export const CAPABILITY_MANIFEST_DISCOVERABLE =
-  DiscoveryService.createDecorator<CapabilityManifest>();
+export const CAPABILITY_OWNERSHIP_DISCOVERABLE =
+  DiscoveryService.createDecorator<CapabilityOwnershipManifest>();
+export const CAPABILITY_RUNTIME_MANIFEST_DISCOVERABLE =
+  DiscoveryService.createDecorator<CapabilityRuntimeManifest>();
 export const CAPABILITY_PROVIDER_BINDING_DISCOVERABLE =
   DiscoveryService.createDecorator<CapabilityProviderBindingMetadata>();
 export const CAPABILITY_QUEUE_BINDING_DISCOVERABLE =
@@ -76,7 +79,9 @@ export const CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_DISCOVERABLE =
 export const CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_DISCOVERABLE =
   DiscoveryService.createDecorator<CapabilitySessionAuthorityScopeAuthorizerMetadata>();
 
-export const CAPABILITY_MANIFEST_METADATA_KEY = CAPABILITY_MANIFEST_DISCOVERABLE.KEY;
+export const CAPABILITY_OWNERSHIP_METADATA_KEY = CAPABILITY_OWNERSHIP_DISCOVERABLE.KEY;
+export const CAPABILITY_RUNTIME_MANIFEST_METADATA_KEY =
+  CAPABILITY_RUNTIME_MANIFEST_DISCOVERABLE.KEY;
 export const CAPABILITY_PROVIDER_BINDING_METADATA_KEY =
   CAPABILITY_PROVIDER_BINDING_DISCOVERABLE.KEY;
 export const CAPABILITY_QUEUE_BINDING_METADATA_KEY = CAPABILITY_QUEUE_BINDING_DISCOVERABLE.KEY;
@@ -93,8 +98,15 @@ export const CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_METADATA_KEY =
   CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_DISCOVERABLE.KEY;
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
-export function CapabilityManifestProvider(manifest: CapabilityManifest): ClassDecorator {
-  return CAPABILITY_MANIFEST_DISCOVERABLE(manifest);
+export function CapabilityOwnershipProvider(manifest: CapabilityOwnershipManifest): ClassDecorator {
+  return CAPABILITY_OWNERSHIP_DISCOVERABLE(manifest);
+}
+
+// eslint-disable-next-line @typescript-eslint/naming-convention
+export function CapabilityRuntimeManifestProvider(
+  manifest: CapabilityRuntimeManifest,
+): ClassDecorator {
+  return CAPABILITY_RUNTIME_MANIFEST_DISCOVERABLE(manifest);
 }
 
 // eslint-disable-next-line @typescript-eslint/naming-convention

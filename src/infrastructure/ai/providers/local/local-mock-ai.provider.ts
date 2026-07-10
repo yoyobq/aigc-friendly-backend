@@ -10,10 +10,19 @@ import { Injectable } from '@nestjs/common';
 import {
   CapabilityHealthCheckProvider,
   CapabilityProviderBindingProvider,
+  CapabilityRuntimeManifestProvider,
 } from '@src/infrastructure/capability/capability.decorators';
 import { createHash } from 'node:crypto';
 
 @Injectable()
+@CapabilityRuntimeManifestProvider({
+  capabilityId: 'ai.local-mock',
+  version: '0.1.0',
+  runtime: { healthCheck: true },
+  contributions: {
+    providers: [{ providerKind: 'ai.provider', providerName: 'mock' }],
+  },
+})
 @CapabilityProviderBindingProvider({
   capabilityId: 'ai.local-mock',
   providerKind: 'ai.provider',

@@ -53,10 +53,40 @@ export type CapabilityResult<TResult> =
       readonly error: CapabilityError;
     };
 
-export interface CapabilityDependency {
+export interface CapabilityRuntimeDependency {
   readonly capabilityId: CapabilityId;
   readonly mode: 'required' | 'optional';
 }
+
+export interface CapabilityOwnershipManifest {
+  readonly capabilityId: CapabilityId;
+  readonly kind: CapabilityKind;
+  readonly semanticScope: string;
+  readonly owns: readonly string[];
+  readonly nonGoals: readonly string[];
+  readonly physicalScopes: readonly CapabilityPhysicalScope[];
+  readonly publicSurfaces: readonly CapabilityPublicSurface[];
+  readonly allowedDependencies: readonly CapabilityId[];
+  readonly foundationClassification:
+    'domain-owned' | 'platform-foundation' | 'shared-technical-foundation';
+  readonly validationEntrypoints: readonly string[];
+}
+
+export interface CapabilityPhysicalScope {
+  readonly path: string;
+  readonly role: 'primary' | 'transitional' | 'shared-implementation';
+  readonly reason?: string;
+}
+
+export type CapabilityPublicSurface =
+  | {
+      readonly status: 'present';
+      readonly path: string;
+    }
+  | {
+      readonly status: 'deferred' | 'not-required';
+      readonly reason: string;
+    };
 
 export interface CapabilityProviderContribution {
   readonly providerKind: CapabilityProviderKind;
@@ -150,9 +180,9 @@ export interface CapabilitySessionAuthorityClaimContribution {
   readonly sessionProjectionKey?: string;
 }
 
-export interface CapabilityRuntimeManifest {
+export interface CapabilityRuntimePolicyManifest {
   readonly defaultState?: CapabilityEnableState;
-  readonly isReadonly?: boolean;
+  readonly disableable?: boolean;
   readonly healthCheck?: boolean;
 }
 
@@ -163,48 +193,13 @@ export interface CapabilityContributionManifest {
   readonly session?: CapabilitySessionContributionManifest;
 }
 
-export interface CapabilityDataManifest {
-  readonly resources?: readonly CapabilityDataResourceClaim[];
-  readonly migrations?: readonly CapabilityMigrationDefinition[];
-}
-
-export interface CapabilityDataResourceClaim {
-  readonly name: string;
-  readonly kind: 'table' | 'view';
-  readonly owner: CapabilityId;
-  readonly readShared?: boolean;
-  readonly writeOwnerOnly: boolean;
-}
-
-export interface CapabilityMigrationDefinition {
-  readonly id: string;
-  readonly description?: string;
-  readonly irreversible?: boolean;
-}
-
-export interface CapabilityResourceClaimManifest {
-  readonly claims?: readonly CapabilityResourceClaim[];
-}
-
-export interface CapabilityResourceClaim {
-  readonly name: string;
-  readonly kind: 'queue' | 'cache' | 'externalResource' | 'artifact' | 'authorizationResource';
-  readonly owner: CapabilityId;
-  readonly relation: 'owns' | 'dependsOn' | 'contributes';
-}
-
-export interface CapabilityManifest {
-  readonly id: CapabilityId;
-  readonly kind: CapabilityKind;
-  readonly displayName: string;
+export interface CapabilityRuntimeManifest {
+  readonly capabilityId: CapabilityId;
   readonly version: string;
-  readonly processes: readonly CapabilityProcess[];
-  readonly dependsOn?: readonly CapabilityDependency[];
+  readonly runtimeDependencies?: readonly CapabilityRuntimeDependency[];
   readonly operations?: CapabilityOperationManifest;
-  readonly runtime?: CapabilityRuntimeManifest;
+  readonly runtime?: CapabilityRuntimePolicyManifest;
   readonly contributions?: CapabilityContributionManifest;
-  readonly data?: CapabilityDataManifest;
-  readonly resourceClaims?: CapabilityResourceClaimManifest;
 }
 
 export interface CapabilityHealthResult {

@@ -6,11 +6,11 @@ import {
   type CapabilityRuntimeStateReader,
 } from '@src/usecases/common/ports/capability-runtime-state-reader.contract';
 import { CapabilityBootstrapCheck } from './capability-bootstrap-check';
-import { CapabilityManifestProvider } from './capability.decorators';
+import { CapabilityRuntimeManifestProvider } from './capability.decorators';
 import { CapabilityModule } from './capability.module';
 
 describe('ConfigCapabilityRuntimeStateReader', () => {
-  it('keeps platform capabilities enabled even when runtime config disables them', async () => {
+  it('reports owner-only platform capabilities as not installed in runtime', async () => {
     const module = await Test.createTestingModule({
       imports: [CapabilityModule.forRoot({ process: 'api' })],
       providers: [],
@@ -28,19 +28,17 @@ describe('ConfigCapabilityRuntimeStateReader', () => {
 
     expect(reader.getCapabilityState('platform.account')).toMatchObject({
       capabilityId: 'platform.account',
-      enabled: true,
+      enabled: false,
+      reason: 'not_installed',
     });
     await module.close();
   });
 
   it('applies kill switch before runtime disabled and operation disabled', async () => {
     @Injectable()
-    @CapabilityManifestProvider({
-      id: 'test.runtime',
-      kind: 'business',
-      displayName: 'Test Runtime',
+    @CapabilityRuntimeManifestProvider({
+      capabilityId: 'test.runtime',
       version: '0.1.0',
-      processes: ['api'],
       operations: {
         commands: [{ kind: 'command', name: 'publish', sideEffects: 'internal' }],
       },
@@ -83,12 +81,9 @@ describe('ConfigCapabilityRuntimeStateReader', () => {
 
   it('uses operation disabled keys after capability state is enabled', async () => {
     @Injectable()
-    @CapabilityManifestProvider({
-      id: 'test.operation-state',
-      kind: 'business',
-      displayName: 'Test Operation State',
+    @CapabilityRuntimeManifestProvider({
+      capabilityId: 'test.operation-state',
       version: '0.1.0',
-      processes: ['api'],
       operations: {
         commands: [{ kind: 'command', name: 'publish', sideEffects: 'internal' }],
       },

@@ -24,8 +24,10 @@ export class ConfigCapabilityRuntimeStateReader implements CapabilityRuntimeStat
 
   getCapabilityState(capabilityId: CapabilityId): CapabilityRuntimeState {
     const manifest = this.capabilityRegistry
-      .getActiveManifests()
-      .find((item) => normalizeCapabilityId(item.id) === normalizeCapabilityId(capabilityId));
+      .getActiveRuntimeManifests()
+      .find(
+        (item) => normalizeCapabilityId(item.capabilityId) === normalizeCapabilityId(capabilityId),
+      );
     if (!manifest) {
       return {
         capabilityId,
@@ -34,20 +36,20 @@ export class ConfigCapabilityRuntimeStateReader implements CapabilityRuntimeStat
         reason: 'not_installed',
       };
     }
-    if (manifest.kind === 'platform') {
+    if (manifest.runtime?.disableable === false) {
       return {
-        capabilityId: manifest.id,
+        capabilityId: manifest.capabilityId,
         enabled: true,
         process: this.currentProcess,
       };
     }
     if (
       this.readCapabilityIdSet('capabilityRuntime.killSwitchIds').has(
-        normalizeCapabilityId(manifest.id),
+        normalizeCapabilityId(manifest.capabilityId),
       )
     ) {
       return {
-        capabilityId: manifest.id,
+        capabilityId: manifest.capabilityId,
         enabled: false,
         process: this.currentProcess,
         reason: 'kill_switch',
@@ -55,11 +57,11 @@ export class ConfigCapabilityRuntimeStateReader implements CapabilityRuntimeStat
     }
     if (
       this.readCapabilityIdSet('capabilityRuntime.disabledIds').has(
-        normalizeCapabilityId(manifest.id),
+        normalizeCapabilityId(manifest.capabilityId),
       )
     ) {
       return {
-        capabilityId: manifest.id,
+        capabilityId: manifest.capabilityId,
         enabled: false,
         process: this.currentProcess,
         reason: 'runtime_disabled',
@@ -67,14 +69,14 @@ export class ConfigCapabilityRuntimeStateReader implements CapabilityRuntimeStat
     }
     if (manifest.runtime?.defaultState === 'disabled') {
       return {
-        capabilityId: manifest.id,
+        capabilityId: manifest.capabilityId,
         enabled: false,
         process: this.currentProcess,
         reason: 'manifest_default_disabled',
       };
     }
     return {
-      capabilityId: manifest.id,
+      capabilityId: manifest.capabilityId,
       enabled: true,
       process: this.currentProcess,
     };

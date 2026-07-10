@@ -57,9 +57,11 @@
   - Boundary contract or port/contract naming:
     - `docs/common/boundary-contract.rules.md`
 
-  - Capability plugin / ability modularization:
-    - `docs/common/capability-plugin.rules.md`
-    - `docs/common/capability-plugin-authoring.guide.md` when adding, reviewing, or merging capability code
+  - Capability ownership or runtime governance:
+    - `docs/common/capability-ownership.rules.md` when deciding identity, scope, or ownership
+    - `docs/common/capability-runtime.rules.md` when changing runtime manifests, operations, providers, queues, or state
+    - `docs/common/capability-authoring.guide.md` when adding, reviewing, or merging capability code
+    - `docs/common/capability-boundary-examples.md` when a composition usecase looks like a capability
     - `docs/generated/capabilities-current.md` when you need the current generated capability id list
     - `docs/common/boundary-contract.rules.md` when adding dispatcher / runtime contracts
     - `docs/worker/qm-worker-integration.rules.md` when adding queue transport or worker consumer
@@ -121,9 +123,10 @@
   ## One-Line Meanings
 
   - `core.rules`: pure domain only
-  - `capability-plugin.rules`: capability plugin boundaries, runtime semantics, transport and contribution rules
-  - `capability-plugin-authoring.guide.md`: capability authoring, merge and validation checklist for AI agents
-  - `generated/capabilities-current.md`: generated local capability id list
+  - `capability-ownership.rules`: semantic identity, physical scopes, public surfaces, dependencies, and non-goals
+  - `capability-runtime.rules`: runtime manifest, installation, state, transport, and contribution rules
+  - `capability-authoring.guide.md`: capability authoring and validation checklist for AI agents
+  - `generated/capabilities-current.md`: generated joined ownership and runtime projection
   - `eslint-architecture-rules.md`: executable lint rule map and architecture validation commands
   - `boundary-contract.rules`: layer-owned contract naming and port/contract distinction
   - `aggregate.rules`: aggregate root and child-entity write boundaries

@@ -26,7 +26,7 @@ For AI/Agent: read `docs/README.md` first.
 - [技术栈](#技术栈)
 - [项目结构与架构](#项目结构与架构)
 - [功能概览](#功能概览)
-- [能力插拔基线](#能力插拔基线)
+- [Capability 治理基线](#capability-治理基线)
 - [快速开始](#快速开始)
 - [开发与测试](#开发与测试)
 - [API 访问](#api-访问)
@@ -36,7 +36,7 @@ For AI/Agent: read `docs/README.md` first.
 
 项目面向可复用后端基础设施与分层架构治理场景，提供账号与会话鉴权、分页 / 排序 / 搜索、错误映射、输入规范化、事务边界与数据库基线交付能力，并内置基于 QM Worker 的 AI / Email 异步队列、任务审计与调试查询能力。它既是可直接扩展的基础框架，也是一套经过实践验证的 DDD 轻量级落地实现。
 
-当前 `v1.4.0-capability-plugin-baseline` 版本在框架基线之上补齐了能力插拔底座：能力 manifest、启动对账、运行态启停、dispatcher / bus、API / Worker runtime guard、BullMQ queue transport、session contribution、健康检查与 generated capability 清单。具体业务域仍不进入默认模板，业务能力应在明确 bounded context 后按分层规则接入。
+当前 `v1.5.0` 基线在严格横向分层之上建立纵向 capability 治理：Ownership metadata 表达语义边界，Runtime Manifest 表达装配、启停、operation、transport 与 contribution，两者通过 Nest module graph 和统一命令组合观察。具体业务域仍不进入默认模板，业务能力应在明确事实与生命周期后接入。
 
 ## 技术栈
 
@@ -133,8 +133,9 @@ adapters -> usecases -> modules -> infrastructure
 - [Boundary Contract Rules](docs/common/boundary-contract.rules.md)
 - [Type Rules](docs/common/type.rules.md)
 - [Infrastructure Rules](docs/common/infrastructure.rules.md)
-- [Capability Plugin Rules](docs/common/capability-plugin.rules.md)
-- [Capability Plugin Authoring Guide](docs/common/capability-plugin-authoring.guide.md)
+- [Capability Ownership Rules](docs/common/capability-ownership.rules.md)
+- [Capability Runtime Rules](docs/common/capability-runtime.rules.md)
+- [Capability Authoring Guide](docs/common/capability-authoring.guide.md)
 - [ESLint Architecture Rules](docs/common/eslint-architecture-rules.md)
 - [Queue Identifiers Rules](docs/common/queue-identifiers.rules.md)
 - [AI Task Lifecycle Audit Rules](docs/common/ai-task-lifecycle-audit.rules.md)
@@ -167,23 +168,25 @@ adapters -> usecases -> modules -> infrastructure
 - ✅ **AI Workflow Baseline**: 支持最小 workflow context、admission、worker handler registry 与 `generic_text_generate`
 - ✅ **Async Task Audit**: 支持按 `traceId` / 业务锚点 / 队列任务标识进行调试查询
 
-## 能力插拔基线
+## Capability 治理基线
 
-`v1.4.0` 引入的 capability plugin 不是新的分层，也不是独立服务拆分方案。它是在既有 `adapters -> usecases -> modules -> infrastructure` 分层上增加的能力声明、装配、启停和运行时治理面。
+Capability 是既有 `adapters -> usecases -> modules -> infrastructure` 分层上的纵向功能 ownership，不是新的分层或服务拆分方案。语义 ownership 与 runtime 装配明确分开，并通过同一个观察命令组合展示。
 
-- **显式声明**：能力通过 `@CapabilityManifestProvider(...)` 声明 id、kind、processes、dependsOn、provider / queue / session / API / data contribution。
-- **启动对账**：registry 在启动期检查 manifest、provider binding、queue binding、operation handler、session resolver、GraphQL surface 和资源声明的一致性。
+- **语义 ownership**：`@CapabilityOwnershipProvider(...)` 声明 id、kind、semantic scope、owns、non-goals、physical scopes、public surfaces 与 allowed dependencies；组合 usecase、报表或 runtime consumer 不会因此自动成为 capability。
+- **Runtime Manifest**：`@CapabilityRuntimeManifestProvider(...)` 只声明 version、runtime dependencies、operations、state policy 以及 provider / queue / session / API contribution；process 从 API/Worker Nest module graph 推导。
+- **启动对账**：registry 在启动期检查 runtime manifest、provider binding、queue binding、operation handler、session resolver 和 GraphQL surface 的一致性。
 - **运行态治理**：通过 `CAPABILITY_DISABLED_IDS`、`CAPABILITY_KILL_SWITCH_IDS`、`CAPABILITY_OPERATION_DISABLED_KEYS` 与 guard / dispatcher 返回统一 capability error。
 - **跨进程协作**：API 与 Worker 之间通过 BullMQ queue transport 传递 capability envelope；同进程协作只在 usecase-owned runtime boundary 中使用 dispatcher / bus。
 - **Typed Capability Client**：业务 usecase 跨能力调用通过 typed client 窄接口（`src/usecases/common/ports/*.contract.ts`），不直接写 raw dispatcher 字符串协议；client 实现在 `infrastructure/capability/` 内部封装 bus 调用，保留 `CapabilityResult<T>` 返回类型。
 - **会话扩展**：能力可贡献 session principal / authority claim，平台只理解稳定 code 和投影，不内置具体业务语义。
-- **本地观察**：`npm run capability:list` 查看当前 manifest 清单，`npm run capability:docs` 生成 `docs/generated/capabilities-current.md`，`npm run capability:docs:check` 校验快照是否同步。
+- **本地观察**：`npm run capability:list` 查看 ownership + runtime 组合视图，`npm run capability:docs` 生成唯一快照 `docs/generated/capabilities-current.md`，`npm run capability:docs:check` 校验同步。
 
 新增或合并 capability 代码时，先读：
 
-- [Capability Plugin Rules](docs/common/capability-plugin.rules.md)
-- [Capability Plugin Authoring Guide](docs/common/capability-plugin-authoring.guide.md)
-- [Current Capability Manifest](docs/generated/capabilities-current.md)
+- [Capability Ownership Rules](docs/common/capability-ownership.rules.md)
+- [Capability Runtime Rules](docs/common/capability-runtime.rules.md)
+- [Capability Authoring Guide](docs/common/capability-authoring.guide.md)
+- [Current Capability Projection](docs/generated/capabilities-current.md)
 
 ## 快速开始
 

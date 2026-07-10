@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import type { CapabilityManifest } from '@app-types/common/capability.types';
+import type { CapabilityRuntimeManifest } from '@app-types/common/capability.types';
 import {
-  CapabilityManifestProvider,
+  CapabilityOwnershipProvider,
+  CapabilityRuntimeManifestProvider,
   CapabilitySessionAuthorityScopeAuthorizerProvider,
   CapabilitySessionAuthoritySummaryResolverProvider,
   CapabilitySessionIdentityResolverProvider,
@@ -20,12 +21,28 @@ import type {
 
 export const SESSION_REFERENCE_CAPABILITY_ID = 'reference.session';
 
-export const SESSION_REFERENCE_CAPABILITY_MANIFEST: CapabilityManifest = {
-  id: SESSION_REFERENCE_CAPABILITY_ID,
+@Injectable()
+@CapabilityOwnershipProvider({
+  capabilityId: SESSION_REFERENCE_CAPABILITY_ID,
   kind: 'business',
-  displayName: 'Reference Session Capability',
+  semanticScope: 'Test-only session principal and authority contribution.',
+  owns: ['Reference session principal and authority contribution semantics.'],
+  nonGoals: ['Production session ownership.'],
+  physicalScopes: [
+    { path: 'test/support/capability/session-reference.fixture.ts', role: 'primary' },
+  ],
+  publicSurfaces: [{ status: 'not-required', reason: 'Test-only session fixture.' }],
+  allowedDependencies: [],
+  foundationClassification: 'domain-owned',
+  validationEntrypoints: [
+    'src/infrastructure/capability/capability-session-context.builder.spec.ts',
+  ],
+})
+export class ReferenceSessionCapabilityOwnership {}
+
+export const SESSION_REFERENCE_CAPABILITY_MANIFEST: CapabilityRuntimeManifest = {
+  capabilityId: SESSION_REFERENCE_CAPABILITY_ID,
   version: '0.1.0',
-  processes: ['api'],
   contributions: {
     api: {
       graphqlOperations: [
@@ -56,26 +73,10 @@ export const SESSION_REFERENCE_CAPABILITY_MANIFEST: CapabilityManifest = {
       ],
     },
   },
-  resourceClaims: {
-    claims: [
-      {
-        name: 'reference.client-scope',
-        kind: 'authorizationResource',
-        owner: SESSION_REFERENCE_CAPABILITY_ID,
-        relation: 'owns',
-      },
-      {
-        name: 'reference.resource-manager-policy',
-        kind: 'artifact',
-        owner: SESSION_REFERENCE_CAPABILITY_ID,
-        relation: 'owns',
-      },
-    ],
-  },
 };
 
 @Injectable()
-@CapabilityManifestProvider(SESSION_REFERENCE_CAPABILITY_MANIFEST)
+@CapabilityRuntimeManifestProvider(SESSION_REFERENCE_CAPABILITY_MANIFEST)
 export class ReferenceSessionCapability {}
 
 @Injectable()
@@ -128,6 +129,7 @@ export class ResourceManagerScopeAuthorizer implements CapabilitySessionAuthorit
 }
 
 export const SESSION_REFERENCE_CAPABILITY_PROVIDERS = [
+  ReferenceSessionCapabilityOwnership,
   ReferenceSessionCapability,
   ClientIdentityResolver,
   ResourceManagerSummaryResolver,

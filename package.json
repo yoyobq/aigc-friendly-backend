@@ -1,13 +1,13 @@
 {
   "name": "aigc-friendly-architecture-backend",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "A NestJS backend architecture optimized for AIGC/Copilot scenarios.",
   "author": "",
   "private": true,
   "license": "MIT",
   "scripts": {
     "build": "npm run build:api",
-    "prebuild:api": "node scripts/clean-dist.js",
+    "prebuild:api": "node scripts/clean-dist.js && npm run capability:docs:check",
     "build:api": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "npm run start:api",
@@ -18,8 +18,8 @@
     "start:debug": "TZ=Asia/Shanghai NODE_ENV=development nest start --debug --watch",
     "start:prod": "NODE_ENV=production node dist/bootstraps/api/main",
     "lint:usecase-normalize-guard": "node scripts/check-usecase-normalize-guard.js",
-    "lint": "npm run lint:usecase-normalize-guard && eslint \"{src,apps,libs,test}/**/*.ts\" --cache --cache-location .eslintcache --fix",
-    "typecheck": "tsc -p tsconfig.build.json --noEmit",
+    "lint": "npm run capability:docs:check && npm run lint:usecase-normalize-guard && eslint \"{src,apps,libs,test,scripts}/**/*.ts\" --cache --cache-location .eslintcache --fix",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit && tsc -p tsconfig.tools.json --noEmit",
     "test:unit": "TZ=Asia/Shanghai jest",
     "test:watch": "TZ=Asia/Shanghai jest --watch",
     "test:cov": "TZ=Asia/Shanghai jest --coverage",
@@ -37,9 +37,9 @@
     "ci:baseline-drill": "npm run migration:drill:empty-db",
     "dev:worker": "TZ=Asia/Shanghai NODE_ENV=development ts-node -r tsconfig-paths/register src/bootstraps/worker/main.ts",
     "start:worker": "NODE_ENV=production node dist/bootstraps/worker/main",
-    "capability:list": "TZ=Asia/Shanghai ts-node -r tsconfig-paths/register scripts/capability-list.ts",
-    "capability:docs": "TZ=Asia/Shanghai ts-node -r tsconfig-paths/register scripts/capability-list.ts --format=md --write=docs/generated/capabilities-current.md",
-    "capability:docs:check": "TZ=Asia/Shanghai ts-node -r tsconfig-paths/register scripts/capability-list.ts --format=md --write=docs/generated/capabilities-current.md --check"
+    "capability:list": "TZ=Asia/Shanghai ts-node -r tsconfig-paths/register scripts/capability-list.ts list",
+    "capability:docs": "TZ=Asia/Shanghai ts-node -r tsconfig-paths/register scripts/capability-list.ts docs",
+    "capability:docs:check": "TZ=Asia/Shanghai ts-node -r tsconfig-paths/register scripts/capability-list.ts check"
   },
   "dependencies": {
     "@apollo/server": "^5.5.1",

@@ -25,6 +25,6 @@
       "@app-types/*": ["./src/types/*"]
     }
   },
-  "include": ["src/**/*", "test/**/*", "jest.config.ts"],
+  "include": ["src/**/*", "test/**/*", "scripts/**/*.ts", "jest.config.ts"],
   "exclude": ["node_modules", "dist"]
 }

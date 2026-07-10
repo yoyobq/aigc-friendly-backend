@@ -11,6 +11,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { FieldEncryptionModule } from '@src/infrastructure/field-encryption/field-encryption.module';
 
 import { AccountFieldEncryptionRegistrar } from './account-field-encryption.registrar';
+import { PlatformAccountCapabilityOwnership } from './account.capability';
 import { AccountEntity } from './base/entities/account.entity';
 import { UserInfoEntity } from './base/entities/user-info.entity';
 import { AccountSecurityService } from './base/services/account-security.service';
@@ -30,6 +31,7 @@ export class AccountModule {
         FieldEncryptionModule,
       ],
       providers: [
+        PlatformAccountCapabilityOwnership,
         AccountFieldEncryptionRegistrar,
         AccountService,
         AccountQueryService,

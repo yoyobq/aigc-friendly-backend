@@ -31,7 +31,7 @@ import {
 import { CapabilityBootstrapCheck } from './capability-bootstrap-check';
 import {
   CapabilityEventSubscriberProvider,
-  CapabilityManifestProvider,
+  CapabilityRuntimeManifestProvider,
   CapabilityOperationHandlerProvider,
   CapabilityQueueBindingProvider,
 } from './capability.decorators';
@@ -40,12 +40,9 @@ import { CapabilityModule } from './capability.module';
 describe('CapabilityDispatcher', () => {
   it('dispatches command and query handlers with inherited request context', async () => {
     @Injectable()
-    @CapabilityManifestProvider({
-      id: 'test.dispatch',
-      kind: 'business',
-      displayName: 'Test Dispatch',
+    @CapabilityRuntimeManifestProvider({
+      capabilityId: 'test.dispatch',
       version: '0.1.0',
-      processes: ['api'],
       operations: {
         commands: [
           {
@@ -170,12 +167,9 @@ describe('CapabilityDispatcher', () => {
 
   it('returns permission denied before invoking the handler', async () => {
     @Injectable()
-    @CapabilityManifestProvider({
-      id: 'test.permission',
-      kind: 'business',
-      displayName: 'Test Permission',
+    @CapabilityRuntimeManifestProvider({
+      capabilityId: 'test.permission',
       version: '0.1.0',
-      processes: ['api'],
       operations: {
         commands: [
           {
@@ -234,12 +228,9 @@ describe('CapabilityDispatcher', () => {
 
   it('folds thrown DomainError into CapabilityError', async () => {
     @Injectable()
-    @CapabilityManifestProvider({
-      id: 'test.domain-error',
-      kind: 'business',
-      displayName: 'Test Domain Error',
+    @CapabilityRuntimeManifestProvider({
+      capabilityId: 'test.domain-error',
       version: '0.1.0',
-      processes: ['api'],
       operations: {
         commands: [
           {
@@ -292,12 +283,9 @@ describe('CapabilityDispatcher', () => {
 
   it('enqueues queue transport commands through BullMQ producer', async () => {
     @Injectable()
-    @CapabilityManifestProvider({
-      id: 'test.queue-dispatch',
-      kind: 'technical',
-      displayName: 'Test Queue Dispatch',
+    @CapabilityRuntimeManifestProvider({
+      capabilityId: 'test.queue-dispatch',
       version: '0.1.0',
-      processes: ['api'],
       operations: {
         commands: [
           {
@@ -378,12 +366,9 @@ describe('CapabilityDispatcher', () => {
 
   it('consumes queued commands by invoking the worker-local handler', async () => {
     @Injectable()
-    @CapabilityManifestProvider({
-      id: 'test.queue-consume',
-      kind: 'business',
-      displayName: 'Test Queue Consume',
+    @CapabilityRuntimeManifestProvider({
+      capabilityId: 'test.queue-consume',
       version: '0.1.0',
-      processes: ['worker'],
       operations: {
         commands: [
           {
@@ -467,12 +452,9 @@ describe('CapabilityDispatcher', () => {
 
   it('publishes in-process events without bubbling subscriber failures', async () => {
     @Injectable()
-    @CapabilityManifestProvider({
-      id: 'test.event-runtime',
-      kind: 'business',
-      displayName: 'Test Event Runtime',
+    @CapabilityRuntimeManifestProvider({
+      capabilityId: 'test.event-runtime',
       version: '0.1.0',
-      processes: ['api'],
       operations: {
         events: [{ kind: 'event', name: 'published', eventType: 'fact' }],
       },
@@ -519,12 +501,9 @@ describe('CapabilityDispatcher', () => {
 
   it('returns disabled result when publishing event for disabled capability', async () => {
     @Injectable()
-    @CapabilityManifestProvider({
-      id: 'test.event-disabled',
-      kind: 'business',
-      displayName: 'Test Event Disabled',
+    @CapabilityRuntimeManifestProvider({
+      capabilityId: 'test.event-disabled',
       version: '0.1.0',
-      processes: ['api'],
       runtime: { defaultState: 'disabled' },
       operations: {
         events: [{ kind: 'event', name: 'published', eventType: 'fact' }],

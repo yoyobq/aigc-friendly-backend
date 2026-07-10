@@ -7,6 +7,7 @@ import { VerificationRecordQueryService } from './queries/verification-record.qu
 import { VerificationRecordReadRepository } from './repositories/verification-record.read.repo';
 import { VerificationRecordEntity } from './verification-record.entity';
 import { VerificationRecordService } from './verification-record.service';
+import { VerificationRecordCapabilityOwnership } from './verification-record.capability';
 
 /**
  * 验证记录模块
@@ -15,6 +16,7 @@ import { VerificationRecordService } from './verification-record.service';
 @Module({
   imports: [TypeOrmModule.forFeature([VerificationRecordEntity])],
   providers: [
+    VerificationRecordCapabilityOwnership,
     VerificationRecordService,
     VerificationRecordReadRepository,
     VerificationReadQueryService,

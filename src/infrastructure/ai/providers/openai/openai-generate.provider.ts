@@ -11,6 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   CapabilityHealthCheckProvider,
   CapabilityProviderBindingProvider,
+  CapabilityRuntimeManifestProvider,
 } from '@src/infrastructure/capability/capability.decorators';
 import axios from 'axios';
 import { createHash } from 'node:crypto';
@@ -31,6 +32,14 @@ interface OpenAiChatCompletionResponse {
 }
 
 @Injectable()
+@CapabilityRuntimeManifestProvider({
+  capabilityId: 'ai.openai',
+  version: '0.1.0',
+  runtime: { healthCheck: true },
+  contributions: {
+    providers: [{ providerKind: 'ai.provider', providerName: 'openai' }],
+  },
+})
 @CapabilityProviderBindingProvider({
   capabilityId: 'ai.openai',
   providerKind: 'ai.provider',

@@ -2,18 +2,44 @@
 import { Injectable } from '@nestjs/common';
 import { BULLMQ_JOBS, BULLMQ_QUEUES } from '@src/infrastructure/bullmq/bullmq.constants';
 import {
-  CapabilityManifestProvider,
+  CapabilityOwnershipProvider,
   CapabilityQueueBindingProvider,
+  CapabilityRuntimeManifestProvider,
 } from '@src/infrastructure/capability/capability.decorators';
-import { AI_PROVIDER_KIND, AI_QUEUE_CAPABILITY_ID } from './ai-capability.constants';
+import {
+  AI_LOCAL_MOCK_CAPABILITY_ID,
+  AI_OPENAI_CAPABILITY_ID,
+  AI_QUEUE_CAPABILITY_ID,
+  AI_QWEN_CAPABILITY_ID,
+} from './ai-capability.constants';
 
 @Injectable()
-@CapabilityManifestProvider({
-  id: AI_QUEUE_CAPABILITY_ID,
+@CapabilityOwnershipProvider({
+  capabilityId: AI_QUEUE_CAPABILITY_ID,
   kind: 'technical',
-  displayName: 'AI Queue',
+  semanticScope: 'Admission and transport of AI generate, embed, and workflow queue jobs.',
+  owns: ['AI generate, embed and workflow queue admission and transport.'],
+  nonGoals: ['AI provider execution.', 'AI workflow state.'],
+  physicalScopes: [
+    { path: 'src/modules/common/ai-queue', role: 'primary' },
+    { path: 'src/usecases/ai-queue', role: 'primary' },
+    {
+      path: 'src/modules/common/ai-capability',
+      role: 'shared-implementation',
+      reason: 'Shared ownership and runtime declaration assembly for AI queue and providers.',
+    },
+  ],
+  publicSurfaces: [{ status: 'present', path: 'src/modules/common/ai-queue/ai-queue.types.ts' }],
+  allowedDependencies: ['platform.async-task-audit'],
+  foundationClassification: 'shared-technical-foundation',
+  validationEntrypoints: ['test/08-qm-worker/ai-graphql-queue.e2e-spec.ts'],
+})
+export class AiQueueCapabilityOwnership {}
+
+@Injectable()
+@CapabilityRuntimeManifestProvider({
+  capabilityId: AI_QUEUE_CAPABILITY_ID,
   version: '0.1.0',
-  processes: ['api', 'worker'],
   contributions: {
     queues: [
       {
@@ -40,7 +66,7 @@ import { AI_PROVIDER_KIND, AI_QUEUE_CAPABILITY_ID } from './ai-capability.consta
     ],
   },
 })
-export class AiQueueCapabilityDeclaration {}
+export class AiQueueRuntimeManifest {}
 
 @Injectable()
 @CapabilityQueueBindingProvider({
@@ -76,43 +102,82 @@ export class AiQueueEmbedBindingDeclaration {}
 export class AiQueueWorkflowBindingDeclaration {}
 
 @Injectable()
-@CapabilityManifestProvider({
-  id: 'ai.local-mock',
+@CapabilityOwnershipProvider({
+  capabilityId: AI_LOCAL_MOCK_CAPABILITY_ID,
   kind: 'technical',
-  displayName: 'AI Local Mock Provider',
-  version: '0.1.0',
-  processes: ['worker'],
-  runtime: { healthCheck: true },
-  contributions: {
-    providers: [{ providerKind: AI_PROVIDER_KIND, providerName: 'mock' }],
-  },
+  semanticScope: 'Deterministic local AI provider implementation for non-live execution.',
+  owns: ['Mock AI provider binding and health lifecycle.'],
+  nonGoals: ['AI queue ownership.', 'AI workflow ownership.'],
+  physicalScopes: [
+    { path: 'src/infrastructure/ai/providers/local', role: 'primary' },
+    {
+      path: 'src/modules/common/ai-capability',
+      role: 'shared-implementation',
+      reason: 'Shared ownership declaration assembly for AI providers.',
+    },
+  ],
+  publicSurfaces: [
+    {
+      status: 'not-required',
+      reason: 'Consumers select the provider through the AI provider registry.',
+    },
+  ],
+  allowedDependencies: [],
+  foundationClassification: 'shared-technical-foundation',
+  validationEntrypoints: ['test/08-qm-worker/ai-worker-consume-persistence.e2e-spec.ts'],
 })
-export class AiLocalMockCapabilityDeclaration {}
+export class AiLocalMockCapabilityOwnership {}
 
 @Injectable()
-@CapabilityManifestProvider({
-  id: 'ai.openai',
+@CapabilityOwnershipProvider({
+  capabilityId: AI_OPENAI_CAPABILITY_ID,
   kind: 'technical',
-  displayName: 'OpenAI Provider',
-  version: '0.1.0',
-  processes: ['worker'],
-  runtime: { healthCheck: true },
-  contributions: {
-    providers: [{ providerKind: AI_PROVIDER_KIND, providerName: 'openai' }],
-  },
+  semanticScope: 'OpenAI provider configuration, invocation binding, and health reporting.',
+  owns: ['OpenAI provider binding, configuration and health lifecycle.'],
+  nonGoals: ['AI queue ownership.', 'AI workflow ownership.'],
+  physicalScopes: [
+    { path: 'src/infrastructure/ai/providers/openai', role: 'primary' },
+    {
+      path: 'src/modules/common/ai-capability',
+      role: 'shared-implementation',
+      reason: 'Shared ownership declaration assembly for AI providers.',
+    },
+  ],
+  publicSurfaces: [
+    {
+      status: 'not-required',
+      reason: 'Consumers select the provider through the AI provider registry.',
+    },
+  ],
+  allowedDependencies: [],
+  foundationClassification: 'shared-technical-foundation',
+  validationEntrypoints: ['test/99-third-party-live-smoke/ai-qwen-generate-real.e2e-spec.ts'],
 })
-export class AiOpenAiCapabilityDeclaration {}
+export class AiOpenAiCapabilityOwnership {}
 
 @Injectable()
-@CapabilityManifestProvider({
-  id: 'ai.qwen',
+@CapabilityOwnershipProvider({
+  capabilityId: AI_QWEN_CAPABILITY_ID,
   kind: 'technical',
-  displayName: 'Qwen Provider',
-  version: '0.1.0',
-  processes: ['worker'],
-  runtime: { healthCheck: true },
-  contributions: {
-    providers: [{ providerKind: AI_PROVIDER_KIND, providerName: 'qwen' }],
-  },
+  semanticScope: 'Qwen provider configuration, invocation binding, and health reporting.',
+  owns: ['Qwen provider binding, configuration and health lifecycle.'],
+  nonGoals: ['AI queue ownership.', 'AI workflow ownership.'],
+  physicalScopes: [
+    { path: 'src/infrastructure/ai/providers/qwen', role: 'primary' },
+    {
+      path: 'src/modules/common/ai-capability',
+      role: 'shared-implementation',
+      reason: 'Shared ownership declaration assembly for AI providers.',
+    },
+  ],
+  publicSurfaces: [
+    {
+      status: 'not-required',
+      reason: 'Consumers select the provider through the AI provider registry.',
+    },
+  ],
+  allowedDependencies: [],
+  foundationClassification: 'shared-technical-foundation',
+  validationEntrypoints: ['test/99-third-party-live-smoke/ai-qwen-generate-real.e2e-spec.ts'],
 })
-export class AiQwenCapabilityDeclaration {}
+export class AiQwenCapabilityOwnership {}

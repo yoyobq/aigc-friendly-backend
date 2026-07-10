@@ -10,10 +10,9 @@
 
 ## 已归档计划
 
-- [Capability Plugin Plan](./capability-plugin-plan.md)：已完成，稳定规则已沉淀到
-  `docs/common/capability-plugin.rules.md`；未完成尾项继续在
-  `plans/capability-plugin-followup.md` 跟踪。`plans/capability-plugin-direction.md`
-  保留为方向背景，不作为稳定规则真源。
+- [Capability Plugin Plan](./capability-plugin-plan.md)：v1.4 历史实现计划。当前稳定规则见
+  `docs/common/capability-ownership.rules.md` 与 `docs/common/capability-runtime.rules.md`；
+  `plans/capability-plugin-direction.md` 仅保留兼容入口，不作为规则真源。
 - [AI Workflow 基线补强计划](./ai-workflow-baseline-plan.md)：已完成，稳定规则已沉淀到
   `docs/common/ai-task-lifecycle-audit.rules.md`、`docs/common/queue-identifiers.rules.md`、
   `docs/worker/qm-worker-integration.rules.md`、`docs/worker/worker-adapter.rules.md` 和

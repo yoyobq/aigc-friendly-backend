@@ -23,10 +23,6 @@ import { ConfigCapabilityPermissionChecker } from './config-capability-permissio
 import { ConfigCapabilityRuntimeStateReader } from './config-capability-runtime-state.reader';
 import { InProcessCapabilityEventPublisher } from './in-process-capability-event.publisher';
 import { CAPABILITY_PROCESS, CapabilityRegistry } from './capability.registry';
-import {
-  PlatformAccountCapabilityDeclaration,
-  PlatformAuthCapabilityDeclaration,
-} from './platform-capability.declarations';
 
 export interface CapabilityModuleOptions {
   readonly process: CapabilityProcess;
@@ -90,8 +86,6 @@ export class CapabilityModule {
           provide: CAPABILITY_SESSION_CONTEXT_BUILDER,
           useExisting: RegistryCapabilitySessionContextBuilder,
         },
-        PlatformAccountCapabilityDeclaration,
-        PlatformAuthCapabilityDeclaration,
       ],
       exports: [
         CapabilityRegistry,

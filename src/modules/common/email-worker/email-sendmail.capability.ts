@@ -7,6 +7,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   CapabilityHealthCheckProvider,
   CapabilityProviderBindingProvider,
+  CapabilityRuntimeManifestProvider,
 } from '@src/infrastructure/capability/capability.decorators';
 import {
   EMAIL_DELIVERY_PROVIDER_KIND,
@@ -16,6 +17,20 @@ import {
 import { EMAIL_DELIVERY_OPTIONS, type EmailDeliveryOptions } from './email-worker.options';
 
 @Injectable()
+@CapabilityRuntimeManifestProvider({
+  capabilityId: NOTIFICATION_EMAIL_SENDMAIL_CAPABILITY_ID,
+  version: '0.1.0',
+  runtimeDependencies: [{ capabilityId: 'notification.email', mode: 'required' }],
+  runtime: { healthCheck: true },
+  contributions: {
+    providers: [
+      {
+        providerKind: EMAIL_DELIVERY_PROVIDER_KIND,
+        providerName: EMAIL_SENDMAIL_PROVIDER_NAME,
+      },
+    ],
+  },
+})
 @CapabilityProviderBindingProvider({
   capabilityId: NOTIFICATION_EMAIL_SENDMAIL_CAPABILITY_ID,
   providerKind: EMAIL_DELIVERY_PROVIDER_KIND,
