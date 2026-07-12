@@ -21,6 +21,9 @@ For layer-owned boundary contract naming, see docs/common/boundary-contract.rule
 - 稳定上收。
   稳定且跨域复用的类型才进入 `src/types`。
   同域多层共享但未跨域的稳定类型放在 bounded context 根类型文件。
+  例外：需要被 GraphQL DTO / schema registry 作为运行时 enum 值使用的领域 enum，若不是
+  GraphQL 专用展示 enum，应放入 framework-free 的 `src/types`，因为 adapter 不能对 module 根
+  `*.types.ts` 做值导入。
 - 分层一致。
   type 的依赖方向必须服从项目分层规则。
 - 先可演进后抽象。
@@ -30,7 +33,7 @@ For layer-owned boundary contract naming, see docs/common/boundary-contract.rule
 
 ### L1：全局共享类型（`src/types`）
 
-适用条件（必须同时满足）：
+默认适用条件（必须同时满足）：
 
 - 跨 2 个及以上 bounded context 复用。
 - 语义稳定。
@@ -38,10 +41,16 @@ For layer-owned boundary contract naming, see docs/common/boundary-contract.rule
 - 不含 adapter 细节。
   例如 GraphQL 装饰器、HTTP 协议字段。
 
+补充适用条件：
+
+- 领域 enum 虽然当前只属于单个 bounded context，但 GraphQL DTO / schema registry 需要以运行时
+  enum 值引用，且 adapter 不能从 module 根 `*.types.ts` 值导入时，也归入 `src/types`。
+
 典型内容：
 
 - 领域 enum。
   如账户状态、身份、验证记录类型。
+- 需要由 GraphQL adapter 运行时注册或装饰器引用的 framework-free 领域 enum。
 - 跨层输入输出契约。
   不绑定框架。
 - 通用响应结构与安全可复用类型。
@@ -75,16 +84,21 @@ For layer-owned boundary contract naming, see docs/common/boundary-contract.rule
 - `src/modules/**/**.types.ts`
 - `src/core/**/**.types.ts`
 
-### L4：适配层类型（GraphQL DTO / 输入输出）
+### L4：适配层类型（GraphQL / HTTP DTO 与协议输入输出）
 
 规则：
 
-- 仅放在 `src/adapters/api/graphql/**/dto`。
-  或同层语义目录。
+- 本仓库架构术语中的 `DTO` 专指 adapter-owned transport shape。下层的 View、ReadModel、
+  Record snapshot、usecase Result / summary 或稳定 data shape 不称为 DTO。
+- 仅放在对应 adapter 协议目录，例如 `src/adapters/api/graphql/**/dto` 或
+  `src/adapters/api/http/**` 的同层语义目录。
 - 不进入 `src/types`。
 - 不作为领域模型向下游传播。
 - 不与 ORM Entity 合并。
 - GraphQL decorator 只能出现在 adapter 层 DTO / Args / Input / Result 类型中。
+- `Input` / `Result` 词本身不是 adapter 专属：framework-free 的 usecase-owned Input / flow
+  Result 可以留在 usecase；只有 adapter 协议 shape 或携带协议 decorator 的 Input / Result
+  属于本节的 adapter 类型。
 
 典型内容：
 
@@ -96,9 +110,19 @@ For layer-owned boundary contract naming, see docs/common/boundary-contract.rule
 
 ### 3.1 领域 enum
 
-- 业务状态、角色、流程类型等领域 enum 放在 `src/types`。
-  也可放在 `core` 的纯领域位置。
+- 跨 bounded context 复用，或需要由 GraphQL DTO / schema registry 作为运行时值使用的领域 enum，
+  canonical source 必须放在 framework-free 的 `src/types`。
+- 只有完全属于 Core 内部纯领域规则、不需要被 adapter 作为运行时值引用、也不作为跨域共享契约的
+  enum，才可放在 `core`。
+- 仅在同一 bounded context 内共享且不需要 GraphQL runtime 引用的 enum，按 L2/L3 规则留在
+  bounded context 根类型文件或领域内局部位置。
 - 在 GraphQL 侧通过集中注册暴露。
+- 同一 bounded context 内共享、但需要 GraphQL DTO 或 `enum.registry.ts` 以运行时值引用的领域
+  enum，也应放在 `src/types` 并通过 `@app-types/*` 导入。
+  不要为了 GraphQL 暴露在 adapter 层维护同义 `Gql*` 副本，也不要让 adapter 对
+  `src/modules/<bounded-context>/<bounded-context>.types.ts` 做值导入。
+- 若 module 内代码希望继续从 bounded context 根类型入口使用该 enum，该根类型文件可以从
+  `@app-types/*` re-export；canonical source 仍是 `src/types`。
 - 禁止在业务目录分散注册。
 
 ### 3.2 GraphQL 专用 enum
@@ -106,6 +130,7 @@ For layer-owned boundary contract naming, see docs/common/boundary-contract.rule
 - 仅 GraphQL 展示语义的 enum 保留在 adapter 层。
   如分页模式。
 - 统一在 `src/adapters/api/graphql/schema/enum.registry.ts` 注册。
+- GraphQL 专用 enum 只表达协议展示语义，不得复制已有领域 enum 的业务值域。
 
 ### 3.3 禁止项
 
@@ -131,6 +156,9 @@ For layer-owned boundary contract naming, see docs/common/boundary-contract.rule
 - 同域上游（含 adapters / usecases）若需复用该类类型，只允许 `import type` 或纯类型 import
   此 bounded context 根公共类型文件；该规则不允许 adapters import modules 的 service、
   QueryService、Entity、局部 `queries/*.types.ts`，也不允许任何值导入。
+- adapters 若需要 enum 运行时值用于 `@Field(() => Enum)`、`@IsEnum(Enum)` 或
+  `registerEnumType(Enum)`，该 enum 的 canonical source 必须是 adapter 允许值导入的位置，
+  优先使用 `@app-types/*` 的 `src/types`。不得从 module 根 `*.types.ts` 值导入。
 - 禁止为了复用类型跨层 import 下层实现文件。
   例如 adapters 不得从 modules 的 `*.service.ts`、`*.query.service.ts`、局部 `queries/*.types.ts` 借类型。
 - 禁止 usecase 为声明事务上下文类型而从 modules service / QueryService 实现文件、
@@ -161,14 +189,16 @@ For layer-owned boundary contract naming, see docs/common/boundary-contract.rule
 
 新增类型前必须通过以下检查。
 
-- 是否跨域复用。
-  若否，放本地 colocate。
-- 是否只是同域多层共享。
-  若是，放 `src/modules/<bounded-context>/<bounded-context>.types.ts`。
-- 是否稳定。
-  若否，放本地 colocate。
 - 是否含 GraphQL / HTTP / ORM 细节。
   若是，禁止入 `src/types`。
+- 是否稳定。
+  若否，放本地 colocate。
+- 是否是 GraphQL-exposed 领域 enum，且 adapter 需要运行时值。
+  若是，放 `src/types`，保持 framework-free，并通过 `@app-types/*` 使用。
+- 是否跨域复用。
+  若是，放 `src/types`。
+- 是否只是同域多层共享。
+  若是，放 `src/modules/<bounded-context>/<bounded-context>.types.ts`。
 - 是否已有同义类型。
   若是，先合并再新增。
 - 是否会引入反向依赖。
@@ -176,7 +206,8 @@ For layer-owned boundary contract naming, see docs/common/boundary-contract.rule
 - 是否只是为了复用类型而让上层 import 下层实现文件。
   若是，应改为上收到 `src/types`、提升到 bounded context 根类型文件，或留在本层局部使用。
 
-全部满足才可进入 `src/types`。
+满足“跨域稳定共享”或“GraphQL runtime 领域 enum 例外”，且不违反 framework-free /
+依赖方向约束时，才可进入 `src/types`。
 
 ## 6. 命名与文件组织
 
@@ -226,6 +257,8 @@ For layer-owned boundary contract naming, see docs/common/boundary-contract.rule
 - 优先清理重复排序 enum。
   保留单一来源。
 - 将同域共享的稳定 View / contract 收敛到 bounded context 根 `*.types.ts`。
+- 将需要 GraphQL runtime 使用的领域 enum 收敛到 `src/types`；module 根类型文件如需保留入口，
+  只做 re-export，不维护第二份 enum。
 - 保持 GraphQL 枚举集中注册。
 - 不在 resolver 分散注册。
 - 将 type 选址规则纳入 PR 模板与团队约定。

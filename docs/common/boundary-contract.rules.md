@@ -11,7 +11,7 @@ Source of truth: This file defines boundary contract naming and shared vocabular
 
 - Boundary contract 是某一层拥有的依赖边界模式，不是独立分层。
 - Port 是架构讨论中的同类概念词，不是本仓库新增文件命名约定。
-- 新增边界文件默认使用 `*.contract.ts`。
+- 新增 boundary contract 文件必须使用 `*.contract.ts`。
 - 不新增 `*.port.ts` / `*.ports.ts` 文件，也不建立全局 boundary contract 层或
   `ports` 层。
 
@@ -23,7 +23,15 @@ Source of truth: This file defines boundary contract naming and shared vocabular
 - Module-owned boundary contract：只在模块需要隔离可替换 infrastructure 实现时使用。
 - Infrastructure 只实现或适配 boundary contract，不拥有业务决策。
 
-归属跟随“谁拥有需要该能力的决策”，而不是跟随实现所在位置。
+归属跟随“谁拥有需要该能力的决策”，而不是跟随实现所在位置。Infrastructure 实现或绑定
+contract 不会转移该 contract 的 ownership。
+
+Infrastructure 只有在实际实现或 DI wiring 某个上层 contract 时，才获得一个窄的依赖反转
+例外：允许 import 被实现的 `*.contract.ts`、其中的 token，以及 contract 签名直接引用
+的最小 framework-free 类型。该例外不允许 infrastructure import owning layer 的实现文件、
+module、service、QueryService、helper、barrel 或场景局部类型。对于新增跨层边界，
+`*.contract.ts` 后缀是识别 boundary contract 的必要条件，不是获得跨层访问权的充分条件；
+已有 legacy interface 仅可在对应规则明确列出时维持现状，不构成新增例外。
 
 ## 命名与位置
 

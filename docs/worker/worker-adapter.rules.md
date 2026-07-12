@@ -58,7 +58,8 @@ Source of truth: This file defines worker adapter rules; code examples elsewhere
 - 允许 worker-adapters -> adapters-common。
   例如通用装饰器、schema 工具、mapper 工具。
 - 允许 worker-adapters -> adapter-local runtime payload definitions。
-  仅限队列协议适配；跨入 Usecase 的类型必须是显式 Command / Input / RuntimeContext。
+  仅限队列协议适配；跨入 Usecase 的类型必须是显式 Command / Input / RuntimeContext，不能以
+  adapter DTO、BullMQ Job 或 queue payload 作为业务输入真源。
 - Worker Adapter 不得从 infrastructure 导入 queue 常量或 runtime contract；适配层在本地声明协议视图，
   由 topology validation 与行为测试和 infrastructure 注册真源对账。
 - 禁止 worker-adapters -> modules(service) / infrastructure。

@@ -36,7 +36,7 @@ Source of truth: This file defines aggregate write boundaries; examples elsewher
 
 - 聚合根 service 内部写自己的子实体。
 - 聚合根 usecase 显式调用聚合根 service 写自己的子实体。
-- QueryService 只读子实体并返回 View / DTO。
+- QueryService 只读子实体并返回 View、ReadModel 或 Record snapshot；协议 DTO 由 adapter 映射。
 - migration、baseline、受控修复脚本按数据库交付规则写表。
 
 ## Account / UserInfo 当前稳定边界

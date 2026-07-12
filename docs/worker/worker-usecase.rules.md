@@ -20,7 +20,13 @@ For precedence, see docs/common/rule-precedence.rules.md.
 
 ## 输入契约
 
-- 输入必须为显式 Command / DTO / Context。
+- 输入必须为显式 Command / Input / RuntimeContext。
+- Worker Usecase 不接收 adapter DTO、queue runtime payload 或 BullMQ 类型；adapter 必须先完成
+  协议到上述显式输入的映射。
+- Command 表示一次显式业务意图；Input 表示 Usecase 稳定接收的字段集合；RuntimeContext 只表示
+  attempts、timestamps、identifiers 等运行时技术上下文，不得替代业务参数。
+- `Command` / `Input` / `RuntimeContext` 是 Usecase-owned framework-free contract，不以 adapter
+  DTO、BullMQ Job 或 queue payload registry 作为类型真源。
 - 不得透传 runtime 原始对象。
 - 所需业务字段必须显式传参。
 - 禁止在 Usecase 内反查 runtime 对象补齐字段。
@@ -61,6 +67,7 @@ For precedence, see docs/common/rule-precedence.rules.md.
 ## 禁止内容
 
 - 在 Usecase 中拼装 Adapter 输出模型或承载协议层映射逻辑。
+- 将 adapter DTO、BullMQ Job、queue payload contract 或 runtime event type 作为 Usecase 输入真源。
 - 以获取某个 Service 为目的绕道依赖跨域 Usecase。
 - 在 Usecase 中引入 BullMQ runtime 语义分支。
   例如按 Job 原始字段格式分支。

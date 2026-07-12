@@ -72,7 +72,8 @@ Global error contract: Every GraphQL interface must also follow docs/api/graphql
 
 ## DTO 语义规范
 
-- DTO：输出对象或领域对外视图。
+- DTO：adapter-owned 的协议输入输出 shape，不是领域 View、ReadModel、Record snapshot 或
+  Usecase Result 的真源。Adapter 可把这些下层稳定结果薄映射为 DTO。
   例如 UserInfoDTO、AccountResponse。
 - Input：写入或筛选输入。
   例如 CreateAccountInput、UpdateAccountInput。
@@ -80,6 +81,8 @@ Global error contract: Every GraphQL interface must also follow docs/api/graphql
   例如 AccountArgs、AccountsArgs。
 - List：列表与分页响应。
   例如 AccountsListResponse、UsersListResponse。
+- Result：可指 GraphQL / HTTP 的 adapter transport Result，也可指 usecase-owned 流程 Result；
+  归属由所在层和是否携带协议细节决定，不能仅凭后缀判断。
 
 ## GraphQL Schema 组织
 
@@ -87,7 +90,10 @@ Global error contract: Every GraphQL interface must also follow docs/api/graphql
 - 重复调用只警告，不重复注册。
 - 枚举与标量集中注册。
 - 避免分散在 DTO 或 Resolver 文件中。
-- GraphQL enums 仅定义，注册统一走 enum.registry.ts。
+- 领域 enum 的 GraphQL 暴露使用 canonical source，不在 adapter DTO 中维护同义副本。
+  若 DTO 装饰器、`@IsEnum` 或 `enum.registry.ts` 需要运行时 enum 值，该值应来自
+  `@app-types/*` 或 adapter 本层的 GraphQL 专用 enum，不能来自 module 根 `*.types.ts`。
+- GraphQL 专用 enum 可以定义在 adapter 层；注册仍统一走 `enum.registry.ts`。
 
 ## 全局 GraphQL 错误契约
 

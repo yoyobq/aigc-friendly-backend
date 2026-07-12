@@ -39,7 +39,7 @@ Source of truth: This file defines Entity purity rules; examples elsewhere must 
 ## GraphQL DTO 放置
 
 - GraphQL `ObjectType`、`InputType`、`ArgsType` 只能放在 `src/adapters/api/graphql/**`。
-- GraphQL DTO 可以薄映射 usecase 返回的 View / DTO。
+- GraphQL DTO 可以薄映射 usecase 返回的稳定 View、ReadModel、Record snapshot 或流程 Result。
 - GraphQL DTO 不得向下游 usecase、modules(service)、core、infrastructure 传播。
 - GraphQL enum 注册继续走 adapter schema 初始化规则。
 
@@ -49,7 +49,8 @@ Source of truth: This file defines Entity purity rules; examples elsewhere must 
 - usecases 对外不得返回 ORM Entity。
 - QueryService 对外不得返回 ORM Entity。
 - modules(service) 对上游不得返回 ORM Entity，除非调用方是同一模块内部私有 helper。
-- 对外输出必须是 View、DTO、Record snapshot 或明确的 contract type。
+- modules / QueryService 对上游输出必须是 View、ReadModel、Record snapshot 或明确的稳定
+  data shape；usecase 也可返回其流程专属 Result / summary。DTO 只由 adapter 创建。
 
 ## 迁移规则
 
@@ -67,5 +68,5 @@ Source of truth: This file defines Entity purity rules; examples elsewhere must 
 - Entity 文件是否 import 了 adapter 或 GraphQL 包。
 - Entity class 是否出现非 TypeORM 装饰器。
 - Resolver / Controller 是否直接返回 Entity。
-- DTO 是否被下游层 import。
-- View / DTO 与 Entity 是否保持清晰分离。
+- Adapter DTO 是否被下游层 import。
+- View / ReadModel / Result / DTO 与 Entity 是否保持清晰分离，且 DTO 是否只存在于 adapter。

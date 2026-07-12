@@ -13,7 +13,8 @@ For boundary contract naming, see docs/common/boundary-contract.rules.md.
 - Modules(service) 承载同域内可复用的读写服务。
   通过 DI 承接 infrastructure 实现。
 - Modules(service) 聚焦单一 bounded context 的能力复用，不做跨域编排。
-- Modules(service) 对上游提供 DTO、View、Record snapshot 或只读模型，不直接暴露 ORM Entity。
+- Modules(service) 对上游提供 View、ReadModel、Record snapshot 或明确的稳定 data shape，
+  不直接暴露 ORM Entity，也不创建 adapter-owned DTO。
 - `src/modules/common/*` 属于 Modules(service) 体系内的受限共享层。
   用于承载横切、稳定、非业务专属的通用能力。
   例如安全辅助、分页、邮件发送、队列网关封装、通用 worker/provider registry。
@@ -24,7 +25,7 @@ For boundary contract naming, see docs/common/boundary-contract.rules.md.
 - ORM Entity 与 Repository 的内部使用与封装。
 - 接收 usecase 传入的 `PersistenceTransactionContext`，并在同一事务内执行细粒度写入。
 - QueryService 归属 modules(service)。
-  只读与规范化输出在此完成。
+  只读与读侧输出整形在此完成。
 - 与 core-owned boundary contract 交互的同域适配逻辑。
 - 通用能力模块化。
   通过 DI token 绑定 infrastructure 实现。
@@ -114,8 +115,8 @@ For boundary contract naming, see docs/common/boundary-contract.rules.md.
 - 读接口优先集合化。
   当单个读取与多个读取语义相同时，优先提供 `listByIds({ ids })` / `findByKeys({ keys })`
   这类批量入口；单个值作为 `[id]` / `[key]` 调用同一逻辑，避免维护两套重复查询口径。
-- 输出规范化。
-  对外输出去敏感字段的 View、DTO 或 Record snapshot。
+- 读侧输出整形。
+  对外输出去敏感字段的 View、ReadModel 或 Record snapshot；协议 DTO 由 adapter 映射。
 
 ## Account / UserInfo 当前稳定边界
 
