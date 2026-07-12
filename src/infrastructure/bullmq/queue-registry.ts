@@ -62,11 +62,11 @@ export const BULLMQ_QUEUE_REGISTRY: Readonly<Record<BullMqQueueName, BullMqQueue
       shutdownGraceMs: 12000,
     },
   },
-  [BULLMQ_QUEUES.CAPABILITY]: {
-    queueName: BULLMQ_QUEUES.CAPABILITY,
+  [BULLMQ_QUEUES.AI_WORKFLOW]: {
+    queueName: BULLMQ_QUEUES.AI_WORKFLOW,
     defaultJobOptions: {
       attempts: 3,
-      backoff: { type: 'exponential', delay: 1000 },
+      backoff: { type: 'exponential', delay: 1500 },
       removeOnComplete: 200,
       removeOnFail: 1000,
     },

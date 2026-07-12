@@ -18,10 +18,8 @@ import type { TransactionRunner } from '@src/usecases/common/ports/transaction-r
 import type { AiWorkflowHandlerRegistry } from './ai-workflow-handler.registry';
 import type { AiWorkflowHandler } from './ai-workflow-handler.types';
 import { AiWorkflowNonRetryableError } from './ai-workflow-worker-errors';
-import {
-  ConsumeAiWorkflowJobUsecase,
-  type ConsumeAiWorkflowJobProcessInput,
-} from './consume-ai-workflow-job.usecase';
+import { ConsumeAiWorkflowJobUsecase } from './consume-ai-workflow-job.usecase';
+import type { ConsumeAiWorkflowJobProcessInput } from './consume-ai-workflow-job.types';
 
 type AiWorkflowContextServiceMock = {
   readonly findByWorkflowId: jest.Mock<Promise<AiWorkflowContextView | null>>;

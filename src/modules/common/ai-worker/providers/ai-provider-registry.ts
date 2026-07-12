@@ -2,8 +2,9 @@
 import { DomainError, THIRDPARTY_ERROR } from '@core/common/errors/domain-error';
 import { Inject, Injectable } from '@nestjs/common';
 import type { AiProviderClient } from '@core/ai/ai-provider.interface';
-import { CapabilityRegistry } from '@src/infrastructure/capability/capability.registry';
-import { AI_PROVIDER_KIND } from '../../ai-capability/ai-capability.constants';
+import { LocalMockAiProvider } from '@src/infrastructure/ai/providers/local/local-mock-ai.provider';
+import { OpenAiGenerateProvider } from '@src/infrastructure/ai/providers/openai/openai-generate.provider';
+import { QwenGenerateProvider } from '@src/infrastructure/ai/providers/qwen/qwen-generate.provider';
 import { AI_PROVIDER_REGISTRY_OPTIONS, type AiProviderRegistryOptions } from '../ai-worker.options';
 
 @Injectable()
@@ -11,7 +12,9 @@ export class AiProviderRegistry {
   constructor(
     @Inject(AI_PROVIDER_REGISTRY_OPTIONS)
     private readonly options: AiProviderRegistryOptions,
-    private readonly capabilityRegistry: CapabilityRegistry,
+    private readonly localMockProvider: LocalMockAiProvider,
+    private readonly openAiProvider: OpenAiGenerateProvider,
+    private readonly qwenProvider: QwenGenerateProvider,
   ) {}
 
   getGenerateProvider(name?: string): AiProviderClient {
@@ -42,10 +45,9 @@ export class AiProviderRegistry {
   }
 
   private resolveProviderByName(providerName: string): AiProviderClient {
-    const provider = this.capabilityRegistry.getProviderClient<AiProviderClient>({
-      providerKind: AI_PROVIDER_KIND,
-      providerName,
-    });
+    const provider = this.getProviders().find(
+      (candidate) => candidate.name.trim().toLowerCase() === providerName,
+    );
     if (provider && provider.name.trim().toLowerCase() === providerName) {
       return provider;
     }
@@ -53,5 +55,9 @@ export class AiProviderRegistry {
       THIRDPARTY_ERROR.PROVIDER_NOT_SUPPORTED,
       `unsupported_ai_provider:${providerName}`,
     );
+  }
+
+  private getProviders(): readonly AiProviderClient[] {
+    return [this.localMockProvider, this.openAiProvider, this.qwenProvider];
   }
 }

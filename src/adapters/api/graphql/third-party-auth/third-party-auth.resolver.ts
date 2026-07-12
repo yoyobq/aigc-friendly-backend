@@ -22,21 +22,16 @@ import { ThirdPartyAuthDTO } from '@src/adapters/api/graphql/third-party-auth/dt
 import { ThirdPartyLoginInput } from '@src/adapters/api/graphql/third-party-auth/dto/third-party-login.input';
 import { UnbindThirdPartyInput } from '@src/adapters/api/graphql/third-party-auth/dto/unbind-third-party.input';
 import { WeappPhoneResultDTO } from '@src/adapters/api/graphql/third-party-auth/dto/weapp-phone-result.dto';
-import { CompleteUserData, FetchUserInfoUsecase } from '@usecases/account/fetch-user-info.usecase';
-import {
-  LoginWithThirdPartyUsecase,
-  ThirdPartyLoginParams,
-} from '@usecases/auth/login-with-third-party.usecase';
+import { FetchUserInfoUsecase } from '@usecases/account/fetch-user-info.usecase';
+import type { CompleteUserData } from '@usecases/account/fetch-user-info.types';
+import { LoginWithThirdPartyUsecase } from '@usecases/auth/login-with-third-party.usecase';
+import type { ThirdPartyLoginParams } from '@usecases/auth/login-with-third-party.types';
 import { BindThirdPartyAccountUsecase } from '@usecases/third-party-accounts/bind-third-party-account.usecase';
-import {
-  GenerateWeappQrcodeUsecase,
-  type GenerateWeappQrcodeResult,
-} from '@usecases/third-party-accounts/generate-weapp-qrcode.usecase';
+import { GenerateWeappQrcodeUsecase } from '@usecases/third-party-accounts/generate-weapp-qrcode.usecase';
+import type { GenerateWeappQrcodeResult } from '@usecases/third-party-accounts/generate-weapp-qrcode.types';
 import { GetThirdPartyAuthsUsecase } from '@usecases/third-party-accounts/get-third-party-auths.usecase';
-import {
-  GetWeappPhoneParams,
-  GetWeappPhoneUsecase,
-} from '@usecases/third-party-accounts/get-weapp-phone.usecase';
+import { GetWeappPhoneUsecase } from '@usecases/third-party-accounts/get-weapp-phone.usecase';
+import type { GetWeappPhoneParams } from '@usecases/third-party-accounts/get-weapp-phone.types';
 import { UnbindThirdPartyAccountUsecase } from '@usecases/third-party-accounts/unbind-third-party-account.usecase';
 
 /**

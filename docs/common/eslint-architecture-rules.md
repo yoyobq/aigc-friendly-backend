@@ -13,7 +13,7 @@ Source of truth: `eslint.config.mjs` is the executable source of truth; this fil
   `npx eslint <path>`
 - Full lint:
   `npm run lint`
-  This also runs `scripts/check-usecase-normalize-guard.js` first and then ESLint with `--fix`.
+  This runs the generated capability check, usecase normalize guard, architecture fixtures, and then ESLint with `--fix`.
 - No-fix full ESLint check:
   `npx eslint "{src,apps,libs,test}/**/*.ts" --cache --cache-location .eslintcache`
 - Type-level confidence:
@@ -31,9 +31,31 @@ performs an automatic `--fix` pass.
   core -> core/types, types -> types.
   Module-owned `*.contract.ts` files are modeled separately so usecases/modules/infrastructure may
   depend on the contract without allowing imports of module services or internals.
+  Usecase-owned `*.contract.ts` files are also modeled separately so usecases/infrastructure may
+  depend on the narrow contract without exposing usecase implementations.
   `modules-contracts` must not depend on same-domain services, queries, or internals; contracts
   should only reference other contracts, stable module types, core contracts/types, or `@app-types/*`.
   It also allows adapters to `import type` same-domain module root `*.types.ts` files only.
+
+- `local-architecture/no-infrastructure-to-usecases-imports`
+  Blocks infrastructure importing usecase implementations, modules, helpers, barrels, or scene-local
+  types. The only path-level exception is a usecase-owned `*.contract.ts`; code review still confirms
+  that the importer actually implements or wires that contract.
+
+- `local-architecture/no-adapter-to-queryservice-imports`
+  Blocks API and Worker adapters importing `*.query.service.ts` implementations. Adapters obtain
+  read-side results through usecases.
+
+- `local-architecture/no-adapter-to-infrastructure-imports`
+  Blocks API and Worker adapters importing infrastructure through relative paths or configured
+  aliases. Runtime payload views and queue identifiers stay adapter-local and are reconciled with
+  infrastructure registries by topology validation and behavior tests.
+
+- `local-architecture/no-adapter-types-from-usecase-implementations`
+  Allows adapters to import `*Usecase` execution classes from `*.usecase.ts`, but blocks importing
+  flow parameters, results, or other reusable types from those implementation files. A usecase
+  execution contract shared only with its calling adapter stays in an adjacent `*.types.ts`; promote
+  it to a bounded-context root type file only when it becomes a wider stable contract.
 
 - `local-architecture/no-boundary-port-naming-drift`
   Blocks new `*.port.ts` / `*.ports.ts` boundary files and imports.
@@ -147,6 +169,13 @@ Run these when preparing P3a inventory or reviewing architecture-sensitive patch
   `rg -n "from ['\"].*\\.entity(?:\\.ts)?['\"]|import\\(['\"].*\\.entity(?:\\.ts)?['\"]\\)|require\\(['\"].*\\.entity(?:\\.ts)?['\"]\\)" src/adapters src/usecases -g '*.ts'`
 - QueryService depending on mixed read/write services:
   `rg -n "from ['\"].*(\\.service|/services/|@modules/|@src/modules/)" src/modules -g '*query.service.ts'`
+- Infrastructure imports from usecases (every result must be an actually implemented/wired
+  `*.contract.ts` plus only its minimal signature types):
+  `rg -n "from ['\"](@src/|src/)?usecases/" src/infrastructure -g '*.ts'`
+- Adapter imports of QueryService implementations (expected result: none):
+  `rg -n "from ['\"](@src/|src/)?modules/.*(query\\.service|/queries/)" src/adapters -g '*.ts'`
+- Adapter type imports from usecase implementations are enforced by ESLint; adapter imports from
+  `*.usecase.ts` should name only `*Usecase` execution classes.
 - Usecase direct ORM calls on transaction-like values are enforced by ESLint; broad text scans for
   `.update()` or `.query()` are noisy and should not be used as the primary signal.
 

@@ -116,6 +116,8 @@ For layer-owned boundary contract naming, see docs/common/boundary-contract.rule
 ## 4. import 与依赖方向（类型同样受限）
 
 - adapters 可对 usecases / core / `src/types` 建立正常依赖；
+  adapter 为调用某个 Usecase，可从该 Usecase 相邻的 `*.types.ts` 仅作 type-only 导入；
+  该流程契约不因此成为 bounded-context 公共类型，也不得从 `*.usecase.ts` 实现文件导入。
   对同域 `src/modules/<bounded-context>/<bounded-context>.types.ts` 只允许下述 type-only 复用。
 - usecases 可依赖 modules(service) / core / `src/types`。
 - modules(service) 可依赖 infrastructure / core / `src/types`。
@@ -124,6 +126,8 @@ For layer-owned boundary contract naming, see docs/common/boundary-contract.rule
 - L1 共享类型统一通过 `@app-types/*` 引用。
 - 禁止使用 `@src/types/*` 混用入口。
 - 同域多层共享但未跨域的稳定类型，统一放在 `src/modules/<bounded-context>/<bounded-context>.types.ts`。
+- 仅由一个 Usecase 与其调用 adapter 共享的执行输入 / 结果，留在 Usecase 相邻 `*.types.ts`；
+  当它成为多个 Usecase、modules(service) 或整个 bounded context 的稳定公共契约时，才提升到 bounded context 根类型文件。
 - 同域上游（含 adapters / usecases）若需复用该类类型，只允许 `import type` 或纯类型 import
   此 bounded context 根公共类型文件；该规则不允许 adapters import modules 的 service、
   QueryService、Entity、局部 `queries/*.types.ts`，也不允许任何值导入。

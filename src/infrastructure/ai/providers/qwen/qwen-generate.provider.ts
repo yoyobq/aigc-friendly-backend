@@ -3,17 +3,10 @@ import type {
   GenerateAiContentInput,
   GenerateAiContentResult,
 } from '@core/ai/ai-provider.interface';
-import type { CapabilityHealthResult } from '@app-types/common/capability.types';
 import { DomainError, THIRDPARTY_ERROR } from '@core/common/errors/domain-error';
 import { HttpService } from '@nestjs/axios';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  CapabilityAnchorProvider,
-  CapabilityHealthCheckProvider,
-  CapabilityProviderBindingProvider,
-  CapabilityRuntimeContributionProvider,
-} from '@src/infrastructure/capability/capability.decorators';
 import axios from 'axios';
 import { createHash } from 'node:crypto';
 
@@ -33,27 +26,6 @@ interface QwenChatCompletionResponse {
 }
 
 @Injectable()
-@CapabilityAnchorProvider({
-  capabilityId: 'ai.qwen',
-  mode: 'switchable',
-  decisionRef: 'docs/capabilities/current.md',
-})
-@CapabilityRuntimeContributionProvider({
-  capabilityId: 'ai.qwen',
-  runtime: { healthCheck: true },
-  contributions: {
-    providers: [{ providerKind: 'ai.provider', providerName: 'qwen' }],
-  },
-})
-@CapabilityProviderBindingProvider({
-  capabilityId: 'ai.qwen',
-  providerKind: 'ai.provider',
-  providerName: 'qwen',
-})
-@CapabilityHealthCheckProvider({
-  capabilityId: 'ai.qwen',
-  name: 'provider-config',
-})
 export class QwenGenerateProvider implements AiProviderClient {
   readonly name = 'qwen';
 
@@ -61,21 +33,6 @@ export class QwenGenerateProvider implements AiProviderClient {
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
   ) {}
-
-  check(): Promise<CapabilityHealthResult> {
-    const baseUrlConfigured = this.hasConfigValue('aiWorker.qwen.baseUrl');
-    const apiKeyConfigured = this.hasConfigValue('aiWorker.qwen.apiKey');
-    const isConfigured = baseUrlConfigured && apiKeyConfigured;
-    return Promise.resolve({
-      status: isConfigured ? 'healthy' : 'unhealthy',
-      checkedAt: new Date(),
-      message: isConfigured ? 'qwen_provider_configured' : 'qwen_provider_config_missing',
-      details: {
-        baseUrlConfigured,
-        apiKeyConfigured,
-      },
-    });
-  }
 
   async generate(input: GenerateAiContentInput): Promise<GenerateAiContentResult> {
     const baseUrl = this.resolveBaseUrl();

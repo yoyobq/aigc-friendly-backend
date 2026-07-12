@@ -1,23 +1,6 @@
 // src/core/common/text/text.helper.ts
 
-/**
- * 简单的文本 trim 处理
- * @param value 待处理的值
- * @returns 如果是字符串则返回 trim 后的结果，否则返回原值
- */
-/**
- * 简单的文本 trim 处理，空白字符串转为 undefined
- * @param value 待处理的值
- * @returns 如果是字符串则返回 trim 后的结果（空白则返回 undefined），否则返回原值
- */
-export function trimText(value: unknown): string | undefined {
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    return trimmed === '' ? undefined : trimmed;
-  }
-  return value as string | undefined;
-}
-
+/** Protocol-compatible trim that preserves empty/null/undefined distinctions. */
 export function trimTextPure(value: unknown): unknown {
   if (typeof value === 'string') {
     return value.trim();

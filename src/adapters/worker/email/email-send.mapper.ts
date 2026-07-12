@@ -3,7 +3,7 @@ import type {
   ConsumeEmailJobCompleteInput,
   ConsumeEmailJobFailInput,
   ConsumeEmailJobProcessInput,
-} from '@src/usecases/email-worker/consume-email-job.usecase';
+} from '@src/usecases/email-worker/consume-email-job.types';
 import type { Job } from 'bullmq';
 
 export const EMAIL_QUEUE_NAME = 'email';

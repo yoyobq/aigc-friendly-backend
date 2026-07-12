@@ -9,8 +9,8 @@ import type {
 import type { AiWorkflowContextService } from '@src/modules/ai-workflow-context/ai-workflow-context.service';
 import type { AsyncTaskRecordService } from '@src/modules/async-task-record/async-task-record.service';
 import type { AsyncTaskRecordView } from '@src/modules/async-task-record/async-task-record.types';
-import type { AiQueueService } from '@src/modules/common/ai-queue/ai-queue.service';
-import type { QueueAiWorkflowQueueHealthResult } from '@src/modules/common/ai-queue/ai-queue.types';
+import type { AiWorkflowQueueService } from '@src/modules/ai-workflow-context/queue/ai-workflow-queue.service';
+import type { QueueAiWorkflowQueueHealthResult } from '@src/modules/ai-workflow-context/queue/ai-workflow-queue.types';
 import type { TransactionRunner } from '@src/usecases/common/ports/transaction-runner.contract';
 import type { PinoLogger } from 'nestjs-pino';
 import { CreateAndAdmitAiWorkflowUsecase } from './create-and-admit-ai-workflow.usecase';
@@ -78,7 +78,7 @@ describe('CreateAndAdmitAiWorkflowUsecase', () => {
     };
     usecase = new CreateAndAdmitAiWorkflowUsecase(
       aiWorkflowContextService as unknown as AiWorkflowContextService,
-      aiQueueService as unknown as AiQueueService,
+      aiQueueService as unknown as AiWorkflowQueueService,
       asyncTaskRecordService as unknown as AsyncTaskRecordService,
       transactionRunner,
       logger as unknown as PinoLogger,
@@ -173,7 +173,7 @@ describe('CreateAndAdmitAiWorkflowUsecase', () => {
     });
     expect(asyncTaskRecordService.recordEnqueued).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        queueName: 'ai',
+        queueName: 'ai-workflow',
         jobName: 'workflow',
         jobId: generatedJobId,
         traceId: 'trace-1',

@@ -40,6 +40,14 @@ Global error contract: Every GraphQL interface must also follow docs/api/graphql
 ## 依赖方向
 
 - 允许 adapters → usecases。
+- 允许 adapters 仅以 `import type` 引用其所调用 Usecase 相邻的 `*.types.ts`，用于该调用的输入、结果或流程契约。
+  不得从 `*.usecase.ts` 实现文件借类型，也不得把该例外扩张成 adapter 对 usecase helper 或内部实现的依赖。
+- 允许 adapters → core 的纯 policy、value object、DomainError、常量、normalize helper 与类型契约。
+  该依赖只用于协议校验、错误映射和输入输出适配，不允许把业务编排或 I/O 下沉到 adapter。
+  对输入而言，Adapter 只能执行与协议一致的纯解析/校验；场景 business policy 的选择和执行
+  仍归 Usecase，不得以“纯 policy”为由前移。
+- 允许 adapters 对 `src/types` / `@app-types/*` 做正常依赖，包括 GraphQL DTO 装饰器、
+  `class-validator` 和 schema registry 所需的 enum 运行时值。
 - 允许 adapters 仅以 `import type` 复用同域
   `src/modules/<bounded-context>/<bounded-context>.types.ts` 的稳定 View / contract。
   该例外只用于类型注解，不得引入运行时值、service、QueryService、Entity 或局部

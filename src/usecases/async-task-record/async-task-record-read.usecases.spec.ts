@@ -2,10 +2,8 @@ import { DomainError, INPUT_NORMALIZE_ERROR } from '@src/core/common/errors/doma
 import type { AsyncTaskRecordView } from '@src/modules/async-task-record/async-task-record.types';
 import { AsyncTaskRecordQueryService } from '@src/modules/async-task-record/queries/async-task-record.query.service';
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  GetAsyncTaskRecordByQueueJobUsecase,
-  type GetAsyncTaskRecordByQueueJobInput,
-} from './get-async-task-record-by-queue-job.usecase';
+import { GetAsyncTaskRecordByQueueJobUsecase } from './get-async-task-record-by-queue-job.usecase';
+import type { GetAsyncTaskRecordByQueueJobInput } from './get-async-task-record-by-queue-job.types';
 import { ListAsyncTaskRecordsByBizTargetUsecase } from './list-async-task-records-by-biz-target.usecase';
 import { ListAsyncTaskRecordsByTraceIdUsecase } from './list-async-task-records-by-trace-id.usecase';
 

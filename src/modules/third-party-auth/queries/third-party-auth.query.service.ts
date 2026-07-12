@@ -1,22 +1,29 @@
 // src/modules/third-party-auth/queries/third-party-auth.query.service.ts
 import { ThirdPartyProviderEnum } from '@app-types/models/account.types';
 import { ThirdPartyAuthView } from '@app-types/models/third-party-auth.types';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ThirdPartyAuthEntity } from '../third-party-auth.entity';
+import {
+  CAPABILITY_STATE_READER,
+  type CapabilityStateReader,
+} from '@src/modules/common/capability-state-reader.contract';
 
 @Injectable()
 export class ThirdPartyAuthQueryService {
   constructor(
     @InjectRepository(ThirdPartyAuthEntity)
     private readonly thirdPartyAuthRepository: Repository<ThirdPartyAuthEntity>,
+    @Inject(CAPABILITY_STATE_READER)
+    private readonly capabilityStateReader: CapabilityStateReader,
   ) {}
 
   async findAccountByThirdParty(params: {
     readonly provider: ThirdPartyProviderEnum;
     readonly providerUserId: string;
   }): Promise<ThirdPartyAuthView | null> {
+    this.capabilityStateReader.requireEnabled('identity.external-account');
     const record = await this.thirdPartyAuthRepository.findOne({
       where: { provider: params.provider, providerUserId: params.providerUserId },
       select: {
@@ -33,6 +40,7 @@ export class ThirdPartyAuthQueryService {
   }
 
   async getThirdPartyAuths(accountId: number): Promise<ThirdPartyAuthView[]> {
+    this.capabilityStateReader.requireEnabled('identity.external-account');
     const records = await this.thirdPartyAuthRepository.find({
       where: { accountId },
       select: {
@@ -60,6 +68,7 @@ export class ThirdPartyAuthQueryService {
     accountId: number,
     provider: ThirdPartyProviderEnum,
   ): Promise<ThirdPartyAuthView | null> {
+    this.capabilityStateReader.requireEnabled('identity.external-account');
     const record = await this.thirdPartyAuthRepository.findOne({
       where: { accountId, provider },
       select: {

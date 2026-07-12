@@ -6,9 +6,13 @@ import {
   normalizeOptionalText,
   normalizeRequiredText,
 } from '@core/common/input-normalize/input-normalize.policy';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { getTypeOrmEntityManager } from '@src/infrastructure/database/transaction/typeorm-persistence-transaction-context';
+import {
+  CAPABILITY_STATE_READER,
+  type CapabilityStateReader,
+} from '@src/modules/common/capability-state-reader.contract';
 import {
   In,
   IsNull,
@@ -34,6 +38,7 @@ import {
   type CreateAiWorkflowContextInput,
   type CreateAiWorkflowContextResult,
   type LinkAiWorkflowAsyncTaskRecordInput,
+  type LinkAiWorkflowTerminalAsyncTaskRecordInput,
   type ListAiWorkflowDueAdmissionWaitingInput,
   type ListAiWorkflowStaleQueuedInput,
   type ListAiWorkflowTerminalContextsInput,
@@ -49,6 +54,10 @@ import {
   type WriteAiWorkflowOutputPayloadForWorkerInput,
   type WriteAiWorkflowOutputPayloadInput,
 } from './ai-workflow-context.types';
+import {
+  requireAiWorkflowEnabled,
+  requireAiWorkflowTerminalDrain,
+} from './ai-workflow-capability.gate';
 
 const HOUSEKEEPING_SELECT_COLUMNS = [
   'context.workflowId',
@@ -78,6 +87,8 @@ export class AiWorkflowContextService {
   constructor(
     @InjectRepository(AiWorkflowContextEntity)
     private readonly aiWorkflowContextRepository: Repository<AiWorkflowContextEntity>,
+    @Inject(CAPABILITY_STATE_READER)
+    private readonly capabilityStateReader: CapabilityStateReader,
   ) {}
 
   async createContext(input: CreateAiWorkflowContextInput): Promise<CreateAiWorkflowContextResult> {
@@ -223,10 +234,10 @@ export class AiWorkflowContextService {
     }
   }
 
-  async listTerminalContexts(
+  async listTerminalContextsForDrain(
     input: ListAiWorkflowTerminalContextsInput,
   ): Promise<AiWorkflowContextHousekeepingCandidate[]> {
-    const repository = this.resolveRepository(input.transactionContext);
+    const repository = this.resolveTerminalDrainRepository(input.transactionContext);
     try {
       const entities = await repository
         .createQueryBuilder('context')
@@ -393,14 +404,35 @@ export class AiWorkflowContextService {
   async linkAsyncTaskRecord(
     input: LinkAiWorkflowAsyncTaskRecordInput,
   ): Promise<AiWorkflowContextMutationResult> {
-    return await this.updateByExpectedStatusesAndJobId({
+    return await this.linkAsyncTaskRecordWithRepository({
       workflowId: input.workflowId,
       jobId: input.jobId,
       expectedStatuses: input.expectedStatuses,
-      patch: {
-        asyncTaskRecordId: input.asyncTaskRecordId,
-      },
-      transactionContext: input.transactionContext,
+      asyncTaskRecordId: input.asyncTaskRecordId,
+      repository: this.resolveRepository(input.transactionContext),
+    });
+  }
+
+  async linkTerminalAsyncTaskRecordForDrain(
+    input: LinkAiWorkflowTerminalAsyncTaskRecordInput,
+  ): Promise<AiWorkflowContextMutationResult> {
+    if (
+      input.expectedStatuses.length === 0 ||
+      input.expectedStatuses.some(
+        (status) => !AI_WORKFLOW_CONTEXT_TERMINAL_STATUSES.includes(status),
+      )
+    ) {
+      throw new DomainError(
+        AI_WORKFLOW_CONTEXT_ERROR.INVALID_PARAMS,
+        'Terminal drain 只允许 terminal workflow status',
+      );
+    }
+    return await this.linkAsyncTaskRecordWithRepository({
+      workflowId: input.workflowId,
+      jobId: input.jobId,
+      expectedStatuses: input.expectedStatuses,
+      asyncTaskRecordId: input.asyncTaskRecordId,
+      repository: this.resolveTerminalDrainRepository(input.transactionContext),
     });
   }
 
@@ -646,13 +678,74 @@ export class AiWorkflowContextService {
     };
   }
 
+  private async linkAsyncTaskRecordWithRepository(input: {
+    readonly workflowId: string;
+    readonly jobId: string;
+    readonly asyncTaskRecordId: number;
+    readonly expectedStatuses: readonly AiWorkflowContextStatus[];
+    readonly repository: Repository<AiWorkflowContextEntity>;
+  }): Promise<AiWorkflowContextMutationResult> {
+    const workflowId = normalizeRequiredString(input.workflowId, 'workflowId');
+    const jobId = normalizeRequiredString(input.jobId, 'jobId');
+    if (input.expectedStatuses.length === 0) {
+      const current = await this.findEntityByWorkflowIdWithRepository({
+        workflowId,
+        repository: input.repository,
+      });
+      return { status: 'CONFLICT', context: current ? this.toView(current) : null };
+    }
+
+    try {
+      const result = await input.repository.update(
+        { workflowId, jobId, status: In([...input.expectedStatuses]) },
+        { asyncTaskRecordId: input.asyncTaskRecordId },
+      );
+      if (result.affected === 1) {
+        const updated = await this.findEntityByWorkflowIdWithRepository({
+          workflowId,
+          repository: input.repository,
+        });
+        if (!updated) {
+          throw new DomainError(AI_WORKFLOW_CONTEXT_ERROR.NOT_FOUND, 'AI workflow context 不存在', {
+            workflowId,
+          });
+        }
+        return { status: 'UPDATED', context: this.toView(updated) };
+      }
+    } catch (error: unknown) {
+      if (error instanceof DomainError) throw error;
+      throw new DomainError(
+        AI_WORKFLOW_CONTEXT_ERROR.UPDATE_FAILED,
+        '更新 AI workflow context async task 关联失败',
+        { workflowId, jobId },
+        error,
+      );
+    }
+
+    const current = await this.findEntityByWorkflowIdWithRepository({
+      workflowId,
+      repository: input.repository,
+    });
+    return { status: 'CONFLICT', context: current ? this.toView(current) : null };
+  }
+
   private async findEntityByWorkflowId(input: {
     readonly workflowId: string;
     readonly transactionContext?: PersistenceTransactionContext;
   }): Promise<AiWorkflowContextEntity | null> {
     const repository = this.resolveRepository(input.transactionContext);
+    return await this.findEntityByWorkflowIdWithRepository({
+      workflowId: input.workflowId,
+      repository,
+    });
+  }
+
+  private async findEntityByWorkflowIdWithRepository(input: {
+    readonly workflowId: string;
+    readonly repository: Repository<AiWorkflowContextEntity>;
+  }): Promise<AiWorkflowContextEntity | null> {
     try {
-      return await repository.findOne({
+      return await input.repository.findOne({
         where: { workflowId: normalizeRequiredString(input.workflowId, 'workflowId') },
       });
     } catch (error: unknown) {
@@ -707,6 +800,20 @@ export class AiWorkflowContextService {
   }
 
   private resolveRepository(
+    transactionContext?: PersistenceTransactionContext,
+  ): Repository<AiWorkflowContextEntity> {
+    requireAiWorkflowEnabled(this.capabilityStateReader);
+    return this.resolveRepositoryWithoutGate(transactionContext);
+  }
+
+  private resolveTerminalDrainRepository(
+    transactionContext?: PersistenceTransactionContext,
+  ): Repository<AiWorkflowContextEntity> {
+    requireAiWorkflowTerminalDrain(this.capabilityStateReader);
+    return this.resolveRepositoryWithoutGate(transactionContext);
+  }
+
+  private resolveRepositoryWithoutGate(
     transactionContext?: PersistenceTransactionContext,
   ): Repository<AiWorkflowContextEntity> {
     const manager = transactionContext ? getTypeOrmEntityManager(transactionContext) : undefined;

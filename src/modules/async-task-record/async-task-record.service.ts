@@ -1,9 +1,13 @@
 // src/modules/async-task-record/async-task-record.service.ts
 import type { PersistenceTransactionContext } from '@app-types/common/transaction.types';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { getTypeOrmEntityManager } from '@src/infrastructure/database/transaction/typeorm-persistence-transaction-context';
 import { QueryFailedError, Repository } from 'typeorm';
+import {
+  CAPABILITY_STATE_READER,
+  type CapabilityStateReader,
+} from '@src/modules/common/capability-state-reader.contract';
 import { AsyncTaskRecordEntity } from './async-task-record.entity';
 import type {
   AsyncTaskRecordView,
@@ -21,6 +25,8 @@ export class AsyncTaskRecordService {
   constructor(
     @InjectRepository(AsyncTaskRecordEntity)
     private readonly asyncTaskRecordRepository: Repository<AsyncTaskRecordEntity>,
+    @Inject(CAPABILITY_STATE_READER)
+    private readonly capabilityStateReader: CapabilityStateReader,
   ) {}
 
   private async findByQueueJob(input: {
@@ -402,6 +408,7 @@ export class AsyncTaskRecordService {
   private getRepository(
     transactionContext?: PersistenceTransactionContext,
   ): Repository<AsyncTaskRecordEntity> {
+    this.capabilityStateReader.requireEnabled('runtime.async-task');
     const manager = transactionContext ? getTypeOrmEntityManager(transactionContext) : undefined;
     return manager ? manager.getRepository(AsyncTaskRecordEntity) : this.asyncTaskRecordRepository;
   }

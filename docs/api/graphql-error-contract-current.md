@@ -25,6 +25,10 @@
 - `login` credential failures may also use `UNAUTHENTICATED` as the GraphQL category, but frontend must not run refresh loops for `login` itself. Login-screen behavior is scoped to the login flow.
 - Permission failures for an authenticated user remain `FORBIDDEN`, not `UNAUTHENTICATED`.
 - Input, validation, conflict, not-found, and business-state failures must not be collapsed into `UNAUTHENTICATED`.
+- A disabled, blocked, or not-installed switchable behavior maps to
+  `extensions.code === 'INTERNAL_SERVER_ERROR'`. When response policy exposes detail it uses
+  `extensions.errorCode === 'CAPABILITY_UNAVAILABLE'`. This is availability state, not
+  authentication or resource-authorization failure, and therefore must not map to `FORBIDDEN`.
 
 ## Backend Implementation Rules
 

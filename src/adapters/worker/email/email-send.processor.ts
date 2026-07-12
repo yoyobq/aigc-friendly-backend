@@ -1,14 +1,29 @@
-// src/adapters/worker/email/email-send.processor.ts
 import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { EmailWorkerActivationUsecase } from '@src/usecases/email-worker/email-worker-activation.usecase';
 import { EmailSendHandler } from './email-send.handler';
 import { EMAIL_QUEUE_NAME, type EmailSendJob, type EmailSendResult } from './email-send.mapper';
 
 @Injectable()
-@Processor(EMAIL_QUEUE_NAME)
-export class EmailSendProcessor extends WorkerHost {
-  constructor(private readonly handler: EmailSendHandler) {
+@Processor(EMAIL_QUEUE_NAME, { autorun: false })
+export class EmailSendProcessor extends WorkerHost implements OnApplicationBootstrap {
+  private readonly logger = new Logger(EmailSendProcessor.name);
+
+  constructor(
+    private readonly handler: EmailSendHandler,
+    private readonly workerActivation: EmailWorkerActivationUsecase,
+  ) {
     super();
+  }
+
+  onApplicationBootstrap(): void {
+    if (!this.workerActivation.shouldRun()) return;
+    void this.worker.run().catch((error: unknown) => {
+      this.logger.error(
+        'Email Worker stopped unexpectedly',
+        error instanceof Error ? error.stack : undefined,
+      );
+    });
   }
 
   async process(job: EmailSendJob): Promise<EmailSendResult> {

@@ -47,7 +47,7 @@ describe('BullMqProducerGateway', () => {
     const { gateway, queue } = createHarness();
 
     const result = await gateway.enqueue({
-      queueName: BULLMQ_QUEUES.AI,
+      queueName: BULLMQ_QUEUES.AI_WORKFLOW,
       jobName: BULLMQ_JOBS.AI.WORKFLOW,
       payload: {
         workflowId: 'workflow-1',
@@ -58,7 +58,7 @@ describe('BullMqProducerGateway', () => {
     });
 
     expect(result).toEqual({
-      queueName: BULLMQ_QUEUES.AI,
+      queueName: BULLMQ_QUEUES.AI_WORKFLOW,
       jobName: BULLMQ_JOBS.AI.WORKFLOW,
       jobId: 'workflow-job-1',
       traceId: 'trace-1',
@@ -76,7 +76,7 @@ describe('BullMqProducerGateway', () => {
 
     await expect(
       gateway.enqueue({
-        queueName: BULLMQ_QUEUES.AI,
+        queueName: BULLMQ_QUEUES.AI_WORKFLOW,
         jobName: BULLMQ_JOBS.AI.WORKFLOW,
         payload: {
           workflowId: 'workflow-1',
@@ -86,7 +86,7 @@ describe('BullMqProducerGateway', () => {
         dedupKey: 'dedup-1',
         traceId: 'trace-1',
       }),
-    ).rejects.toThrow(`explicit_job_id_conflicts_with_dedup_key:${BULLMQ_QUEUES.AI}`);
+    ).rejects.toThrow(`explicit_job_id_conflicts_with_dedup_key:${BULLMQ_QUEUES.AI_WORKFLOW}`);
     expect(queue.add).not.toHaveBeenCalled();
   });
 
@@ -95,7 +95,7 @@ describe('BullMqProducerGateway', () => {
 
     await expect(
       gateway.enqueue({
-        queueName: BULLMQ_QUEUES.AI,
+        queueName: BULLMQ_QUEUES.AI_WORKFLOW,
         jobName: BULLMQ_JOBS.AI.WORKFLOW,
         payload: {
           workflowId: 'workflow-1',
@@ -145,11 +145,11 @@ describe('BullMqProducerGateway', () => {
 
     await expect(
       gateway.hasJob({
-        queueName: BULLMQ_QUEUES.AI,
+        queueName: BULLMQ_QUEUES.AI_WORKFLOW,
         jobId: ' workflow-job-1 ',
       }),
     ).resolves.toEqual({
-      queueName: BULLMQ_QUEUES.AI,
+      queueName: BULLMQ_QUEUES.AI_WORKFLOW,
       jobId: 'workflow-job-1',
       exists: true,
     });

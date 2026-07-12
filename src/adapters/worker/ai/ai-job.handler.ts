@@ -4,27 +4,20 @@ import {
   ConsumeAiEmbedJobUsecase,
   ConsumeAiGenerateJobUsecase,
 } from '@src/usecases/ai-worker/consume-ai-job.usecase';
-import { ConsumeAiWorkflowJobUsecase } from '@src/usecases/ai-worker/consume-ai-workflow-job.usecase';
 import {
   AI_EMBED_JOB_NAME,
   AI_GENERATE_JOB_NAME,
-  AI_WORKFLOW_JOB_NAME,
   type AiEmbedJob,
   type AiEmbedResult,
   type AiFailedJob,
   type AiGenerateJob,
   type AiGenerateResult,
-  type AiWorkflowJob,
-  type AiWorkflowResult,
   mapAiEmbedJobToCompleteInput,
   mapAiEmbedJobToFailInput,
   mapAiEmbedJobToProcessInput,
   mapAiGenerateJobToCompleteInput,
   mapAiGenerateJobToFailInput,
   mapAiGenerateJobToProcessInput,
-  mapAiWorkflowJobToCompleteInput,
-  mapAiWorkflowJobToFailInput,
-  mapAiWorkflowJobToProcessInput,
   mapMissingAiJobToFailInput,
   mapUnknownAiJobToFailInput,
 } from './ai-job.mapper';
@@ -34,7 +27,6 @@ export class AiJobHandler {
   constructor(
     private readonly consumeAiGenerateJobUsecase: ConsumeAiGenerateJobUsecase,
     private readonly consumeAiEmbedJobUsecase: ConsumeAiEmbedJobUsecase,
-    private readonly consumeAiWorkflowJobUsecase: ConsumeAiWorkflowJobUsecase,
   ) {}
 
   async processGenerate(input: { readonly job: AiGenerateJob }): Promise<AiGenerateResult> {
@@ -49,12 +41,6 @@ export class AiJobHandler {
     );
   }
 
-  async processWorkflow(input: { readonly job: AiWorkflowJob }): Promise<AiWorkflowResult> {
-    return await this.consumeAiWorkflowJobUsecase.process(
-      mapAiWorkflowJobToProcessInput({ job: input.job }),
-    );
-  }
-
   async onGenerateCompleted(input: { readonly job: AiGenerateJob }): Promise<void> {
     await this.consumeAiGenerateJobUsecase.complete(
       mapAiGenerateJobToCompleteInput({ job: input.job }),
@@ -63,12 +49,6 @@ export class AiJobHandler {
 
   async onEmbedCompleted(input: { readonly job: AiEmbedJob }): Promise<void> {
     await this.consumeAiEmbedJobUsecase.complete(mapAiEmbedJobToCompleteInput({ job: input.job }));
-  }
-
-  async onWorkflowCompleted(input: { readonly job: AiWorkflowJob }): Promise<void> {
-    await this.consumeAiWorkflowJobUsecase.complete(
-      mapAiWorkflowJobToCompleteInput({ job: input.job }),
-    );
   }
 
   async onGenerateFailed(input: {
@@ -83,15 +63,6 @@ export class AiJobHandler {
   async onEmbedFailed(input: { readonly job: AiEmbedJob; readonly error: Error }): Promise<void> {
     await this.consumeAiEmbedJobUsecase.fail(
       mapAiEmbedJobToFailInput({ job: input.job, error: input.error }),
-    );
-  }
-
-  async onWorkflowFailed(input: {
-    readonly job: AiWorkflowJob;
-    readonly error: Error;
-  }): Promise<void> {
-    await this.consumeAiWorkflowJobUsecase.fail(
-      mapAiWorkflowJobToFailInput({ job: input.job, error: input.error }),
     );
   }
 
@@ -115,13 +86,6 @@ export class AiJobHandler {
     if (input.job.name === AI_EMBED_JOB_NAME) {
       await this.onEmbedFailed({
         job: input.job as unknown as AiEmbedJob,
-        error: input.error,
-      });
-      return;
-    }
-    if (input.job.name === AI_WORKFLOW_JOB_NAME) {
-      await this.onWorkflowFailed({
-        job: input.job as unknown as AiWorkflowJob,
         error: input.error,
       });
       return;

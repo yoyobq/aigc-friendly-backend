@@ -3,7 +3,8 @@
 import { AuthLoginModel, LoginResultModel, UserInfoView } from '@app-types/models/auth.types';
 import { GeographicInfo } from '@app-types/models/user-info.types';
 import { Args, Mutation, Resolver } from '@nestjs/graphql';
-import { CompleteUserData, FetchUserInfoUsecase } from '@usecases/account/fetch-user-info.usecase';
+import { FetchUserInfoUsecase } from '@usecases/account/fetch-user-info.usecase';
+import type { CompleteUserData } from '@usecases/account/fetch-user-info.types';
 import { LoginWithPasswordUsecase } from '@usecases/auth/login-with-password.usecase';
 import { LoginResult } from '../account/dto/login-result.dto';
 import { UserInfoDTO } from '../account/dto/user-info.dto';

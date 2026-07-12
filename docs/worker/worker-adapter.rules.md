@@ -28,12 +28,13 @@ Source of truth: This file defines worker adapter rules; code examples elsewhere
 ## 允许内容
 
 - BullMQ Processor、Worker 事件监听（completed / failed / stalled 等）。
-- Job 元数据解析与标准化（jobId、traceId、attempts、timestamp）。
+- Job 元数据解析与 RuntimeContext 映射（jobId、traceId、attempts、timestamp）。
 - 运行时参数适配（并发、限流、重试、退避相关的技术参数读取）。
 - 技术性日志与监控埋点。
 - 不包含业务决策。
 - 不得写入业务状态。
-- 将队列框架原始对象转换为内部显式 DTO / Command / RuntimeContext。
+- 将队列框架原始对象转换为 adapter-local runtime payload，再映射为 Usecase 所需的显式
+  Command / Input / RuntimeContext。
 - 基于运行时生命周期事件，调用单个对应职责的 Usecase 入口。
 
 ## 禁止内容
@@ -56,8 +57,10 @@ Source of truth: This file defines worker adapter rules; code examples elsewhere
 - 允许：worker-adapters -> usecases。
 - 允许 worker-adapters -> adapters-common。
   例如通用装饰器、schema 工具、mapper 工具。
-- 允许 worker-adapters -> queue runtime contracts / internal DTO definitions。
-  仅限适配所需边界模型。
+- 允许 worker-adapters -> adapter-local runtime payload definitions。
+  仅限队列协议适配；跨入 Usecase 的类型必须是显式 Command / Input / RuntimeContext。
+- Worker Adapter 不得从 infrastructure 导入 queue 常量或 runtime contract；适配层在本地声明协议视图，
+  由 topology validation 与行为测试和 infrastructure 注册真源对账。
 - 禁止 worker-adapters -> modules(service) / infrastructure。
   尤其是业务语义相关依赖。
 - 禁止：任意层反向依赖 worker-adapters。
@@ -87,8 +90,9 @@ Source of truth: This file defines worker adapter rules; code examples elsewhere
 
 ## 术语约定（最小）
 
-- DTO：仅表示结构化数据载体，不承载行为。
+- Adapter-local runtime payload：只描述队列协议在 adapter 内的结构，不向 usecase 传播。
 - Command：表示一次显式业务意图输入，供 Usecase 执行。
+- Input：表示 Usecase 显式接收的稳定输入，但不隐含业务意图名称。
 - RuntimeContext：表示运行时技术上下文。
   例如 attempts、timestamps、identifiers。
 - RuntimeContext 不得替代业务参数。
@@ -102,7 +106,7 @@ Source of truth: This file defines worker adapter rules; code examples elsewhere
 - 推荐子结构：
   - `*.processor.ts`：WorkerHost + 队列事件绑定。
   - `*.handler.ts`：标准化 runtime context 到单个 Usecase 输入的映射与调用。
-  - `*.mapper.ts`：Job / event -> 内部 DTO / RuntimeContext 的字段转换与标准化。
+  - `*.mapper.ts`：Job / event -> adapter-local runtime payload / RuntimeContext 的字段转换。
   - `*.adapter.module.ts`：仅声明 adapter provider 与 usecase imports。
 - 命名建议：
   - `<domain>-<action>.processor.ts`

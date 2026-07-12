@@ -1,10 +1,17 @@
 /// <reference types="jest" />
 // src/modules/ai-workflow-context/ai-workflow-context.service.spec.ts
-import { AI_WORKFLOW_CONTEXT_ERROR } from '@core/common/errors/domain-error';
+import type { CapabilityStateSnapshot } from '@app-types/common/capability.types';
+import {
+  AI_WORKFLOW_CONTEXT_ERROR,
+  CAPABILITY_ERROR,
+  DomainError,
+} from '@core/common/errors/domain-error';
+import type { CapabilityStateReader } from '@src/modules/common/capability-state-reader.contract';
 import type { Repository, UpdateResult } from 'typeorm';
 import { AiWorkflowContextEntity } from './ai-workflow-context.entity';
 import { AiWorkflowContextService } from './ai-workflow-context.service';
 import type { AiWorkflowJsonPayload } from './ai-workflow-context.types';
+import { createEnabledCapabilityStateReader } from '../../../test/support/capability/capability-state-reader.fixture';
 
 describe('AiWorkflowContextService', () => {
   let repository: {
@@ -26,6 +33,7 @@ describe('AiWorkflowContextService', () => {
     };
     service = new AiWorkflowContextService(
       repository as unknown as Repository<AiWorkflowContextEntity>,
+      createEnabledCapabilityStateReader(),
     );
   });
 
@@ -137,11 +145,54 @@ describe('AiWorkflowContextService', () => {
     const queryBuilder = createQueryBuilderMock([]);
     repository.createQueryBuilder.mockReturnValueOnce(queryBuilder);
 
-    await service.listTerminalContexts({ limit: 10 });
+    await service.listTerminalContextsForDrain({ limit: 10 });
 
     expect(queryBuilder.where).toHaveBeenCalledWith('context.status IN (:...statuses)', {
       statuses: ['SUCCEEDED', 'FAILED', 'CANCELLED'],
     });
+  });
+
+  it('allows only terminal owned-fact operations when AI execution blocks workflow', async () => {
+    const queryBuilder = createQueryBuilderMock([]);
+    repository.createQueryBuilder.mockReturnValueOnce(queryBuilder);
+    repository.update.mockResolvedValueOnce({ affected: 1 } satisfies Partial<UpdateResult>);
+    repository.findOne.mockResolvedValueOnce(
+      createEntity({ status: 'CANCELLED', asyncTaskRecordId: 44, jobId: 'workflow-job-1' }),
+    );
+    service = new AiWorkflowContextService(
+      repository as unknown as Repository<AiWorkflowContextEntity>,
+      createAiExecutionBlockedReader(),
+    );
+
+    await expect(service.listTerminalContextsForDrain({ limit: 10 })).resolves.toEqual([]);
+    await expect(
+      service.linkTerminalAsyncTaskRecordForDrain({
+        workflowId: 'workflow-1',
+        jobId: 'workflow-job-1',
+        asyncTaskRecordId: 44,
+        expectedStatuses: ['CANCELLED'],
+      }),
+    ).resolves.toMatchObject({ status: 'UPDATED' });
+    await expect(
+      service.listStaleQueuedContexts({
+        staleBefore: new Date('2026-01-01T00:00:00.000Z'),
+        limit: 10,
+      }),
+    ).rejects.toMatchObject({ code: CAPABILITY_ERROR.UNAVAILABLE });
+  });
+
+  it('rejects non-terminal statuses at the terminal drain entry', async () => {
+    await expect(
+      service.linkTerminalAsyncTaskRecordForDrain({
+        workflowId: 'workflow-1',
+        jobId: 'workflow-job-1',
+        asyncTaskRecordId: 44,
+        expectedStatuses: ['PROCESSING'],
+      } as unknown as Parameters<
+        AiWorkflowContextService['linkTerminalAsyncTaskRecordForDrain']
+      >[0]),
+    ).rejects.toMatchObject({ code: AI_WORKFLOW_CONTEXT_ERROR.INVALID_PARAMS });
+    expect(repository.update).not.toHaveBeenCalled();
   });
 
   it('rejects payloads larger than 1 MiB', async () => {
@@ -172,6 +223,22 @@ describe('AiWorkflowContextService', () => {
     });
   });
 });
+
+function createAiExecutionBlockedReader(): CapabilityStateReader {
+  const state: CapabilityStateSnapshot = {
+    capabilityId: 'ai.workflow',
+    configuredState: 'enabled',
+    effectiveState: 'blocked',
+    health: 'unknown',
+    rootBlockers: [{ capabilityId: 'ai.execution', effectiveState: 'disabled' }],
+  };
+  return {
+    getState: () => state,
+    requireEnabled: () => {
+      throw new DomainError(CAPABILITY_ERROR.UNAVAILABLE, 'Capability is unavailable', state);
+    },
+  };
+}
 
 function createEntity(overrides: Partial<AiWorkflowContextEntity> = {}): AiWorkflowContextEntity {
   const now = new Date('2026-01-01T00:00:00.000Z');

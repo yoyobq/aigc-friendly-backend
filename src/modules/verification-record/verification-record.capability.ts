@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { CapabilityAnchorProvider } from '@src/infrastructure/capability/capability.decorators';
 
-export const PLATFORM_VERIFICATION_RECORD_CAPABILITY_ID = 'platform.verification-record' as const;
+export const IDENTITY_VERIFICATION_CAPABILITY_ID = 'identity.verification' as const;
 
 @Injectable()
 @CapabilityAnchorProvider({
-  capabilityId: PLATFORM_VERIFICATION_RECORD_CAPABILITY_ID,
+  capabilityId: IDENTITY_VERIFICATION_CAPABILITY_ID,
   mode: 'always-on',
   decisionRef: 'docs/capabilities/current.md',
+  requires: [],
 })
-export class VerificationRecordCapabilityAnchor {}
+export class IdentityVerificationCapabilityAnchor {}

@@ -36,7 +36,7 @@ For AI/Agent: read `docs/README.md` first.
 
 项目面向可复用后端基础设施与分层架构治理场景，提供账号与会话鉴权、分页 / 排序 / 搜索、错误映射、输入规范化、事务边界与数据库基线交付能力，并内置基于 QM Worker 的 AI / Email 异步队列、任务审计与调试查询能力。它既是可直接扩展的基础框架，也是一套经过实践验证的 DDD 轻量级落地实现。
 
-当前 `v1.6.0` 基线在严格横向分层之上提供轻量纵向 capability 治理：稳定 decision 文档定义语义边界，最小 Anchor 让边界在代码与运行时可指认，Runtime Contribution 只保留实际执行或校验的装配事实。进程与入口模块由 Nest module graph 推导，不维护平行 Catalog。
+当前基线在严格横向分层之上提供轻量纵向 capability 治理：稳定 decision 文档定义语义边界，最小 Anchor 让边界在代码与运行时可指认，Runtime Contribution 只保留实际执行或校验的 runtime dependency 与 queue/job resource。进程和入口模块由 Nest module graph 推导，不维护平行 Catalog。
 
 ## 技术栈
 
@@ -114,7 +114,8 @@ adapters -> usecases -> modules -> infrastructure
 #### 2. 依赖规则
 
 - **主链路**: `adapters -> usecases -> modules -> infrastructure`。
-- **稳定依赖**: `usecases`、`modules`、`infrastructure` 可在各自规则内依赖 `core` 与 `types`；`core` 只能依赖 core-local code 和允许的 `@app-types/*`；`types` 只能依赖 `types`。
+- **Adapter 稳定依赖**: `adapters` 可依赖 `usecases`、`core` 与 `types`；对 Core 仅限纯 policy、value object、DomainError、常量、normalize helper 与类型契约。输入侧只允许协议一致的纯解析/校验，场景业务语义仍由 usecase 选择。
+- **其他稳定依赖**: `usecases`、`modules`、`infrastructure` 可在各自规则内依赖 `core` 与 `types`；`core` 只能依赖 core-local code 和允许的 `@app-types/*`；`types` 只能依赖 `types`。
 - **模块边界**: 业务域 modules 可依赖 `modules/common`，不得依赖其他业务域 modules；`modules/common` 不得依赖业务域 modules。
 - **用例边界**: `usecases -> usecases` 仅允许同域编排且一跳以内；跨域读写应上收到 usecase，而不是下沉到 modules 或 infrastructure。
 - **禁止方向**: 任何层不得依赖 `adapters`；adapters 不直接调用 modules / infrastructure；infrastructure 不拥有业务决策。
@@ -152,7 +153,7 @@ adapters -> usecases -> modules -> infrastructure
 - ✅ **Data Access**: 分页 / 排序 / 搜索通用能力、数据库事务支持
 - ✅ **Observability**: 结构化日志 (Pino)、配置管理
 - ✅ **QM Worker Base**: 统一 AI / Email 队列接入、消费链路与模块装配模式
-- ✅ **Capability Runtime**: 能力 Anchor、启动对账、运行态启停、dispatcher / bus、queue transport、GraphQL guard 与 generated capability 清单
+- ✅ **Capability Governance**: 能力 Anchor、显式行为 gate、依赖状态、Worker 激活点与 generated capability 清单
 - ✅ **AI Provider Call Record**: 记录 provider 调用链路、请求响应快照与耗时指标，支撑审计与排障
 
 ### 基础域能力
@@ -171,20 +172,23 @@ adapters -> usecases -> modules -> infrastructure
 
 Capability 是既有 `adapters -> usecases -> modules -> infrastructure` 分层上的纵向功能边界，不是新的分层或服务拆分方案。治理遵循“能推导的推导、只声明会执行的决策、散文回文档”。
 
+- **决策权限**：纵向模型的成熟度仍在实践中验证，但规则执行是严格的；Capability 的新增、拆分、合并、删除、重分类或 mode 变化必须来自已接受 decision、经人类批准的 active plan 或当前任务中的人类决策，AIGC 提案本身不构成授权。
 - **语义决策**：`docs/capabilities/*.md` 定义 capability 拥有什么、边界在哪里；组合 usecase、报表或 runtime consumer 不会因依赖关系自动成为 capability。
-- **Capability Anchor**：`@CapabilityAnchorProvider(...)` 只声明 `capabilityId`、`mode` 与 `decisionRef`，作为代码和运行时的垂直锚点。
-- **Runtime Contribution**：`@CapabilityRuntimeContributionProvider(...)` 可选，只声明 registry 实际执行或校验的 dependency、operation、state policy 以及 provider / queue / session / API contribution。
+- **Capability Anchor**：`@CapabilityAnchorProvider(...)` 只声明 `capabilityId`、`mode`、`decisionRef` 与传递约简后的 `requires`；只有真实行为 gate 已存在时才允许安装 Anchor。
+- **Runtime Contribution**：`@CapabilityRuntimeContributionProvider(...)` 可选，只声明 registry 实际校验的同进程 runtime dependency 与 queue/job resource；provider、payload 与 handler 仍由原有代码和 registry 负责。
 - **推导装配**：入口模块和 API/Worker 安装进程从 Nest module graph 推导，不手写 process、physical scope 或文件清单。
-- **启动对账**：registry 在启动期检查 anchor、runtime contribution、provider binding、queue binding、operation handler、session resolver 和 GraphQL surface 的一致性，并提示无效关闭配置。
-- **运行态治理**：`switchable` 能力通过 `CAPABILITY_DISABLED_IDS`、`CAPABILITY_KILL_SWITCH_IDS`、`CAPABILITY_OPERATION_DISABLED_KEYS` 与 guard / dispatcher 返回统一 capability error；`always-on` 不接受关闭配置。
-- **跨进程协作**：API 与 Worker 之间通过 BullMQ queue transport 传递 capability envelope；同进程协作只在 usecase-owned runtime boundary 中使用 dispatcher / bus。
-- **Typed Capability Client**：业务 usecase 跨能力调用通过 typed client 窄接口（`src/usecases/common/ports/*.contract.ts`），不直接写 raw dispatcher 字符串协议；client 实现在 `infrastructure/capability/` 内部封装 bus 调用，保留 `CapabilityResult<T>` 返回类型。
-- **会话扩展**：能力可贡献 session principal / authority claim，平台只理解稳定 code 和投影，不内置具体业务语义。
+- **状态语义**：`switchable` 能力通过 `CAPABILITY_DISABLED_IDS` 表达配置意图；有效状态区分 `not_installed`、`disabled`、`blocked` 与 `enabled`，health 与启停正交。
+- **显式行为 gate**：owner-facing service 调用 `requireEnabled`；没有通用 GraphQL guard、dispatcher、session builder 或 permission registry 代替真实行为边界。
+- **Worker 观察点**：可关闭能力的 processor 使用 `autorun: false`，由激活用例在 `getState` 确认为 effective `enabled` 后启动；关闭时不领取 backlog，也不把合法关闭状态变成启动错误。
+- **跨进程协作**：API 与 Worker 之间使用显式 BullMQ queue/job contract，不使用 capability envelope 隐藏进程边界。
+- **跨能力调用**：优先复用 owner-facing surface 或窄 typed contract，普通调用不经过 capability bus。
 - **本地观察**：`npm run capability:list` 查看从模块图计算出的浅投影，`npm run capability:docs` 生成 `docs/generated/capabilities-current.md`，`npm run capability:docs:check` 校验同步。入口模块只是代码导航起点，不声称提供文件级 ownership 视图。
 
 新增或合并 capability 代码时，先读：
 
 - [Capability Rules](docs/common/capability.rules.md)
+- [Capability Adoption Guide](docs/common/capability-plugin-authoring.guide.md)
+- [Capability Boundary Examples](docs/common/capability-boundary-examples.md)
 - [Current Capability Decisions](docs/capabilities/current.md)
 - [Current Capability Projection](docs/generated/capabilities-current.md)
 
@@ -313,7 +317,7 @@ MIGRATION_DRILL_CREATE_TEMP_DB=true npm run migration:drill:empty-db
 - **共享类型**: 跨上下文稳定类型放在 `src/types`，通过 `@app-types/*` 引用。
 - **GraphQL**: DTO / Input / Args / Result 保持在 adapter 层；枚举、标量与 schema 初始化放在 `src/adapters/api/graphql/schema/`。
 - **ORM Entity**: 只表达持久化结构，不添加 GraphQL / HTTP / Swagger 等 adapter decorator。
-- **Capability**: manifest 是能力声明真源；generated capability 文档只能由命令生成；dispatcher / bus 只作为 usecase-owned runtime boundary，不替代业务 usecase 编排；业务 usecase 跨能力调用应通过 typed capability client 窄接口，不直接写 raw dispatcher 协议。
+- **Capability**: 稳定 decision 与已安装 Anchor 是能力语义和代码锚点；switchable 行为必须保留显式 gate，generated capability 文档只能由命令生成；普通跨能力调用不引入 dispatcher / bus。
 
 ## API 访问
 

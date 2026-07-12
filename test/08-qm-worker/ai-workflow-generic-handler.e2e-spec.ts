@@ -1,6 +1,6 @@
 // test/08-qm-worker/ai-workflow-generic-handler.e2e-spec.ts
 import { getQueueToken } from '@nestjs/bullmq';
-import { Injectable, type INestApplication } from '@nestjs/common';
+import { Inject, Injectable, type INestApplication } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { ApiModule } from '@src/bootstraps/api/api.module';
 import { WorkerModule } from '@src/bootstraps/worker/worker.module';
@@ -14,10 +14,14 @@ import type {
   AiWorkflowContextStatus,
   AiWorkflowJsonPayload,
 } from '@src/modules/ai-workflow-context/ai-workflow-context.types';
+import { AiWorkflowQueueService } from '@src/modules/ai-workflow-context/queue/ai-workflow-queue.service';
+import type { QueueAiWorkflowQueueHealthResult } from '@src/modules/ai-workflow-context/queue/ai-workflow-queue.types';
 import { AsyncTaskRecordEntity } from '@src/modules/async-task-record/async-task-record.entity';
 import type { AsyncTaskRecordStatus } from '@src/modules/async-task-record/async-task-record.types';
-import { AiQueueService } from '@src/modules/common/ai-queue/ai-queue.service';
-import type { QueueAiWorkflowQueueHealthResult } from '@src/modules/common/ai-queue/ai-queue.types';
+import {
+  CAPABILITY_STATE_READER,
+  type CapabilityStateReader,
+} from '@src/modules/common/capability-state-reader.contract';
 import { AiWorkerService } from '@src/modules/common/ai-worker/ai-worker.service';
 import type {
   EmbedAiContentInput,
@@ -40,11 +44,15 @@ type FinalJobState = 'completed' | 'failed';
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 @Injectable()
-class SwitchableAiQueueService extends AiQueueService {
+class SwitchableAiQueueService extends AiWorkflowQueueService {
   private unavailableChecksRemaining = 0;
 
-  constructor(producer: BullMqProducerGateway, logger: PinoLogger) {
-    super(producer, logger);
+  constructor(
+    producer: BullMqProducerGateway,
+    logger: PinoLogger,
+    @Inject(CAPABILITY_STATE_READER) capabilityStateReader: CapabilityStateReader,
+  ) {
+    super(producer, logger, capabilityStateReader);
   }
 
   forceUnavailableChecks(count: number): void {
@@ -183,7 +191,7 @@ const waitAsyncTaskRecord = async (input: {
   while (Date.now() < deadline) {
     const record = await input.dataSource.getRepository(AsyncTaskRecordEntity).findOne({
       where: {
-        queueName: BULLMQ_QUEUES.AI,
+        queueName: BULLMQ_QUEUES.AI_WORKFLOW,
         jobName: BULLMQ_JOBS.AI.WORKFLOW,
         jobId: input.jobId,
       },
@@ -251,7 +259,7 @@ describe('AI Workflow generic text generate handler（e2e）', () => {
     const apiModuleFixture: TestingModule = await Test.createTestingModule({
       imports: [ApiModule, AiWorkflowUsecasesModule],
     })
-      .overrideProvider(AiQueueService)
+      .overrideProvider(AiWorkflowQueueService)
       .useClass(SwitchableAiQueueService)
       .compile();
     apiApp = apiModuleFixture.createNestApplication();
@@ -266,11 +274,11 @@ describe('AI Workflow generic text generate handler（e2e）', () => {
     workerApp = workerModuleFixture.createNestApplication();
     await workerApp.init();
 
-    aiQueue = apiApp.get<Queue>(getQueueToken(BULLMQ_QUEUES.AI));
+    aiQueue = apiApp.get<Queue>(getQueueToken(BULLMQ_QUEUES.AI_WORKFLOW));
     workerRuntime = workerApp.get(BullMqWorkerRuntime);
     dataSource = apiApp.get(DataSource);
     aiWorkerMock = workerApp.get<MockWorkflowAiWorkerService>(AiWorkerService);
-    aiQueueService = apiApp.get<SwitchableAiQueueService>(AiQueueService);
+    aiQueueService = apiApp.get<SwitchableAiQueueService>(AiWorkflowQueueService);
     createAndAdmitAiWorkflowUsecase = apiApp.get(CreateAndAdmitAiWorkflowUsecase);
     runAiWorkflowHousekeepingUsecase = apiApp.get(RunAiWorkflowHousekeepingUsecase);
   }, 60000);

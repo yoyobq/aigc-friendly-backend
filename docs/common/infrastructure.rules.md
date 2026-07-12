@@ -55,6 +55,10 @@ For boundary contract naming, see docs/common/boundary-contract.rules.md.
 - 禁止 infrastructure 反向 import modules(service) 的 service、QueryService、entity 或非 boundary-contract 局部类型。
 - 若某个 infrastructure 实现需要上层协作型依赖，contract 应归属于实际拥有该协作需求的层。
   只有纯领域能力才下沉到 core；provider 绑定放回 modules(service) 或对应装配模块。
+- ESLint 将 usecase-owned `*.contract.ts` 建模为独立 boundary element，并通过
+  `no-infrastructure-to-usecases-imports` 阻止 infrastructure 导入其他 usecase 文件。
+- “实际实现或 DI wiring”仍需 code review 根据 provider 绑定确认；文件后缀通过 lint 只证明
+  import surface 合法，不自动证明该 infrastructure 文件确实承担实现或装配职责。
 
 ## 命名与结构
 

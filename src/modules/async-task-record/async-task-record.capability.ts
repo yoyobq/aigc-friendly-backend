@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { CapabilityAnchorProvider } from '@src/infrastructure/capability/capability.decorators';
 
-export const PLATFORM_ASYNC_TASK_AUDIT_CAPABILITY_ID = 'platform.async-task-audit' as const;
+export const RUNTIME_ASYNC_TASK_CAPABILITY_ID = 'runtime.async-task' as const;
 
 @Injectable()
 @CapabilityAnchorProvider({
-  capabilityId: PLATFORM_ASYNC_TASK_AUDIT_CAPABILITY_ID,
-  mode: 'always-on',
+  capabilityId: RUNTIME_ASYNC_TASK_CAPABILITY_ID,
+  mode: 'switchable',
   decisionRef: 'docs/capabilities/current.md',
+  requires: [],
 })
-export class AsyncTaskAuditCapabilityAnchor {}
+export class RuntimeAsyncTaskCapabilityAnchor {}

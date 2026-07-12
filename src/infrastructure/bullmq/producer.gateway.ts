@@ -192,7 +192,11 @@ export class BullMqProducerGateway {
     readonly payload: BullMqJobPayload<Q, J>;
     readonly traceId: string;
   }): BullMqJobPayload<Q, J> {
-    if (input.queueName !== 'ai' && input.queueName !== 'email') {
+    if (
+      input.queueName !== 'ai-execution' &&
+      input.queueName !== 'ai-workflow' &&
+      input.queueName !== 'email'
+    ) {
       return input.payload;
     }
     if (!this.isObjectRecord(input.payload)) {

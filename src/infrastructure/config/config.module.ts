@@ -419,33 +419,9 @@ const parseCsvEnv = (key: string): readonly string[] => {
     .filter((item) => item.length > 0);
 };
 
-const parsePermissionGrantEnv = (
-  raw: string | undefined,
-): Readonly<Record<string, readonly string[]>> => {
-  const grants: Record<string, readonly string[]> = {};
-  for (const entry of (raw ?? '').split(';')) {
-    const [permission, rolesRaw] = entry.split('=');
-    const normalizedPermission = permission?.trim();
-    if (!normalizedPermission || !rolesRaw) {
-      continue;
-    }
-    const roles = rolesRaw
-      .split('|')
-      .map((role) => role.trim())
-      .filter((role) => role.length > 0);
-    if (roles.length > 0) {
-      grants[normalizedPermission] = roles;
-    }
-  }
-  return grants;
-};
-
 const capabilityRuntimeConfig: ConfigFactory = () => ({
   capabilityRuntime: {
     disabledIds: parseCsvEnv('CAPABILITY_DISABLED_IDS'),
-    killSwitchIds: parseCsvEnv('CAPABILITY_KILL_SWITCH_IDS'),
-    operationDisabledKeys: parseCsvEnv('CAPABILITY_OPERATION_DISABLED_KEYS'),
-    permissionGrants: parsePermissionGrantEnv(process.env.CAPABILITY_PERMISSION_GRANTS),
   },
 });
 

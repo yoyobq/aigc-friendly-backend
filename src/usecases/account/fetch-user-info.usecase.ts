@@ -1,28 +1,16 @@
 // src/usecases/account/fetch-user-info.usecase.ts
 
-import { IdentityTypeEnum } from '@app-types/models/account.types';
 import type { PersistenceTransactionContext } from '@app-types/common/transaction.types';
+import type { IdentityTypeEnum } from '@app-types/models/account.types';
 import { UserInfoView } from '@app-types/models/auth.types'; // 导入统一的 UserInfoView
 import { UserState } from '@app-types/models/user-info.types';
 import { ACCOUNT_ERROR, DomainError } from '@core/common/errors';
 import { AccountSecurityService } from '@modules/account/base/services/account-security.service';
 import { AccountQueryService } from '@modules/account/queries/account.query.service';
 import { Injectable } from '@nestjs/common';
+import type { CompleteUserData } from './fetch-user-info.types';
 
 // 移除本地的 UserInfoView 定义，使用统一的类型定义
-
-/**
- * 完整的用户数据（包含安全验证结果）
- * 用于登录流程中的数据传递和安全比对
- */
-export interface CompleteUserData {
-  userInfoView: UserInfoView;
-  securityResult: {
-    isValid: boolean;
-    wasSuspended: boolean;
-    realAccessGroup?: IdentityTypeEnum[];
-  };
-}
 
 @Injectable()
 export class FetchUserInfoUsecase {

@@ -2,23 +2,16 @@
 
 # Current Capabilities
 
-This shallow projection is derived from the Nest API and Worker module graphs. Entry Module is a navigation seed, not a file-level ownership claim. Semantic decisions live at Decision Ref.
+This shallow projection is derived from the Nest API and Worker module graphs. Entry Module is a navigation seed, not a file-level ownership claim.
 
-| ID | Mode | Default State | Entry Module | Installed Processes | Runtime Processes | Runtime Resources | Decision Ref |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| ai.local-mock | switchable | enabled | AiInfrastructureModule | worker | worker | provider:ai.provider:mock; health | [docs/capabilities/current.md](../capabilities/current.md) |
-| ai.openai | switchable | enabled | AiInfrastructureModule | worker | worker | provider:ai.provider:openai; health | [docs/capabilities/current.md](../capabilities/current.md) |
-| ai.provider-call-observation | always-on | enabled | AiProviderCallRecordModule | worker | - | - | [docs/capabilities/current.md](../capabilities/current.md) |
-| ai.queue | switchable | enabled | AiCapabilityModule | api, worker | api, worker | queue:command:generate->ai/generate; queue:command:embed->ai/embed; queue:command:workflow->ai/workflow | [docs/capabilities/current.md](../capabilities/current.md) |
-| ai.qwen | switchable | enabled | AiInfrastructureModule | worker | worker | provider:ai.provider:qwen; health | [docs/capabilities/current.md](../capabilities/current.md) |
-| ai.workflow | always-on | enabled | AiWorkflowContextModule | worker | - | - | [docs/capabilities/current.md](../capabilities/current.md) |
-| notification.email | switchable | enabled | EmailCapabilityModule | api, worker | api, worker | queue:command:send->email/send | [docs/capabilities/current.md](../capabilities/current.md) |
-| notification.email.sendmail | switchable | enabled | EmailWorkerModule | worker | worker | dependency:required:notification.email; provider:email.delivery:sendmail; health | [docs/capabilities/current.md](../capabilities/current.md) |
-| platform.account | always-on | enabled | AccountModule | api | - | - | [docs/capabilities/current.md](../capabilities/current.md) |
-| platform.async-task-audit | always-on | enabled | AsyncTaskRecordModule | api, worker | - | - | [docs/capabilities/current.md](../capabilities/current.md) |
-| platform.auth | always-on | enabled | AuthModule | api | - | - | [docs/capabilities/current.md](../capabilities/current.md) |
-| platform.verification-record | always-on | enabled | VerificationRecordModule | api | - | - | [docs/capabilities/current.md](../capabilities/current.md) |
-| third-party-auth.binding | always-on | enabled | ThirdPartyAuthModule | api | - | - | [docs/capabilities/current.md](../capabilities/current.md) |
-| third-party-auth.weapp | switchable | enabled | ThirdPartyAuthInfrastructureModule | api | api | provider:third-party-auth.provider:weapp; health | [docs/capabilities/current.md](../capabilities/current.md) |
-
-Validation: anchor IDs and decision references are valid; runtime contributions and bindings are complete in each installed process; required runtime dependencies form no cycle.
+| ID | Mode | Configured | Effective | Health | Root Blockers | Entry Module | Processes | Runtime Resources | Decision Ref |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ai | switchable | enabled | enabled | unknown | - | AiCapabilityModule | api, worker | - | [docs/capabilities/current.md](../capabilities/current.md) |
+| ai.execution | switchable | enabled | enabled | unknown | - | AiCapabilityModule | api, worker | api:queue:ai-execution/generate;api:queue:ai-execution/embed;worker:queue:ai-execution/generate;worker:queue:ai-execution/embed | [docs/capabilities/current.md](../capabilities/current.md) |
+| ai.workflow | switchable | enabled | enabled | unknown | - | AiWorkflowContextModule | worker | worker:queue:ai-workflow/workflow | [docs/capabilities/current.md](../capabilities/current.md) |
+| identity.account | always-on | enabled | enabled | unknown | - | AccountModule | api | - | [docs/capabilities/current.md](../capabilities/current.md) |
+| identity.authentication | always-on | enabled | enabled | unknown | - | AuthModule | api | - | [docs/capabilities/current.md](../capabilities/current.md) |
+| identity.external-account | switchable | enabled | enabled | unknown | - | ThirdPartyAuthModule | api | - | [docs/capabilities/current.md](../capabilities/current.md) |
+| identity.verification | always-on | enabled | enabled | unknown | - | VerificationRecordModule | api | - | [docs/capabilities/current.md](../capabilities/current.md) |
+| runtime.async-task | switchable | enabled | enabled | unknown | - | AsyncTaskRecordModule | api, worker | - | [docs/capabilities/current.md](../capabilities/current.md) |
+| runtime.email-delivery | switchable | enabled | enabled | unknown | - | EmailCapabilityModule | api, worker | api:dependency:optional:runtime.async-task;api:queue:email/send;worker:dependency:optional:runtime.async-task;worker:queue:email/send | [docs/capabilities/current.md](../capabilities/current.md) |

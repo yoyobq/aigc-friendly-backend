@@ -1,7 +1,6 @@
-// src/infrastructure/capability/capability-bootstrap-check.ts
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { CapabilityBootstrapError, CapabilityRegistry } from './capability.registry';
-import { ConfigCapabilityRuntimeStateReader } from './config-capability-runtime-state.reader';
+import { ConfigCapabilityStateReader } from './config-capability-state.reader';
 
 @Injectable()
 export class CapabilityBootstrapCheck implements OnApplicationBootstrap {
@@ -9,21 +8,16 @@ export class CapabilityBootstrapCheck implements OnApplicationBootstrap {
 
   constructor(
     private readonly capabilityRegistry: CapabilityRegistry,
-    private readonly runtimeStateReader: ConfigCapabilityRuntimeStateReader,
+    private readonly capabilityStateReader: ConfigCapabilityStateReader,
   ) {}
 
   onApplicationBootstrap(): void {
-    const result = this.capabilityRegistry.validateBootstrap();
-    for (const issue of result.issues.filter((item) => item.severity === 'warning')) {
-      this.logger.warn(issue.message);
+    const issues = this.capabilityRegistry.getValidationIssues();
+    if (issues.length > 0) {
+      throw new CapabilityBootstrapError(this.capabilityRegistry.process, issues);
     }
-    for (const warning of this.runtimeStateReader.getConfigurationWarnings()) {
+    for (const warning of this.capabilityStateReader.getConfigurationWarnings()) {
       this.logger.warn(warning.message);
-    }
-
-    const blockingIssues = result.issues.filter((issue) => issue.severity !== 'warning');
-    if (blockingIssues.length > 0) {
-      throw new CapabilityBootstrapError({ ...result, issues: blockingIssues });
     }
   }
 }

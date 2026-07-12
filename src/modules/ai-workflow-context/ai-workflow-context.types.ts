@@ -22,6 +22,9 @@ export const AI_WORKFLOW_CONTEXT_TERMINAL_STATUSES = [
   'CANCELLED',
 ] as const satisfies readonly AiWorkflowContextStatus[];
 
+export type AiWorkflowContextTerminalStatus =
+  (typeof AI_WORKFLOW_CONTEXT_TERMINAL_STATUSES)[number];
+
 export const AI_WORKFLOW_CONTEXT_ACTIVE_STATUSES = [
   'CREATED',
   'ADMISSION_WAITING',
@@ -178,6 +181,14 @@ export interface LinkAiWorkflowAsyncTaskRecordInput {
   readonly jobId: string;
   readonly asyncTaskRecordId: number;
   readonly expectedStatuses: readonly AiWorkflowContextStatus[];
+  readonly transactionContext?: PersistenceTransactionContext;
+}
+
+export interface LinkAiWorkflowTerminalAsyncTaskRecordInput {
+  readonly workflowId: string;
+  readonly jobId: string;
+  readonly asyncTaskRecordId: number;
+  readonly expectedStatuses: readonly AiWorkflowContextTerminalStatus[];
   readonly transactionContext?: PersistenceTransactionContext;
 }
 

@@ -131,6 +131,11 @@ export const ASYNC_TASK_RECORD_ERROR = {
 } as const;
 Object.freeze(ASYNC_TASK_RECORD_ERROR);
 
+export const CAPABILITY_ERROR = {
+  UNAVAILABLE: 'CAPABILITY_UNAVAILABLE',
+} as const;
+Object.freeze(CAPABILITY_ERROR);
+
 export const AI_WORKFLOW_CONTEXT_ERROR = {
   INVALID_PARAMS: 'AI_WORKFLOW_CONTEXT_INVALID_PARAMS',
   NOT_FOUND: 'AI_WORKFLOW_CONTEXT_NOT_FOUND',
@@ -173,6 +178,7 @@ export type VerificationRecordErrorCode =
   (typeof VERIFICATION_RECORD_ERROR)[keyof typeof VERIFICATION_RECORD_ERROR];
 export type AsyncTaskRecordErrorCode =
   (typeof ASYNC_TASK_RECORD_ERROR)[keyof typeof ASYNC_TASK_RECORD_ERROR];
+export type CapabilityErrorCode = (typeof CAPABILITY_ERROR)[keyof typeof CAPABILITY_ERROR];
 export type AiWorkflowContextErrorCode =
   (typeof AI_WORKFLOW_CONTEXT_ERROR)[keyof typeof AI_WORKFLOW_CONTEXT_ERROR];
 export type TimeErrorCode = (typeof TIME_ERROR)[keyof typeof TIME_ERROR];
@@ -197,6 +203,7 @@ export type DomainErrorCode =
   | PermissionErrorCode
   | VerificationRecordErrorCode
   | AsyncTaskRecordErrorCode
+  | CapabilityErrorCode
   | AiWorkflowContextErrorCode
   | TimeErrorCode
   | InputNormalizeErrorCode

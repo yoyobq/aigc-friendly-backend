@@ -1,7 +1,7 @@
 // src/infrastructure/bullmq/contracts/ai-queue.runtime.ts
 import { AI_PROVIDERS, type AiProvider } from '@app-types/common/ai-provider.types';
 
-import { BULLMQ_JOBS, BULLMQ_QUEUES } from '../bullmq.constants';
+import { BULLMQ_JOBS } from '../bullmq.constants';
 import {
   isNonEmptyString,
   isOptionalNonEmptyString,
@@ -136,9 +136,4 @@ export const AI_JOB_CONTRACT = {
     result: {} as AiWorkflowResult,
     payloadValidator: isAiWorkflowPayload,
   },
-} as const;
-
-export const AI_QUEUE_CONTRACT = {
-  queueName: BULLMQ_QUEUES.AI,
-  jobs: AI_JOB_CONTRACT,
 } as const;

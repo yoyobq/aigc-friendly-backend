@@ -3,6 +3,7 @@ import { DomainError, THIRDPARTY_ERROR } from '@core/common/errors/domain-error'
 import type { AiProviderClient } from '@core/ai/ai-provider.interface';
 import { AiWorkerService } from './ai-worker.service';
 import type { AiProviderRegistry } from './providers/ai-provider-registry';
+import { createEnabledCapabilityStateReader } from '../../../../test/support/capability/capability-state-reader.fixture';
 
 describe('AiWorkerService', () => {
   it('embed 应使用固定能力路由调用 registry', async () => {
@@ -24,7 +25,7 @@ describe('AiWorkerService', () => {
       getGenerateProvider: jest.fn(),
       getEmbedProvider,
     } as unknown as AiProviderRegistry;
-    const service = new AiWorkerService(registry);
+    const service = new AiWorkerService(registry, createEnabledCapabilityStateReader());
 
     const result = await service.embed({
       model: 'text-embedding-v1',
@@ -44,7 +45,7 @@ describe('AiWorkerService', () => {
       getGenerateProvider: jest.fn(),
       getEmbedProvider: jest.fn(() => provider),
     } as unknown as AiProviderRegistry;
-    const service = new AiWorkerService(registry);
+    const service = new AiWorkerService(registry, createEnabledCapabilityStateReader());
 
     await expect(
       service.embed({

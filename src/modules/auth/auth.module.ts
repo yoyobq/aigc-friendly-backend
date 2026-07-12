@@ -4,7 +4,7 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CoreJwtModule } from '@src/infrastructure/jwt/jwt.module';
 import { AuthService } from './auth.service';
-import { PlatformAuthCapabilityAnchor } from './auth.capability';
+import { IdentityAuthenticationCapabilityAnchor } from './auth.capability';
 import { AUTH_TOKENS } from './auth.tokens';
 import { LoginBootstrapQueryService } from './queries/login-bootstrap.query.service';
 import { LoginResultQueryService } from './queries/login-result.query.service';
@@ -16,7 +16,7 @@ import { TokenHelper } from './token.helper';
 @Module({
   imports: [CoreJwtModule],
   providers: [
-    PlatformAuthCapabilityAnchor,
+    IdentityAuthenticationCapabilityAnchor,
     {
       provide: AUTH_TOKENS.JWT_AUDIENCE,
       inject: [ConfigService],

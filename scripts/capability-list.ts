@@ -1,41 +1,30 @@
 /// <reference types="node" />
 
-/* eslint-disable no-console -- This command writes its projection and status to stdout. */
+/* eslint-disable no-console -- Interactive observation command. */
 
 import 'reflect-metadata';
 
 import type {
-  CapabilityId,
   CapabilityAnchor,
+  CapabilityId,
   CapabilityProcess,
   CapabilityRuntimeContribution,
+  CapabilityStateSnapshot,
 } from '@app-types/common/capability.types';
 import { MODULE_METADATA } from '@nestjs/common/constants';
 import type { DynamicModule, Provider, Type } from '@nestjs/common';
 import { ApiModule } from '@src/bootstraps/api/api.module';
 import { WorkerModule } from '@src/bootstraps/worker/worker.module';
+import { validateCapabilityAnchors } from '@src/infrastructure/capability/capability-graph';
 import {
-  CAPABILITY_HEALTH_CHECK_METADATA_KEY,
-  CAPABILITY_OPERATION_HANDLER_METADATA_KEY,
+  aggregateCapabilityProcessState,
+  buildCapabilityProcessProjections,
+  resolveCapabilityDecisionHref,
+} from '@src/infrastructure/capability/capability-process-projection';
+import {
   CAPABILITY_ANCHOR_METADATA_KEY,
-  CAPABILITY_PROVIDER_BINDING_METADATA_KEY,
-  CAPABILITY_QUEUE_BINDING_METADATA_KEY,
   CAPABILITY_RUNTIME_CONTRIBUTION_METADATA_KEY,
-  CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_METADATA_KEY,
-  CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_METADATA_KEY,
-  CAPABILITY_SESSION_IDENTITY_RESOLVER_METADATA_KEY,
-  type CapabilityHealthCheckMetadata,
-  type CapabilityOperationHandlerMetadata,
-  type CapabilityProviderBindingMetadata,
-  type CapabilityQueueBindingMetadata,
-  type CapabilitySessionAuthorityScopeAuthorizerMetadata,
-  type CapabilitySessionAuthoritySummaryResolverMetadata,
-  type CapabilitySessionIdentityResolverMetadata,
 } from '@src/infrastructure/capability/capability.decorators';
-import {
-  validateCapabilityProcessTopology,
-  type CapabilityProcessTopology,
-} from '@src/infrastructure/capability/capability-topology.validator';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
@@ -47,24 +36,34 @@ interface ProviderObservation {
   readonly providerType: Type<unknown>;
 }
 
-export interface CapabilityViewEntry {
+interface RuntimeObservation {
+  readonly process: CapabilityProcess;
+  readonly contribution: CapabilityRuntimeContribution;
+}
+
+interface AnchorObservation {
+  readonly anchor: CapabilityAnchor;
+  readonly modules: Set<string>;
+  readonly processes: Set<CapabilityProcess>;
+}
+
+interface CapabilityViewEntry {
   readonly anchor: CapabilityAnchor;
   readonly entryModule: string;
-  readonly installedProcesses: readonly CapabilityProcess[];
-  readonly runtimeContribution: CapabilityRuntimeContribution | null;
-  readonly runtimeProcesses: readonly CapabilityProcess[];
+  readonly processes: readonly CapabilityProcess[];
+  readonly contributions: readonly RuntimeObservation[];
+  readonly state: CapabilityStateSnapshot;
 }
 
 const PROJECT_ROOT = process.cwd();
 const GENERATED_DOC_PATH = path.join(PROJECT_ROOT, 'docs/generated/capabilities-current.md');
-const CAPABILITY_ID_PATTERN = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*$/;
 const PROCESS_ORDER: readonly CapabilityProcess[] = ['api', 'worker'];
 
 async function main(): Promise<void> {
   const command = parseCommand(process.argv.slice(2));
   const entries = await collectCapabilityView();
+  reportConfigurationWarnings(entries);
   const markdown = renderMarkdown(entries);
-
   if (command === 'list') {
     console.log(renderTable(entries));
     return;
@@ -75,354 +74,185 @@ async function main(): Promise<void> {
     console.log(`Wrote ${toProjectPath(GENERATED_DOC_PATH)}`);
     return;
   }
-  await assertGeneratedFileMatches(markdown);
+  const current = await fs.readFile(GENERATED_DOC_PATH, 'utf8').catch(() => null);
+  if (current !== markdown) {
+    throw new Error('Generated capability docs are stale; run npm run capability:docs');
+  }
+  console.log(`Generated capability docs are current: ${toProjectPath(GENERATED_DOC_PATH)}`);
 }
 
-function parseCommand(argv: readonly string[]): Command {
-  const args = argv.filter((arg) => arg !== '--');
-  if (args.length === 0) {
-    return 'list';
-  }
-  if (args.length === 1 && (args[0] === 'list' || args[0] === 'docs' || args[0] === 'check')) {
-    return args[0];
-  }
-  throw new Error('Usage: capability-list.ts [list|docs|check]');
-}
+async function collectCapabilityView(): Promise<readonly CapabilityViewEntry[]> {
+  const observations = (
+    await Promise.all([
+      collectProviderObservations('api', ApiModule),
+      collectProviderObservations('worker', WorkerModule),
+    ])
+  ).flat();
+  const anchorsById = new Map<CapabilityId, AnchorObservation>();
+  const contributionsById = new Map<CapabilityId, RuntimeObservation[]>();
 
-export async function collectCapabilityView(): Promise<readonly CapabilityViewEntry[]> {
-  const [apiObservations, workerObservations] = await Promise.all([
-    collectProviderObservations({ process: 'api', rootModule: ApiModule }),
-    collectProviderObservations({ process: 'worker', rootModule: WorkerModule }),
-  ]);
-  const observations = [...apiObservations, ...workerObservations];
-  const anchorsById = collectAnchors(observations);
-  const runtimeById = collectRuntimeContributions(observations);
+  for (const observation of observations) {
+    const anchor = Reflect.getMetadata(CAPABILITY_ANCHOR_METADATA_KEY, observation.providerType) as
+      CapabilityAnchor | undefined;
+    if (anchor) {
+      const current = anchorsById.get(anchor.capabilityId);
+      if (current && JSON.stringify(current.anchor) !== JSON.stringify(anchor)) {
+        throw new Error(`Capability anchor differs across processes: ${anchor.capabilityId}`);
+      }
+      const item = current ?? {
+        anchor,
+        modules: new Set<string>(),
+        processes: new Set<CapabilityProcess>(),
+      };
+      item.modules.add(observation.moduleName);
+      item.processes.add(observation.process);
+      anchorsById.set(anchor.capabilityId, item);
+    }
+    const contribution = Reflect.getMetadata(
+      CAPABILITY_RUNTIME_CONTRIBUTION_METADATA_KEY,
+      observation.providerType,
+    ) as CapabilityRuntimeContribution | undefined;
+    if (contribution) {
+      const items = contributionsById.get(contribution.capabilityId) ?? [];
+      if (
+        !items.some(
+          (item) =>
+            item.process === observation.process &&
+            JSON.stringify(item.contribution) === JSON.stringify(contribution),
+        )
+      ) {
+        items.push({ process: observation.process, contribution });
+      }
+      contributionsById.set(contribution.capabilityId, items);
+    }
+  }
 
-  const issues = await validateAnchors(anchorsById);
-  const topologyIssues = PROCESS_ORDER.flatMap((process) =>
-    validateCapabilityProcessTopology(buildProcessTopology({ process, observations })).filter(
-      (issue) => issue.severity !== 'warning',
-    ),
+  const anchors = [...anchorsById.values()].map((item) => item.anchor);
+  // This command is a composition/observation entry point, so reading deployment
+  // configuration here mirrors the API and Worker bootstraps.
+  // eslint-disable-next-line local-architecture/no-runtime-config-outside-wiring
+  const disabledIds = new Set(parseCsv(process.env.CAPABILITY_DISABLED_IDS));
+  const processProjection = buildCapabilityProcessProjections({
+    topologies: PROCESS_ORDER.map((processName) => ({
+      process: processName,
+      anchors: [...anchorsById.values()]
+        .filter((item) => item.processes.has(processName))
+        .map((item) => item.anchor),
+      contributions: [...contributionsById.values()]
+        .flat()
+        .filter((item) => item.process === processName)
+        .map((item) => item.contribution),
+    })),
+    disabledIds,
+  });
+  const graphIssues = validateCapabilityAnchors(anchors);
+  const decisionIssues = await validateDecisionReferences(anchors);
+  const moduleIssues = [...anchorsById.entries()].flatMap(([capabilityId, item]) =>
+    item.modules.size === 1 ? [] : [`capability_entry_module_ambiguous:${capabilityId}`],
   );
-  const allIssues = [...issues, ...topologyIssues.map((issue) => issue.message)];
-  if (allIssues.length > 0) {
-    throw new Error(`Capability governance validation failed\n- ${allIssues.join('\n- ')}`);
+  const issues = [
+    ...graphIssues.map((item) => item.message),
+    ...processProjection.issues,
+    ...decisionIssues,
+    ...moduleIssues,
+  ];
+  if (issues.length > 0) {
+    throw new Error(`Capability observation failed\n- ${issues.join('\n- ')}`);
   }
 
   return [...anchorsById.entries()]
     .map(([capabilityId, item]) => {
-      const runtime = runtimeById.get(capabilityId);
       return {
         anchor: item.anchor,
         entryModule: [...item.modules][0] ?? '',
-        installedProcesses: sortProcesses(item.processes),
-        runtimeContribution: runtime?.contribution ?? null,
-        runtimeProcesses: sortProcesses(runtime?.processes ?? new Set()),
+        processes: sortProcesses(item.processes),
+        contributions: contributionsById.get(capabilityId) ?? [],
+        state: aggregateCapabilityProcessState({
+          capabilityId,
+          projections: processProjection.projections,
+        }),
       };
     })
     .sort((left, right) => left.anchor.capabilityId.localeCompare(right.anchor.capabilityId));
 }
 
-async function collectProviderObservations(input: {
-  readonly process: CapabilityProcess;
-  readonly rootModule: Type<unknown>;
-}): Promise<readonly ProviderObservation[]> {
+async function collectProviderObservations(
+  processName: CapabilityProcess,
+  rootModule: Type<unknown>,
+): Promise<readonly ProviderObservation[]> {
   const observations: ProviderObservation[] = [];
-  const visitedModuleTypes = new Set<Type<unknown>>();
+  const visitedModules = new Set<Type<unknown>>();
   const visitedDynamicModules = new Set<DynamicModule>();
 
-  const observeProviders = (moduleType: Type<unknown>, providers: readonly Provider[]): void => {
+  const observe = (moduleType: Type<unknown>, providers: readonly Provider[]): void => {
     for (const provider of providers) {
       const providerType = readProviderType(provider);
-      if (!providerType) {
-        continue;
-      }
-      observations.push({
-        process: input.process,
-        moduleName: moduleType.name,
-        providerType,
-      });
+      if (providerType)
+        observations.push({ process: processName, moduleName: moduleType.name, providerType });
     }
   };
 
-  const visitModuleType = async (moduleType: Type<unknown>): Promise<void> => {
-    if (visitedModuleTypes.has(moduleType)) {
-      return;
-    }
-    visitedModuleTypes.add(moduleType);
-    observeProviders(
-      moduleType,
-      readModuleMetadata<readonly Provider[]>(moduleType, MODULE_METADATA.PROVIDERS) ?? [],
-    );
-    for (const imported of readModuleMetadata<readonly unknown[]>(
-      moduleType,
-      MODULE_METADATA.IMPORTS,
-    ) ?? []) {
-      await visitModuleDefinition(imported);
-    }
-  };
-
-  const visitDynamicModule = async (dynamicModule: DynamicModule): Promise<void> => {
-    if (visitedDynamicModules.has(dynamicModule)) {
-      return;
-    }
-    visitedDynamicModules.add(dynamicModule);
-    await visitModuleType(dynamicModule.module);
-    observeProviders(dynamicModule.module, dynamicModule.providers ?? []);
-    for (const imported of dynamicModule.imports ?? []) {
-      await visitModuleDefinition(imported);
-    }
-  };
-
-  const visitModuleDefinition = async (definition: unknown): Promise<void> => {
+  const visit = async (definition: unknown): Promise<void> => {
     const forwardResolved = unwrapForwardReference(definition);
     const resolved = isPromiseLike(forwardResolved) ? await forwardResolved : forwardResolved;
     if (isDynamicModule(resolved)) {
-      await visitDynamicModule(resolved);
+      if (visitedDynamicModules.has(resolved)) return;
+      visitedDynamicModules.add(resolved);
+      await visit(resolved.module);
+      observe(resolved.module, resolved.providers ?? []);
+      for (const imported of resolved.imports ?? []) await visit(imported);
       return;
     }
-    if (typeof resolved === 'function') {
-      await visitModuleType(resolved as Type<unknown>);
-      return;
-    }
-    if (resolved !== null && resolved !== undefined) {
-      throw new Error(`Unsupported Nest module definition in ${input.rootModule.name}`);
-    }
-  };
-
-  await visitModuleType(input.rootModule);
-  return dedupeProviderObservations(observations);
-}
-
-function collectAnchors(observations: readonly ProviderObservation[]): Map<
-  CapabilityId,
-  {
-    readonly anchor: CapabilityAnchor;
-    readonly modules: Set<string>;
-    readonly processes: Set<CapabilityProcess>;
-  }
-> {
-  const anchorsById = new Map<
-    CapabilityId,
-    {
-      readonly anchor: CapabilityAnchor;
-      readonly modules: Set<string>;
-      readonly processes: Set<CapabilityProcess>;
-    }
-  >();
-  for (const observation of observations) {
-    const anchor = Reflect.getMetadata(CAPABILITY_ANCHOR_METADATA_KEY, observation.providerType) as
-      CapabilityAnchor | undefined;
-    if (!anchor) {
-      continue;
-    }
-    const current = anchorsById.get(anchor.capabilityId);
-    if (!current) {
-      anchorsById.set(anchor.capabilityId, {
-        anchor,
-        modules: new Set([observation.moduleName]),
-        processes: new Set([observation.process]),
-      });
-      continue;
-    }
-    if (!metadataEquals(current.anchor, anchor)) {
-      throw new Error(`Conflicting capability anchors: ${anchor.capabilityId}`);
-    }
-    current.modules.add(observation.moduleName);
-    current.processes.add(observation.process);
-  }
-  return anchorsById;
-}
-
-function collectRuntimeContributions(observations: readonly ProviderObservation[]): Map<
-  CapabilityId,
-  {
-    readonly contribution: CapabilityRuntimeContribution;
-    readonly processes: Set<CapabilityProcess>;
-  }
-> {
-  const runtimeById = new Map<
-    CapabilityId,
-    {
-      readonly contribution: CapabilityRuntimeContribution;
-      readonly processes: Set<CapabilityProcess>;
-    }
-  >();
-  for (const observation of observations) {
-    const contribution = Reflect.getMetadata(
-      CAPABILITY_RUNTIME_CONTRIBUTION_METADATA_KEY,
-      observation.providerType,
-    ) as CapabilityRuntimeContribution | undefined;
-    if (!contribution) {
-      continue;
-    }
-    const current = runtimeById.get(contribution.capabilityId);
-    if (!current) {
-      runtimeById.set(contribution.capabilityId, {
-        contribution,
-        processes: new Set([observation.process]),
-      });
-      continue;
-    }
-    if (!metadataEquals(current.contribution, contribution)) {
-      throw new Error(`Conflicting capability runtime contributions: ${contribution.capabilityId}`);
-    }
-    current.processes.add(observation.process);
-  }
-  return runtimeById;
-}
-
-function buildProcessTopology(input: {
-  readonly process: CapabilityProcess;
-  readonly observations: readonly ProviderObservation[];
-}): CapabilityProcessTopology {
-  const observations = input.observations.filter(
-    (observation) => observation.process === input.process,
-  );
-  return {
-    process: input.process,
-    anchors: collectProviderMetadata<CapabilityAnchor>(
-      observations,
-      CAPABILITY_ANCHOR_METADATA_KEY,
-    ),
-    runtimeContributions: collectProviderMetadata<CapabilityRuntimeContribution>(
-      observations,
-      CAPABILITY_RUNTIME_CONTRIBUTION_METADATA_KEY,
-    ),
-    providerBindings: collectProviderMetadata<CapabilityProviderBindingMetadata>(
-      observations,
-      CAPABILITY_PROVIDER_BINDING_METADATA_KEY,
-    ),
-    queueBindings: collectProviderMetadata<CapabilityQueueBindingMetadata>(
-      observations,
-      CAPABILITY_QUEUE_BINDING_METADATA_KEY,
-    ),
-    healthChecks: collectProviderMetadata<CapabilityHealthCheckMetadata>(
-      observations,
-      CAPABILITY_HEALTH_CHECK_METADATA_KEY,
-    ),
-    operationHandlers: collectProviderMetadata<CapabilityOperationHandlerMetadata>(
-      observations,
-      CAPABILITY_OPERATION_HANDLER_METADATA_KEY,
-    ),
-    sessionIdentityResolvers: collectProviderMetadata<CapabilitySessionIdentityResolverMetadata>(
-      observations,
-      CAPABILITY_SESSION_IDENTITY_RESOLVER_METADATA_KEY,
-    ),
-    sessionAuthoritySummaryResolvers:
-      collectProviderMetadata<CapabilitySessionAuthoritySummaryResolverMetadata>(
-        observations,
-        CAPABILITY_SESSION_AUTHORITY_SUMMARY_RESOLVER_METADATA_KEY,
-      ),
-    sessionAuthorityScopeAuthorizers:
-      collectProviderMetadata<CapabilitySessionAuthorityScopeAuthorizerMetadata>(
-        observations,
-        CAPABILITY_SESSION_AUTHORITY_SCOPE_AUTHORIZER_METADATA_KEY,
-      ),
-  };
-}
-
-function collectProviderMetadata<T>(
-  observations: readonly ProviderObservation[],
-  metadataKey: string,
-): readonly T[] {
-  return observations.flatMap((observation) => {
-    const metadata = Reflect.getMetadata(metadataKey, observation.providerType) as T | undefined;
-    return metadata === undefined ? [] : [metadata];
-  });
-}
-
-async function validateAnchors(
-  anchorsById: ReadonlyMap<
-    CapabilityId,
-    {
-      readonly anchor: CapabilityAnchor;
-      readonly modules: ReadonlySet<string>;
-    }
-  >,
-): Promise<readonly string[]> {
-  const decisionDocuments = new Map<string, string>();
-  const issues: string[] = [];
-  for (const [capabilityId, item] of anchorsById) {
-    if (!CAPABILITY_ID_PATTERN.test(capabilityId)) {
-      issues.push(`capability_anchor_id_invalid:${capabilityId}`);
-    }
-    if (item.modules.size !== 1) {
-      issues.push(
-        `capability_anchor_entry_module_ambiguous:${capabilityId}:${[...item.modules].sort().join(',')}`,
-      );
-    }
-    issues.push(
-      ...(await validateCapabilityDecisionRef({
-        capabilityId,
-        decisionRef: item.anchor.decisionRef,
-        decisionDocuments,
-      })),
+    if (typeof resolved !== 'function') return;
+    const moduleType = resolved as Type<unknown>;
+    if (visitedModules.has(moduleType)) return;
+    visitedModules.add(moduleType);
+    observe(
+      moduleType,
+      readMetadata<readonly Provider[]>(moduleType, MODULE_METADATA.PROVIDERS) ?? [],
     );
-  }
-  return issues;
-}
-
-export async function validateCapabilityDecisionRef(input: {
-  readonly capabilityId: CapabilityId;
-  readonly decisionRef: string;
-  readonly decisionDocuments?: Map<string, string>;
-}): Promise<readonly string[]> {
-  const decisionRef = normalizeProjectPath(input.decisionRef.trim());
-  if (!isCapabilityDecisionPath(decisionRef)) {
-    return [`capability_decision_ref_invalid:${input.capabilityId}:${input.decisionRef}`];
-  }
-
-  const decisionDocuments = input.decisionDocuments ?? new Map<string, string>();
-  let content = decisionDocuments.get(decisionRef);
-  if (content === undefined) {
-    try {
-      content = await fs.readFile(path.resolve(PROJECT_ROOT, decisionRef), 'utf8');
-      decisionDocuments.set(decisionRef, content);
-    } catch {
-      return [`capability_decision_ref_missing:${input.capabilityId}:${decisionRef}`];
+    for (const imported of readMetadata<readonly unknown[]>(moduleType, MODULE_METADATA.IMPORTS) ??
+      []) {
+      await visit(imported);
     }
-  }
+  };
 
-  const capabilityHeading = new RegExp('^## `' + escapeRegExp(input.capabilityId) + '`\\s*$', 'm');
-  return capabilityHeading.test(content)
-    ? []
-    : [`capability_decision_ref_capability_missing:${input.capabilityId}:${decisionRef}`];
-}
-
-function isCapabilityDecisionPath(value: string): boolean {
-  return (
-    value.startsWith('docs/capabilities/') &&
-    value.endsWith('.md') &&
-    !value.split('/').includes('..') &&
-    !path.isAbsolute(value)
-  );
+  await visit(rootModule);
+  return observations;
 }
 
 function renderTable(entries: readonly CapabilityViewEntry[]): string {
-  const rows = [
-    ['ID', 'Mode', 'Default', 'Entry module', 'Installed', 'Runtime', 'Resources', 'Decision'],
-    ...entries.map((entry) => [
-      entry.anchor.capabilityId,
-      entry.anchor.mode,
-      resolveDefaultState(entry),
-      entry.entryModule,
-      entry.installedProcesses.join(',') || '-',
-      entry.runtimeProcesses.join(',') || '-',
-      summarizeRuntimeResources(entry.runtimeContribution),
-      entry.anchor.decisionRef,
-    ]),
+  const rows = entries.map((entry) => [
+    entry.anchor.capabilityId,
+    entry.anchor.mode,
+    entry.state.configuredState ?? '-',
+    entry.state.effectiveState,
+    entry.state.health,
+    entry.state.rootBlockers
+      .map((item) => `${item.capabilityId}(${item.effectiveState})`)
+      .join(',') || '-',
+    entry.entryModule,
+    entry.processes.join(','),
+    renderResources(entry),
+    entry.anchor.decisionRef,
+  ]);
+  const headers = [
+    'Capability',
+    'Mode',
+    'Configured',
+    'Effective',
+    'Health',
+    'Root blockers',
+    'Entry module',
+    'Processes',
+    'Resources',
+    'Decision',
   ];
-  const widths = rows[0].map((_, index) =>
-    Math.max(...rows.map((row) => (row[index] ?? '').length)),
+  const widths = headers.map((header, index) =>
+    Math.max(header.length, ...rows.map((row) => row[index]?.length ?? 0)),
   );
-  return rows
-    .map((row) =>
-      row
-        .map((cell, index) => cell.padEnd(widths[index] ?? 0))
-        .join('  ')
-        .trimEnd(),
-    )
+  return [headers, widths.map((width) => '-'.repeat(width)), ...rows]
+    .map((row) => row.map((value, index) => value.padEnd(widths[index] ?? 0)).join(' | '))
     .join('\n');
 }
 
@@ -432,202 +262,132 @@ function renderMarkdown(entries: readonly CapabilityViewEntry[]): string {
     '',
     '# Current Capabilities',
     '',
-    'This shallow projection is derived from the Nest API and Worker module graphs. Entry Module is a navigation seed, not a file-level ownership claim. Semantic decisions live at Decision Ref.',
+    'This shallow projection is derived from the Nest API and Worker module graphs. Entry Module is a navigation seed, not a file-level ownership claim.',
     '',
-    '| ID | Mode | Default State | Entry Module | Installed Processes | Runtime Processes | Runtime Resources | Decision Ref |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- |',
-    ...entries.map((entry) =>
-      markdownRow([
-        entry.anchor.capabilityId,
-        entry.anchor.mode,
-        resolveDefaultState(entry),
-        entry.entryModule,
-        entry.installedProcesses.join(', ') || '-',
-        entry.runtimeProcesses.join(', ') || '-',
-        summarizeRuntimeResources(entry.runtimeContribution),
-        markdownDecisionLink(entry.anchor.decisionRef),
-      ]),
+    '| ID | Mode | Configured | Effective | Health | Root Blockers | Entry Module | Processes | Runtime Resources | Decision Ref |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    ...entries.map(
+      (entry) =>
+        `| ${entry.anchor.capabilityId} | ${entry.anchor.mode} | ${entry.state.configuredState ?? '-'} | ${entry.state.effectiveState} | ${entry.state.health} | ${entry.state.rootBlockers.map((item) => `${item.capabilityId}(${item.effectiveState})`).join(', ') || '-'} | ${entry.entryModule} | ${entry.processes.join(', ')} | ${renderResources(entry)} | [${entry.anchor.decisionRef}](${resolveCapabilityDecisionHref({ generatedDocumentRef: toProjectPath(GENERATED_DOC_PATH), decisionRef: entry.anchor.decisionRef })}) |`,
     ),
-    '',
-    'Validation: anchor IDs and decision references are valid; runtime contributions and bindings are complete in each installed process; required runtime dependencies form no cycle.',
-    '',
   ];
-  return lines.join('\n');
+  return `${lines.join('\n')}\n`;
 }
 
-async function assertGeneratedFileMatches(output: string): Promise<void> {
-  const current = await fs.readFile(GENERATED_DOC_PATH, 'utf8');
-  if (current !== output) {
-    throw new Error(`Generated capability docs are stale: ${toProjectPath(GENERATED_DOC_PATH)}`);
+function renderResources(entry: CapabilityViewEntry): string {
+  const resources = entry.contributions.flatMap((item) => [
+    ...item.contribution.runtimeDependencies.map(
+      (dependency) =>
+        `${item.process}:dependency:${dependency.requirement}:${dependency.capabilityId}`,
+    ),
+    ...item.contribution.queueResources.map(
+      (resource) => `${item.process}:queue:${resource.queueName}/${resource.jobName}`,
+    ),
+  ]);
+  return [...new Set(resources)].join(';') || '-';
+}
+
+async function validateDecisionReferences(
+  anchors: readonly CapabilityAnchor[],
+): Promise<readonly string[]> {
+  const issues: string[] = [];
+  for (const anchor of anchors) {
+    const absolutePath = path.join(PROJECT_ROOT, anchor.decisionRef);
+    const content = await fs.readFile(absolutePath, 'utf8').catch(() => null);
+    if (!content) {
+      issues.push(`capability_decision_missing:${anchor.capabilityId}:${anchor.decisionRef}`);
+      continue;
+    }
+    if (!content.includes(`## \`${anchor.capabilityId}\``)) {
+      issues.push(
+        `capability_decision_heading_missing:${anchor.capabilityId}:${anchor.decisionRef}`,
+      );
+    }
   }
-  console.log(`Generated capability docs are current: ${toProjectPath(GENERATED_DOC_PATH)}`);
+  return issues;
 }
 
-function readModuleMetadata<T>(moduleType: Type<unknown>, key: string): T | undefined {
-  return Reflect.getMetadata(key, moduleType) as T | undefined;
+function parseCommand(args: readonly string[]): Command {
+  const command = args.filter((item) => item !== '--')[0] ?? 'list';
+  if (command === 'list' || command === 'docs' || command === 'check') return command;
+  throw new Error('Usage: capability-list.ts [list|docs|check]');
+}
+
+function parseCsv(raw: unknown): readonly string[] {
+  if (typeof raw !== 'string') return [];
+  return [
+    ...new Set(
+      raw
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
+function reportConfigurationWarnings(entries: readonly CapabilityViewEntry[]): void {
+  // eslint-disable-next-line local-architecture/no-runtime-config-outside-wiring
+  const disabledIds = parseCsv(process.env.CAPABILITY_DISABLED_IDS);
+  const anchorsById = new Map(entries.map((entry) => [entry.anchor.capabilityId, entry.anchor]));
+  for (const capabilityId of disabledIds) {
+    const anchor = anchorsById.get(capabilityId);
+    if (!anchor) {
+      console.warn(`capability_disabled_id_unknown:${capabilityId}`);
+      continue;
+    }
+    if (anchor.mode === 'always-on') {
+      console.warn(`capability_disabled_id_ignored_always_on:${capabilityId}`);
+    }
+  }
+}
+
+function sortProcesses(processes: ReadonlySet<CapabilityProcess>): readonly CapabilityProcess[] {
+  return PROCESS_ORDER.filter((item) => processes.has(item));
 }
 
 function readProviderType(provider: Provider): Type<unknown> | null {
   if (typeof provider === 'function') return provider as Type<unknown>;
-  if ('useClass' in provider && provider.useClass) return provider.useClass as Type<unknown>;
+  if (
+    provider &&
+    typeof provider === 'object' &&
+    'useClass' in provider &&
+    typeof provider.useClass === 'function'
+  ) {
+    return provider.useClass as Type<unknown>;
+  }
+  if (
+    provider &&
+    typeof provider === 'object' &&
+    'useExisting' in provider &&
+    typeof provider.useExisting === 'function'
+  ) {
+    return provider.useExisting as Type<unknown>;
+  }
   return null;
 }
 
+function readMetadata<T>(target: Type<unknown>, key: string): T | undefined {
+  return Reflect.getMetadata(key, target) as T | undefined;
+}
+
 function unwrapForwardReference(value: unknown): unknown {
-  if (hasForwardReference(value)) {
-    return value.forwardRef();
+  if (value && typeof value === 'object' && 'forwardRef' in value) {
+    const forwardRef = (value as { readonly forwardRef?: () => unknown }).forwardRef;
+    if (typeof forwardRef === 'function') return forwardRef();
   }
   return value;
 }
 
-function hasForwardReference(value: unknown): value is { readonly forwardRef: () => unknown } {
-  if (!value || typeof value !== 'object' || !('forwardRef' in value)) {
-    return false;
-  }
-  return typeof value.forwardRef === 'function';
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  return Boolean(value && typeof value === 'object' && 'then' in value);
 }
 
 function isDynamicModule(value: unknown): value is DynamicModule {
   return Boolean(value && typeof value === 'object' && 'module' in value);
 }
 
-function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
-  return Boolean(
-    value && typeof value === 'object' && 'then' in value && typeof value.then === 'function',
-  );
+function toProjectPath(absolutePath: string): string {
+  return path.relative(PROJECT_ROOT, absolutePath).split(path.sep).join('/');
 }
 
-function dedupeProviderObservations(
-  observations: readonly ProviderObservation[],
-): readonly ProviderObservation[] {
-  const seen = new Map<Type<unknown>, Set<string>>();
-  return observations.filter((observation) => {
-    const key = `${observation.process}:${observation.moduleName}`;
-    const providerKeys = seen.get(observation.providerType) ?? new Set<string>();
-    if (providerKeys.has(key)) return false;
-    providerKeys.add(key);
-    seen.set(observation.providerType, providerKeys);
-    return true;
-  });
-}
-
-function metadataEquals(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function sortProcesses(processes: ReadonlySet<CapabilityProcess>): readonly CapabilityProcess[] {
-  return PROCESS_ORDER.filter((process) => processes.has(process));
-}
-
-function resolveDefaultState(entry: CapabilityViewEntry): 'enabled' | 'disabled' {
-  if (entry.anchor.mode === 'always-on') {
-    return 'enabled';
-  }
-  return entry.runtimeContribution?.runtime?.defaultState ?? 'enabled';
-}
-
-function summarizeRuntimeResources(contribution: CapabilityRuntimeContribution | null): string {
-  if (!contribution) {
-    return '-';
-  }
-  const resources = [
-    ...summarizeRuntimeDependencyResources(contribution),
-    ...summarizeProviderResources(contribution),
-    ...summarizeQueueResources(contribution),
-    ...summarizeOperationResources(contribution),
-    ...summarizeApiResources(contribution),
-    ...summarizeSessionResources(contribution),
-    ...summarizeHealthResources(contribution),
-  ];
-  return resources.join('; ') || '-';
-}
-
-function summarizeRuntimeDependencyResources(
-  contribution: CapabilityRuntimeContribution,
-): readonly string[] {
-  return (contribution.runtimeDependencies ?? []).map(
-    (dependency) => `dependency:${dependency.mode}:${dependency.capabilityId}`,
-  );
-}
-
-function summarizeProviderResources(
-  contribution: CapabilityRuntimeContribution,
-): readonly string[] {
-  return (contribution.contributions?.providers ?? []).map(
-    (provider) => `provider:${provider.providerKind}:${provider.providerName}`,
-  );
-}
-
-function summarizeQueueResources(contribution: CapabilityRuntimeContribution): readonly string[] {
-  return (contribution.contributions?.queues ?? []).map(
-    (queue) =>
-      `queue:${queue.operationKind}:${queue.operation}->${queue.queueName}/${queue.jobName}`,
-  );
-}
-
-function summarizeOperationResources(
-  contribution: CapabilityRuntimeContribution,
-): readonly string[] {
-  return [
-    ...(contribution.operations?.commands ?? []).map(
-      (operation) => `operation:command:${operation.name}`,
-    ),
-    ...(contribution.operations?.queries ?? []).map(
-      (operation) => `operation:query:${operation.name}`,
-    ),
-    ...(contribution.operations?.events ?? []).map(
-      (operation) => `operation:event:${operation.name}`,
-    ),
-  ];
-}
-
-function summarizeApiResources(contribution: CapabilityRuntimeContribution): readonly string[] {
-  const graphqlOperationCount = contribution.contributions?.api?.graphqlOperations?.length ?? 0;
-  return graphqlOperationCount > 0 ? [`api:${graphqlOperationCount}`] : [];
-}
-
-function summarizeSessionResources(contribution: CapabilityRuntimeContribution): readonly string[] {
-  const principalCount = contribution.contributions?.session?.principals?.length ?? 0;
-  const authorityClaimCount = contribution.contributions?.session?.authorityClaims?.length ?? 0;
-  return principalCount > 0 || authorityClaimCount > 0
-    ? [`session:${principalCount}/${authorityClaimCount}`]
-    : [];
-}
-
-function summarizeHealthResources(contribution: CapabilityRuntimeContribution): readonly string[] {
-  return contribution.runtime?.healthCheck ? ['health'] : [];
-}
-
-function markdownDecisionLink(decisionRef: string): string {
-  const relativePath = path
-    .relative(path.dirname(GENERATED_DOC_PATH), path.resolve(PROJECT_ROOT, decisionRef))
-    .replaceAll(path.sep, '/');
-  return `[${decisionRef}](${relativePath})`;
-}
-
-function normalizeProjectPath(value: string): string {
-  return value.replaceAll('\\', '/').replace(/\/$/, '');
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function markdownRow(cells: readonly string[]): string {
-  return `| ${cells.map(escapeMarkdownCell).join(' | ')} |`;
-}
-
-function escapeMarkdownCell(value: string): string {
-  return value.replaceAll('|', '\\|').replaceAll('\n', ' ');
-}
-
-function toProjectPath(filePath: string): string {
-  return path.relative(PROJECT_ROOT, filePath).replaceAll(path.sep, '/');
-}
-
-if (require.main === module) {
-  void main().catch((error: unknown) => {
-    console.error(error instanceof Error ? error.message : error);
-    process.exitCode = 1;
-  });
-}
+void main();

@@ -5,6 +5,7 @@ import type {
   AiWorkflowContextStatus,
   AiWorkflowContextView,
 } from '@src/modules/ai-workflow-context/ai-workflow-context.types';
+import type { CapabilityStateReader } from '@src/modules/common/capability-state-reader.contract';
 import type { AiWorkflowContextService } from '@src/modules/ai-workflow-context/ai-workflow-context.service';
 import type { AsyncTaskRecordService } from '@src/modules/async-task-record/async-task-record.service';
 import type { AsyncTaskRecordQueryService } from '@src/modules/async-task-record/queries/async-task-record.query.service';
@@ -12,20 +13,24 @@ import type {
   AsyncTaskRecordStatus,
   AsyncTaskRecordView,
 } from '@src/modules/async-task-record/async-task-record.types';
-import type { AiQueueService } from '@src/modules/common/ai-queue/ai-queue.service';
+import type { AiWorkflowQueueService } from '@src/modules/ai-workflow-context/queue/ai-workflow-queue.service';
 import type { PinoLogger } from 'nestjs-pino';
 import type { CreateAndAdmitAiWorkflowResult } from './ai-workflow-usecases.types';
 import { CreateAndAdmitAiWorkflowUsecase } from './create-and-admit-ai-workflow.usecase';
 import { RunAiWorkflowHousekeepingUsecase } from './run-ai-workflow-housekeeping.usecase';
+import { createEnabledCapabilityStateReader } from '../../../test/support/capability/capability-state-reader.fixture';
 
 type AiWorkflowContextServiceMock = {
   readonly listDueAdmissionWaitingContexts: jest.Mock<
     Promise<AiWorkflowContextHousekeepingCandidate[]>
   >;
   readonly listStaleQueuedContexts: jest.Mock<Promise<AiWorkflowContextHousekeepingCandidate[]>>;
-  readonly listTerminalContexts: jest.Mock<Promise<AiWorkflowContextHousekeepingCandidate[]>>;
+  readonly listTerminalContextsForDrain: jest.Mock<
+    Promise<AiWorkflowContextHousekeepingCandidate[]>
+  >;
   readonly markFailed: jest.Mock<Promise<AiWorkflowContextMutationResult>>;
   readonly linkAsyncTaskRecord: jest.Mock<Promise<AiWorkflowContextMutationResult>>;
+  readonly linkTerminalAsyncTaskRecordForDrain: jest.Mock<Promise<AiWorkflowContextMutationResult>>;
 };
 
 type AiQueueServiceMock = {
@@ -68,9 +73,10 @@ describe('RunAiWorkflowHousekeepingUsecase', () => {
     aiWorkflowContextService = {
       listDueAdmissionWaitingContexts: jest.fn().mockResolvedValue([]),
       listStaleQueuedContexts: jest.fn().mockResolvedValue([]),
-      listTerminalContexts: jest.fn().mockResolvedValue([]),
+      listTerminalContextsForDrain: jest.fn().mockResolvedValue([]),
       markFailed: jest.fn(),
       linkAsyncTaskRecord: jest.fn(),
+      linkTerminalAsyncTaskRecordForDrain: jest.fn(),
     };
     aiQueueService = {
       hasWorkflowJob: jest.fn(),
@@ -93,12 +99,51 @@ describe('RunAiWorkflowHousekeepingUsecase', () => {
     };
     usecase = new RunAiWorkflowHousekeepingUsecase(
       aiWorkflowContextService as unknown as AiWorkflowContextService,
-      aiQueueService as unknown as AiQueueService,
+      aiQueueService as unknown as AiWorkflowQueueService,
       asyncTaskRecordService as unknown as AsyncTaskRecordService,
       asyncTaskRecordQueryService as unknown as AsyncTaskRecordQueryService,
       createAndAdmitAiWorkflowUsecase as unknown as CreateAndAdmitAiWorkflowUsecase,
       logger as unknown as PinoLogger,
+      createEnabledCapabilityStateReader(),
     );
+  });
+
+  it('drains only terminal owned facts when AI execution blocks workflow', async () => {
+    const candidate = createCandidate({
+      status: 'CANCELLED',
+      queueName: 'ai-workflow',
+      jobName: 'workflow',
+      jobId: 'workflow-job-1',
+      asyncTaskRecordId: 77,
+    });
+    aiWorkflowContextService.listTerminalContextsForDrain.mockResolvedValue([candidate]);
+    asyncTaskRecordQueryService.findByQueueJob.mockResolvedValue(
+      createAsyncTaskRecord({ id: 77, status: 'cancelled' }),
+    );
+    usecase = new RunAiWorkflowHousekeepingUsecase(
+      aiWorkflowContextService as unknown as AiWorkflowContextService,
+      aiQueueService as unknown as AiWorkflowQueueService,
+      asyncTaskRecordService as unknown as AsyncTaskRecordService,
+      asyncTaskRecordQueryService as unknown as AsyncTaskRecordQueryService,
+      createAndAdmitAiWorkflowUsecase as unknown as CreateAndAdmitAiWorkflowUsecase,
+      logger as unknown as PinoLogger,
+      createAiExecutionBlockedReader(),
+    );
+
+    const result = await usecase.execute({ now });
+
+    expect(result.admission).toEqual({ scanned: 0, succeeded: 0, skipped: 0, failed: 0 });
+    expect(result.staleQueued).toEqual({ scanned: 0, succeeded: 0, skipped: 0, failed: 0 });
+    expect(result.asyncTaskReconcile).toEqual({
+      scanned: 1,
+      succeeded: 0,
+      skipped: 1,
+      failed: 0,
+    });
+    expect(aiWorkflowContextService.listDueAdmissionWaitingContexts).not.toHaveBeenCalled();
+    expect(aiWorkflowContextService.listStaleQueuedContexts).not.toHaveBeenCalled();
+    expect(aiQueueService.hasWorkflowJob).not.toHaveBeenCalled();
+    expect(aiWorkflowContextService.listTerminalContextsForDrain).toHaveBeenCalledTimes(1);
   });
 
   it('retries due admission waiting contexts', async () => {
@@ -360,14 +405,14 @@ describe('RunAiWorkflowHousekeepingUsecase', () => {
       jobId: 'workflow-job-1',
       asyncTaskRecordId: null,
     });
-    aiWorkflowContextService.listTerminalContexts.mockResolvedValue([candidate]);
+    aiWorkflowContextService.listTerminalContextsForDrain.mockResolvedValue([candidate]);
     asyncTaskRecordQueryService.findByQueueJob.mockResolvedValue(
       createAsyncTaskRecord({ status: 'processing', attemptCount: 2 }),
     );
     asyncTaskRecordService.recordFinished.mockResolvedValue(
       createAsyncTaskRecord({ id: 44, status: 'cancelled' }),
     );
-    aiWorkflowContextService.linkAsyncTaskRecord.mockResolvedValue({
+    aiWorkflowContextService.linkTerminalAsyncTaskRecordForDrain.mockResolvedValue({
       status: 'UPDATED',
       context: createWorkflowContext({ status: 'CANCELLED', asyncTaskRecordId: 44 }),
     });
@@ -396,7 +441,7 @@ describe('RunAiWorkflowHousekeepingUsecase', () => {
         occurredAt: now,
       }),
     });
-    expect(aiWorkflowContextService.linkAsyncTaskRecord).toHaveBeenCalledWith({
+    expect(aiWorkflowContextService.linkTerminalAsyncTaskRecordForDrain).toHaveBeenCalledWith({
       workflowId: 'workflow-1',
       jobId: 'workflow-job-1',
       asyncTaskRecordId: 44,
@@ -412,7 +457,7 @@ describe('RunAiWorkflowHousekeepingUsecase', () => {
       jobId: 'workflow-job-1',
       asyncTaskRecordId: 77,
     });
-    aiWorkflowContextService.listTerminalContexts.mockResolvedValue([candidate]);
+    aiWorkflowContextService.listTerminalContextsForDrain.mockResolvedValue([candidate]);
     asyncTaskRecordQueryService.findByQueueJob.mockResolvedValue(
       createAsyncTaskRecord({
         id: 77,
@@ -431,7 +476,7 @@ describe('RunAiWorkflowHousekeepingUsecase', () => {
       failed: 0,
     });
     expect(asyncTaskRecordService.recordFinished).not.toHaveBeenCalled();
-    expect(aiWorkflowContextService.linkAsyncTaskRecord).not.toHaveBeenCalled();
+    expect(aiWorkflowContextService.linkTerminalAsyncTaskRecordForDrain).not.toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({
         phase: 'asyncTaskReconcile',
@@ -446,6 +491,21 @@ describe('RunAiWorkflowHousekeepingUsecase', () => {
     );
   });
 });
+
+function createAiExecutionBlockedReader(): CapabilityStateReader {
+  return {
+    getState: () => ({
+      capabilityId: 'ai.workflow',
+      configuredState: 'enabled',
+      effectiveState: 'blocked',
+      health: 'unknown',
+      rootBlockers: [{ capabilityId: 'ai.execution', effectiveState: 'disabled' }],
+    }),
+    requireEnabled: () => {
+      throw new Error('Capability is unavailable');
+    },
+  };
+}
 
 function createCandidate(
   overrides: Partial<AiWorkflowContextHousekeepingCandidate> & {

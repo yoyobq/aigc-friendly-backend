@@ -6,7 +6,7 @@ export { AI_WORKFLOW_ASYNC_TASK_BIZ_TYPE } from '@src/modules/ai-workflow-contex
 export {
   AI_WORKFLOW_JOB_NAME,
   AI_WORKFLOW_QUEUE_NAME,
-} from '@src/modules/common/ai-queue/ai-queue.constants';
+} from '@src/modules/ai-workflow-context/queue/ai-workflow-queue.constants';
 
 export const AI_WORKFLOW_ADMISSION_RETRY_DELAY_MS = 30 * 1000;
 export const AI_WORKFLOW_ADMISSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;

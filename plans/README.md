@@ -17,23 +17,25 @@
 
 ## 读取顺序
 
-阅读某个 plan 时，优先按下面顺序处理：
+先按根目录 `AGENTS.md` 与 `docs/README.md` 路由并加载当前任务适用的最小规则集，再阅读具体 plan。Plan 只定义目标、范围、优先级和产出物，不能省略、替代或覆盖适用规则。
 
-1. 先看当前 plan 本身，确认目标、范围、优先级和产出物
-2. 若 plan 明确引用了某份 rule，再按需打开对应 `docs` 文档
-3. 若多个 rule 可能冲突，再看 [docs/common/rule-precedence.rules.md](../docs/common/rule-precedence.rules.md)
-4. 若当前 plan 需要真实后端字段、类型或权限语义，先看 [docs/README.md](../docs/README.md)，再按需打开本地相关 schema 或实现文件
+1. 先读根目录 `AGENTS.md`
+2. 再用 [docs/README.md](../docs/README.md) 路由到当前任务适用的最小规则集
+3. 若多个 tracked rule 重叠或冲突，使用 [docs/common/rule-precedence.rules.md](../docs/common/rule-precedence.rules.md) 裁决
+4. 再读当前 plan，确认目标、范围、优先级和产出物
+5. 若任务需要真实后端字段、类型、权限或当前行为，再按需查看相关 schema、current 文档与实现文件
 
 ## 与 Docs 的关系
 
 - `plans/`：记录尚在推进中的事项、阶段和待完成产出
-- `docs/`：记录已经稳定的规则、边界、约定和开放项
+- `docs/`：记录稳定规则、已接受边界、当前契约，以及明确的 non-goals / 已知限制
+- 可执行待办、迁移步骤、优先级和未完成交付只进入 `plans/` / `followup`；不得以“开放项”名义留在 `docs/` 形成第二份 pending work list
 
 常见情况：
 
 - 若 plan 里写着“已移入规则的内容”，不要再把 plan 当成主规则来源
 - 若需要判断正式边界，优先去 [docs/README.md](../docs/README.md) 查对应主题入口
-- 若只是执行某个 plan 中的单一事项，只打开该事项直接引用的文档即可
+- 完成 `AGENTS.md` / `docs/README.md` 的适用规则路由后，若只是执行 plan 中的单一事项，只需额外打开该事项直接引用的上下文文档
 - 若需要后端契约，优先读取与当前任务直接相关的本地 schema、DTO、resolver 或 usecase，不做全文通读
 
 ## 命名约定
@@ -65,16 +67,17 @@ direction -> plan -> docs / followup -> delete
 
 - 不要为了理解一个 plan，先全文阅读整个 `docs/` 目录
 - 优先只读取：
-- 当前 plan 直接引用的 rule 文档
-- `docs/README.md` 中与当前主题直接相关的 1 到 2 个入口文档
+- 根目录 `AGENTS.md`
+- `docs/README.md` 为当前任务路由出的最小适用规则集
+- 当前 plan 额外直接引用的上下文文档
 - 若任务依赖后端契约，优先按需读取本地相关 schema、type、query、mutation、input
 - 只有在规则重叠、冲突或边界不清时，再补读 [docs/common/rule-precedence.rules.md](../docs/common/rule-precedence.rules.md)
 - `schema.graphql` 不是默认必读，只有当前任务确实依赖后端字段、类型或权限语义时，才按需打开
 
 一句话原则：
 
-- 先读 plan
-- 再按需查 rule
+- 先路由并读取适用 rule
+- 再用 plan 确认本次执行范围
 - 不做整库文档通读
 
 ## 当前优先级约定

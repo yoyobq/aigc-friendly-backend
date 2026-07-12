@@ -1,29 +1,10 @@
 // src/usecases/third-party-accounts/get-weapp-phone.usecase.ts
 
-import { AudienceTypeEnum } from '@app-types/models/account.types';
-import { PhoneNumberResult } from '@app-types/models/third-party-auth.types';
 import { DomainError, THIRDPARTY_ERROR } from '@core/common/errors/domain-error';
 import { ThirdPartyAuthService } from '@modules/third-party-auth/third-party-auth.service';
 import { Injectable } from '@nestjs/common';
 import { PinoLogger } from 'nestjs-pino';
-
-/**
- * 获取微信小程序手机号参数
- */
-export interface GetWeappPhoneParams {
-  /** 手机号获取凭证 */
-  phoneCode: string;
-  /** 客户端类型 */
-  audience: AudienceTypeEnum;
-}
-
-/**
- * 获取微信小程序手机号结果
- */
-export interface GetWeappPhoneResult {
-  /** 手机号信息 */
-  phoneInfo: PhoneNumberResult;
-}
+import type { GetWeappPhoneParams, GetWeappPhoneResult } from './get-weapp-phone.types';
 
 /**
  * 获取微信小程序用户手机号 Usecase

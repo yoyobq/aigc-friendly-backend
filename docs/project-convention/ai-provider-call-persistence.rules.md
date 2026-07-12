@@ -198,8 +198,8 @@ Source of truth: This file defines provider-call record rules; code examples els
 
 ## 与其他文档的关系
 
-- 本文是 [queue-identifiers.rules.md](./queue-identifiers.rules.md) 在 provider 调用落库场景下的补充。
-- 本文与 [ai-task-lifecycle-audit.rules.md](./ai-task-lifecycle-audit.rules.md) 配套使用：
+- 本文是 [queue-identifiers.rules.md](../common/queue-identifiers.rules.md) 在 provider 调用落库场景下的补充。
+- 本文与 [ai-task-lifecycle-audit.rules.md](../common/ai-task-lifecycle-audit.rules.md) 配套使用：
   - 前者定义任务生命周期审计
   - 本文定义 provider 调用记录
 - 时间字段语义继续遵循：

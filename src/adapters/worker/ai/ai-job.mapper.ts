@@ -6,20 +6,12 @@ import type {
   ConsumeAiGenerateJobCompleteInput,
   ConsumeAiGenerateJobFailInput,
   ConsumeAiGenerateJobProcessInput,
-} from '@src/usecases/ai-worker/consume-ai-job.usecase';
-import type {
-  ConsumeAiWorkflowJobCompleteInput,
-  ConsumeAiWorkflowJobFailInput,
-  ConsumeAiWorkflowJobProcessInput,
-  ConsumeAiWorkflowJobProcessResult,
-} from '@src/usecases/ai-worker/consume-ai-workflow-job.usecase';
-import { BULLMQ_JOBS, BULLMQ_QUEUES } from '@src/infrastructure/bullmq/bullmq.constants';
+} from '@src/usecases/ai-worker/consume-ai-job.types';
 import type { Job } from 'bullmq';
 
-export const AI_QUEUE_NAME = BULLMQ_QUEUES.AI;
-export const AI_GENERATE_JOB_NAME = BULLMQ_JOBS.AI.GENERATE;
-export const AI_EMBED_JOB_NAME = BULLMQ_JOBS.AI.EMBED;
-export const AI_WORKFLOW_JOB_NAME = BULLMQ_JOBS.AI.WORKFLOW;
+export const AI_QUEUE_NAME = 'ai-execution';
+export const AI_GENERATE_JOB_NAME = 'generate';
+export const AI_EMBED_JOB_NAME = 'embed';
 
 export interface AiGeneratePayload {
   readonly provider?: string;
@@ -74,18 +66,10 @@ export interface AiEmbedResult {
   readonly providerFinishedAt?: Date | null;
 }
 
-export interface AiWorkflowPayload {
-  readonly workflowId: string;
-  readonly traceId: string;
-}
-
-export type AiWorkflowResult = ConsumeAiWorkflowJobProcessResult;
-
 export type AiGenerateJob = Job<AiGeneratePayload, AiGenerateResult, typeof AI_GENERATE_JOB_NAME>;
 export type AiEmbedJob = Job<AiEmbedPayload, AiEmbedResult, typeof AI_EMBED_JOB_NAME>;
-export type AiWorkflowJob = Job<AiWorkflowPayload, AiWorkflowResult, typeof AI_WORKFLOW_JOB_NAME>;
-export type AiJob = AiGenerateJob | AiEmbedJob | AiWorkflowJob;
-export type AiJobResult = AiGenerateResult | AiEmbedResult | AiWorkflowResult;
+export type AiExecutionJob = AiGenerateJob | AiEmbedJob;
+export type AiExecutionJobResult = AiGenerateResult | AiEmbedResult;
 export type AiFailedJob = Job<Record<string, unknown>, unknown, string>;
 
 export function mapAiGenerateJobToProcessInput(input: {
@@ -276,88 +260,6 @@ export function mapAiEmbedJobToFailInput(input: {
   };
 }
 
-export function mapAiWorkflowJobToProcessInput(input: {
-  readonly job: AiWorkflowJob;
-}): ConsumeAiWorkflowJobProcessInput {
-  const jobId = resolveJobId({ job: input.job });
-  const traceId = resolveTraceId({
-    job: input.job,
-    mode: 'strict',
-  });
-  const workflowId = resolveWorkflowId({
-    job: input.job,
-    mode: 'strict',
-  });
-  return {
-    queueName: AI_QUEUE_NAME,
-    jobName: AI_WORKFLOW_JOB_NAME,
-    jobId,
-    workflowId,
-    traceId,
-    attemptsMade: input.job.attemptsMade,
-    maxAttempts: resolveMaxAttempts({ job: input.job }),
-    enqueuedAt: resolveDate({ timestamp: input.job.timestamp }),
-    startedAt: resolveDate({ timestamp: input.job.processedOn }),
-  };
-}
-
-export function mapAiWorkflowJobToCompleteInput(input: {
-  readonly job: AiWorkflowJob;
-}): ConsumeAiWorkflowJobCompleteInput {
-  const jobId = resolveJobId({ job: input.job });
-  const traceId = resolveTraceId({
-    job: input.job,
-    mode: 'strict',
-  });
-  const workflowId = resolveWorkflowId({
-    job: input.job,
-    mode: 'strict',
-  });
-  return {
-    queueName: AI_QUEUE_NAME,
-    jobName: AI_WORKFLOW_JOB_NAME,
-    jobId,
-    workflowId,
-    traceId,
-    attemptsMade: input.job.attemptsMade,
-    maxAttempts: resolveMaxAttempts({ job: input.job }),
-    enqueuedAt: resolveDate({ timestamp: input.job.timestamp }),
-    startedAt: resolveDate({ timestamp: input.job.processedOn }),
-    finishedAt: resolveDate({ timestamp: input.job.finishedOn }),
-  };
-}
-
-export function mapAiWorkflowJobToFailInput(input: {
-  readonly job: AiWorkflowJob;
-  readonly error: Error;
-}): ConsumeAiWorkflowJobFailInput {
-  const occurredAt = resolveDate({ timestamp: input.job.finishedOn });
-  const jobId = resolveJobId({ job: input.job });
-  const traceId = resolveTraceId({
-    job: input.job,
-    mode: 'degraded',
-  });
-  const workflowId = resolveWorkflowId({
-    job: input.job,
-    mode: 'degraded',
-  });
-  return {
-    queueName: AI_QUEUE_NAME,
-    jobName: AI_WORKFLOW_JOB_NAME,
-    jobId,
-    workflowId,
-    traceId,
-    attemptsMade: input.job.attemptsMade,
-    maxAttempts: resolveMaxAttempts({ job: input.job }),
-    enqueuedAt: resolveDate({ timestamp: input.job.timestamp }),
-    startedAt: resolveDate({ timestamp: input.job.processedOn }),
-    finishedAt: occurredAt,
-    occurredAt,
-    reason: resolveWorkerFailedReason({ message: input.error.message }),
-    error: input.error,
-  };
-}
-
 function resolveDate(input: { readonly timestamp?: number }): Date | undefined {
   if (typeof input.timestamp !== 'number' || Number.isNaN(input.timestamp)) {
     return undefined;
@@ -365,7 +267,9 @@ function resolveDate(input: { readonly timestamp?: number }): Date | undefined {
   return new Date(input.timestamp);
 }
 
-function resolveMaxAttempts(input: { readonly job: AiJob | AiFailedJob }): number | undefined {
+function resolveMaxAttempts(input: {
+  readonly job: AiExecutionJob | AiFailedJob;
+}): number | undefined {
   const attempts = input.job.opts.attempts;
   if (typeof attempts !== 'number' || Number.isNaN(attempts)) {
     return undefined;
@@ -373,7 +277,7 @@ function resolveMaxAttempts(input: { readonly job: AiJob | AiFailedJob }): numbe
   return attempts;
 }
 
-function resolveJobId(input: { readonly job: AiJob | AiFailedJob }): string {
+function resolveJobId(input: { readonly job: AiExecutionJob | AiFailedJob }): string {
   if (typeof input.job.id === 'number') {
     return String(input.job.id);
   }
@@ -381,7 +285,7 @@ function resolveJobId(input: { readonly job: AiJob | AiFailedJob }): string {
 }
 
 function resolveTraceId(input: {
-  readonly job: AiJob | AiFailedJob;
+  readonly job: AiExecutionJob | AiFailedJob;
   readonly mode: 'strict' | 'degraded';
 }): string {
   const payloadTraceId = resolvePayloadTraceId({ job: input.job });
@@ -395,7 +299,9 @@ function resolveTraceId(input: {
   return `degraded-trace:${input.job.name}:${jobId}`;
 }
 
-function resolvePayloadTraceId(input: { readonly job: AiJob | AiFailedJob }): string | undefined {
+function resolvePayloadTraceId(input: {
+  readonly job: AiExecutionJob | AiFailedJob;
+}): string | undefined {
   const payload = input.job.data;
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return undefined;
@@ -406,37 +312,6 @@ function resolvePayloadTraceId(input: { readonly job: AiJob | AiFailedJob }): st
   }
   const normalizedTraceId = traceId.trim();
   return normalizedTraceId || undefined;
-}
-
-function resolveWorkflowId(input: {
-  readonly job: AiJob | AiFailedJob;
-  readonly mode: 'strict' | 'degraded';
-}): string {
-  const payloadWorkflowId = resolvePayloadWorkflowId({ job: input.job });
-  if (payloadWorkflowId) {
-    return payloadWorkflowId;
-  }
-  if (input.mode === 'strict') {
-    throw new Error(`missing_payload_workflow_id:${input.job.name}`);
-  }
-  const jobId = resolveJobId({ job: input.job });
-  return `degraded-workflow:${input.job.name}:${jobId}`;
-}
-
-function resolvePayloadWorkflowId(input: {
-  readonly job: AiJob | AiFailedJob;
-}): string | undefined {
-  const rawPayload = input.job.data;
-  if (!rawPayload || typeof rawPayload !== 'object' || Array.isArray(rawPayload)) {
-    return undefined;
-  }
-  const payload = rawPayload as Record<string, unknown>;
-  const workflowId = payload.workflowId;
-  if (typeof workflowId !== 'string') {
-    return undefined;
-  }
-  const normalizedWorkflowId = workflowId.trim();
-  return normalizedWorkflowId || undefined;
 }
 
 function resolveFailedJobName(input: { readonly job: AiFailedJob }): string {

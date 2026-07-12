@@ -12,6 +12,10 @@ import { Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
+  CAPABILITY_STATE_READER,
+  type CapabilityStateReader,
+} from '@src/modules/common/capability-state-reader.contract';
+import {
   THIRD_PARTY_PROVIDER_TOKENS,
   ThirdPartyProvider,
   WeAppProviderContract,
@@ -35,6 +39,8 @@ export class ThirdPartyAuthService {
     private readonly adapters: Map<ThirdPartyProviderEnum, ThirdPartyProvider>,
     @Inject(THIRD_PARTY_PROVIDER_TOKENS.WEAPP)
     private readonly weappProvider: WeAppProviderContract,
+    @Inject(CAPABILITY_STATE_READER)
+    private readonly capabilityStateReader: CapabilityStateReader,
   ) {}
 
   /**
@@ -57,6 +63,7 @@ export class ThirdPartyAuthService {
     authCredential: string;
     audience: AudienceTypeEnum;
   }): Promise<ThirdPartySession> {
+    this.capabilityStateReader.requireEnabled('identity.external-account');
     const adapter = this.adapters.get(provider);
     if (!adapter) {
       throw new DomainError(
@@ -89,6 +96,7 @@ export class ThirdPartyAuthService {
     accountId: number;
     input: BindThirdPartyInputModel;
   }): Promise<ThirdPartyAuthView> {
+    this.capabilityStateReader.requireEnabled('identity.external-account');
     const { accountId, input } = params;
 
     // 检查当前账户是否已绑定该平台
@@ -139,6 +147,7 @@ export class ThirdPartyAuthService {
     accountId: number;
     input: UnbindThirdPartyInputModel;
   }): Promise<boolean> {
+    this.capabilityStateReader.requireEnabled('identity.external-account');
     const { accountId, input } = params;
 
     const where = input?.id ? { id: input.id, accountId } : { accountId, provider: input.provider };
@@ -168,6 +177,7 @@ export class ThirdPartyAuthService {
     provider: ThirdPartyProviderEnum;
     session: ThirdPartySession;
   }): Promise<ThirdPartyAuthView> {
+    this.capabilityStateReader.requireEnabled('identity.external-account');
     const { accountId, provider, session } = params;
 
     // 检查当前账户是否已绑定该平台
@@ -226,6 +236,7 @@ export class ThirdPartyAuthService {
     phoneCode: string;
     audience: AudienceTypeEnum;
   }): Promise<PhoneNumberResult> {
+    this.capabilityStateReader.requireEnabled('identity.external-account');
     const accessToken = await this.weappProvider.getAccessToken({
       audience: params.audience,
     });
@@ -250,6 +261,7 @@ export class ThirdPartyAuthService {
     envVersion?: 'develop' | 'trial' | 'release';
     isHyaline?: boolean;
   }): Promise<WeAppQrcodeImage> {
+    this.capabilityStateReader.requireEnabled('identity.external-account');
     const accessToken = await this.weappProvider.getAccessToken({
       audience: params.audience,
     });

@@ -29,7 +29,7 @@ const GROUPS = {
       'test/08-qm-worker/email-queue-consume.e2e-spec.ts',
       'test/08-qm-worker/ai-graphql-queue.e2e-spec.ts',
       'test/08-qm-worker/ai-worker-consume-persistence.e2e-spec.ts',
-      'test/08-qm-worker/ai-worker-consume-workflow.e2e-spec.ts',
+      'test/08-qm-worker/ai-worker-consume-execution.e2e-spec.ts',
       'test/08-qm-worker/ai-workflow-generic-handler.e2e-spec.ts',
     ],
     needs: {

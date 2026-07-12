@@ -65,3 +65,7 @@ Source of truth: This file defines boundary contract naming and shared vocabular
 - 新增 `TransactionPort` / `UnitOfWork` 事务并行抽象名。
 - 在 usecases / modules 中新增 `*TransactionManager` alias。
   不得恢复旧 `TransactionManager = EntityManager` 兼容类型。
+
+当前 lint 已分别建模 module-owned 与 usecase-owned `*.contract.ts`，并阻止 infrastructure
+导入 owning layer 的其他实现文件。Lint 只验证路径与后缀；contract 是否由该 infrastructure
+文件实际实现或装配，仍按 `docs/common/infrastructure.rules.md` 人工审查。

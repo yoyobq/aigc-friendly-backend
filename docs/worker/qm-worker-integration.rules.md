@@ -124,6 +124,8 @@ Source of truth: This file defines QM worker integration rules; code examples el
   - 参考：`src/infrastructure/bullmq/queue-registry.ts`
   - Runtime contract 文件使用 `*.runtime.ts`、`*.payload.ts` 或 `*.registry.ts`，不得使用
     layer boundary contract 的 `*.contract.ts` 后缀。
+  - Worker Adapter 不导入这些 infrastructure 文件；它保留 adapter-local payload 视图并映射到
+    Usecase 输入。注册真源、适配视图和行为由 topology validation 与测试对账。
 - 审计记录
   - 统一走 Async Task Record Service，不单独造表。
   - 参考：`src/usecases/ai-queue/queue-ai.usecase.ts`

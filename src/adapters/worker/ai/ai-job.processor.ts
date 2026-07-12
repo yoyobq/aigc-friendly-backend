@@ -1,58 +1,52 @@
-// src/adapters/worker/ai/ai-job.processor.ts
 import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
-import { Injectable } from '@nestjs/common';
-import { isAiWorkflowNonRetryableError } from '@src/usecases/ai-worker/ai-workflow-worker-errors';
-import { UnrecoverableError } from 'bullmq';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { AiWorkerActivationUsecase } from '@src/usecases/ai-worker/ai-worker-activation.usecase';
 import { AiJobHandler } from './ai-job.handler';
 import {
   AI_EMBED_JOB_NAME,
+  type AiExecutionJob,
+  type AiExecutionJobResult,
   type AiFailedJob,
   AI_GENERATE_JOB_NAME,
   AI_QUEUE_NAME,
-  AI_WORKFLOW_JOB_NAME,
-  type AiJob,
-  type AiJobResult,
 } from './ai-job.mapper';
 
 @Injectable()
-@Processor(AI_QUEUE_NAME)
-export class AiJobProcessor extends WorkerHost {
-  constructor(private readonly handler: AiJobHandler) {
+@Processor(AI_QUEUE_NAME, { autorun: false })
+export class AiJobProcessor extends WorkerHost implements OnApplicationBootstrap {
+  private readonly logger = new Logger(AiJobProcessor.name);
+
+  constructor(
+    private readonly handler: AiJobHandler,
+    private readonly workerActivation: AiWorkerActivationUsecase,
+  ) {
     super();
   }
 
-  async process(job: AiJob): Promise<AiJobResult> {
-    if (job.name === AI_GENERATE_JOB_NAME) {
-      return await this.handler.processGenerate({ job });
-    }
-    if (job.name === AI_EMBED_JOB_NAME) {
-      return await this.handler.processEmbed({ job });
-    }
-    if (job.name === AI_WORKFLOW_JOB_NAME) {
-      try {
-        return await this.handler.processWorkflow({ job });
-      } catch (error: unknown) {
-        if (isAiWorkflowNonRetryableError(error)) {
-          throw new UnrecoverableError(error.message);
-        }
-        throw error;
-      }
-    }
+  onApplicationBootstrap(): void {
+    if (!this.workerActivation.shouldRun()) return;
+    void this.worker.run().catch((error: unknown) => {
+      this.logger.error(
+        'AI execution Worker stopped unexpectedly',
+        error instanceof Error ? error.stack : undefined,
+      );
+    });
+  }
+
+  async process(job: AiExecutionJob): Promise<AiExecutionJobResult> {
+    if (job.name === AI_GENERATE_JOB_NAME) return await this.handler.processGenerate({ job });
+    if (job.name === AI_EMBED_JOB_NAME) return await this.handler.processEmbed({ job });
     throw new Error('Unsupported AI job');
   }
 
   @OnWorkerEvent('completed')
-  async onCompleted(job: AiJob): Promise<void> {
+  async onCompleted(job: AiExecutionJob): Promise<void> {
     if (job.name === AI_GENERATE_JOB_NAME) {
       await this.handler.onGenerateCompleted({ job });
       return;
     }
     if (job.name === AI_EMBED_JOB_NAME) {
       await this.handler.onEmbedCompleted({ job });
-      return;
-    }
-    if (job.name === AI_WORKFLOW_JOB_NAME) {
-      await this.handler.onWorkflowCompleted({ job });
       return;
     }
     throw new Error('Unsupported AI job');

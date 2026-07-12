@@ -15,10 +15,8 @@ import { currentUser } from '@src/adapters/api/graphql/decorators/current-user.d
 import { qmWorkerEntry } from '@src/adapters/api/graphql/decorators/qm-worker-entry.decorator';
 import { trimTextPure } from '@src/core/common/text/text.helper';
 import { QueueAiUsecase } from '@src/usecases/ai-queue/queue-ai.usecase';
-import {
-  GetAsyncTaskRecordByQueueJobUsecase,
-  type GetAsyncTaskRecordByQueueJobResult,
-} from '@src/usecases/async-task-record/get-async-task-record-by-queue-job.usecase';
+import { GetAsyncTaskRecordByQueueJobUsecase } from '@src/usecases/async-task-record/get-async-task-record-by-queue-job.usecase';
+import type { GetAsyncTaskRecordByQueueJobResult } from '@src/usecases/async-task-record/get-async-task-record-by-queue-job.types';
 import { ListAsyncTaskRecordsByBizTargetUsecase } from '@src/usecases/async-task-record/list-async-task-records-by-biz-target.usecase';
 import { ListAsyncTaskRecordsByTraceIdUsecase } from '@src/usecases/async-task-record/list-async-task-records-by-trace-id.usecase';
 import { Transform, TransformFnParams } from 'class-transformer';
@@ -27,8 +25,8 @@ import { QueueAiEmbedInput } from './dto/queue-ai-embed.input';
 import { QueueAiGenerateInput } from './dto/queue-ai-generate.input';
 import { QueueAiResult } from './dto/queue-ai.result';
 
-const AI_DEBUG_BIZ_TYPES = ['ai_generation', 'ai_embedding', 'ai_worker'] as const;
-const AI_DEBUG_QUEUE_NAME = 'ai';
+const AI_DEBUG_BIZ_TYPES = ['ai_generation', 'ai_embedding', 'ai_worker', 'ai_workflow'] as const;
+const AI_DEBUG_QUEUE_NAMES = ['ai-execution', 'ai-workflow'] as const;
 
 @ObjectType()
 class AsyncTaskRecordDebugType {
@@ -156,7 +154,7 @@ class DebugAsyncTaskRecordByQueueJobInput {
   @Transform(({ value }: TransformFnParams) => trimTextPure(value))
   @IsString()
   @IsNotEmpty()
-  @IsIn([AI_DEBUG_QUEUE_NAME])
+  @IsIn([...AI_DEBUG_QUEUE_NAMES])
   queueName!: string;
 
   @Field(() => String)
@@ -232,7 +230,6 @@ export class AiResolver {
   ): Promise<AsyncTaskRecordDebugListResult> {
     const result = await this.listAsyncTaskRecordsByTraceIdUsecase.execute({
       traceId: input.traceId,
-      queueName: AI_DEBUG_QUEUE_NAME,
       bizTypes: [...AI_DEBUG_BIZ_TYPES],
       limit: input.limit,
     });
@@ -250,7 +247,6 @@ export class AiResolver {
     @Args('input') input: DebugAsyncTaskRecordsByBizTargetInput,
   ): Promise<AsyncTaskRecordDebugListResult> {
     const result = await this.listAsyncTaskRecordsByBizTargetUsecase.execute({
-      queueName: AI_DEBUG_QUEUE_NAME,
       bizType: input.bizType,
       bizKey: input.bizKey,
       bizSubKey: input.bizSubKey,

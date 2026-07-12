@@ -1,15 +1,24 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { resolveAsyncTaskBizKey } from '@src/core/common/async-task/async-task-identifier.policy';
 import { normalizeOptionalText } from '@src/core/common/input-normalize/input-normalize.policy';
 import { AiWorkflowContextService } from '@src/modules/ai-workflow-context/ai-workflow-context.service';
-import type { AiWorkflowContextHousekeepingCandidate } from '@src/modules/ai-workflow-context/ai-workflow-context.types';
+import { requireAiWorkflowTerminalDrain } from '@src/modules/ai-workflow-context/ai-workflow-capability.gate';
+import type {
+  AiWorkflowContextHousekeepingCandidate,
+  AiWorkflowContextStatus,
+  AiWorkflowContextTerminalStatus,
+} from '@src/modules/ai-workflow-context/ai-workflow-context.types';
+import { AiWorkflowQueueService } from '@src/modules/ai-workflow-context/queue/ai-workflow-queue.service';
+import {
+  CAPABILITY_STATE_READER,
+  type CapabilityStateReader,
+} from '@src/modules/common/capability-state-reader.contract';
 import { AsyncTaskRecordService } from '@src/modules/async-task-record/async-task-record.service';
 import type {
   AsyncTaskRecordTerminalStatus,
   AsyncTaskRecordView,
 } from '@src/modules/async-task-record/async-task-record.types';
 import { AsyncTaskRecordQueryService } from '@src/modules/async-task-record/queries/async-task-record.query.service';
-import { AiQueueService } from '@src/modules/common/ai-queue/ai-queue.service';
 import { PinoLogger } from 'nestjs-pino';
 import {
   AI_WORKFLOW_ASYNC_TASK_BIZ_TYPE,
@@ -27,11 +36,13 @@ import { CreateAndAdmitAiWorkflowUsecase } from './create-and-admit-ai-workflow.
 export class RunAiWorkflowHousekeepingUsecase {
   constructor(
     private readonly aiWorkflowContextService: AiWorkflowContextService,
-    private readonly aiQueueService: AiQueueService,
+    private readonly aiWorkflowQueueService: AiWorkflowQueueService,
     private readonly asyncTaskRecordService: AsyncTaskRecordService,
     private readonly asyncTaskRecordQueryService: AsyncTaskRecordQueryService,
     private readonly createAndAdmitAiWorkflowUsecase: CreateAndAdmitAiWorkflowUsecase,
     private readonly logger: PinoLogger,
+    @Inject(CAPABILITY_STATE_READER)
+    private readonly capabilityStateReader: CapabilityStateReader,
   ) {
     this.logger.setContext(RunAiWorkflowHousekeepingUsecase.name);
   }
@@ -39,16 +50,25 @@ export class RunAiWorkflowHousekeepingUsecase {
   async execute(
     input: RunAiWorkflowHousekeepingInput = {},
   ): Promise<RunAiWorkflowHousekeepingResult> {
+    const workflowState = this.capabilityStateReader.getState('ai.workflow');
+    const canRunEnabledPhases = workflowState.effectiveState === 'enabled';
+    if (!canRunEnabledPhases) {
+      requireAiWorkflowTerminalDrain(this.capabilityStateReader);
+    }
     const now = input.now ?? new Date();
     const limit = resolveBatchLimit(input.limit);
     return {
-      admission: await this.drainAdmissionWaiting({ now, limit }),
-      staleQueued: await this.repairStaleQueued({
-        now,
-        limit,
-        staleQueuedGraceMs:
-          input.staleQueuedGraceMs ?? AI_WORKFLOW_HOUSEKEEPING_DEFAULT_STALE_QUEUED_GRACE_MS,
-      }),
+      admission: canRunEnabledPhases
+        ? await this.drainAdmissionWaiting({ now, limit })
+        : createEmptyPhaseResult(),
+      staleQueued: canRunEnabledPhases
+        ? await this.repairStaleQueued({
+            now,
+            limit,
+            staleQueuedGraceMs:
+              input.staleQueuedGraceMs ?? AI_WORKFLOW_HOUSEKEEPING_DEFAULT_STALE_QUEUED_GRACE_MS,
+          })
+        : createEmptyPhaseResult(),
       asyncTaskReconcile: await this.reconcileTerminalAsyncTasks({ now, limit }),
     };
   }
@@ -127,7 +147,9 @@ export class RunAiWorkflowHousekeepingUsecase {
           continue;
         }
 
-        const existingJob = await this.aiQueueService.hasWorkflowJob({ jobId: candidate.jobId });
+        const existingJob = await this.aiWorkflowQueueService.hasWorkflowJob({
+          jobId: candidate.jobId,
+        });
         if (existingJob.exists && candidate.asyncTaskRecordId !== null) {
           const linkedRecord = await this.asyncTaskRecordQueryService.findById({
             id: candidate.asyncTaskRecordId,
@@ -161,7 +183,7 @@ export class RunAiWorkflowHousekeepingUsecase {
         }
 
         if (!existingJob.exists) {
-          await this.aiQueueService.enqueueWorkflow({
+          await this.aiWorkflowQueueService.enqueueWorkflow({
             workflowId: candidate.workflowId,
             traceId: candidate.traceId,
             jobId: candidate.jobId,
@@ -212,7 +234,7 @@ export class RunAiWorkflowHousekeepingUsecase {
     readonly now: Date;
     readonly limit: number;
   }): Promise<AiWorkflowHousekeepingPhaseResult> {
-    const candidates = await this.aiWorkflowContextService.listTerminalContexts({
+    const candidates = await this.aiWorkflowContextService.listTerminalContextsForDrain({
       limit: input.limit,
     });
     const result = createPhaseResult(candidates.length);
@@ -309,11 +331,11 @@ export class RunAiWorkflowHousekeepingUsecase {
       return;
     }
 
-    const linked = await this.aiWorkflowContextService.linkAsyncTaskRecord({
+    const linked = await this.aiWorkflowContextService.linkTerminalAsyncTaskRecordForDrain({
       workflowId: input.candidate.workflowId,
       jobId: input.jobId,
       asyncTaskRecordId: input.asyncTaskRecordId,
-      expectedStatuses: [input.candidate.status],
+      expectedStatuses: [requireTerminalWorkflowStatus(input.candidate.status)],
     });
     if (linked.status === 'CONFLICT') {
       input.result.skipped += 1;
@@ -395,6 +417,10 @@ function createPhaseResult(scanned: number): MutablePhaseResult {
   };
 }
 
+function createEmptyPhaseResult(): AiWorkflowHousekeepingPhaseResult {
+  return { scanned: 0, succeeded: 0, skipped: 0, failed: 0 };
+}
+
 function freezePhaseResult(input: MutablePhaseResult): AiWorkflowHousekeepingPhaseResult {
   return {
     scanned: input.scanned,
@@ -439,6 +465,13 @@ function resolveAsyncTaskTerminalStatus(
     return 'cancelled';
   }
   return null;
+}
+
+function requireTerminalWorkflowStatus(
+  status: AiWorkflowContextStatus,
+): AiWorkflowContextTerminalStatus {
+  if (status === 'SUCCEEDED' || status === 'FAILED' || status === 'CANCELLED') return status;
+  throw new Error(`AI workflow terminal drain received non-terminal status: ${status}`);
 }
 
 function isAsyncTaskRecordTerminalStatus(

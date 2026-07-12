@@ -28,7 +28,6 @@ import { VerificationRecordResolver } from './verification-record/verification-r
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { QmWorkerEntryGuard } from './guards/qm-worker-entry.guard';
-import { CapabilityRuntimeGuard } from './guards/capability-runtime.guard';
 import {
   QM_WORKER_ENTRY_OPTIONS,
   type QmWorkerEntryOptions,
@@ -95,7 +94,6 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     VerificationRecordResolver,
     UserInfoResolver,
     // Guards
-    CapabilityRuntimeGuard,
     QmWorkerEntryGuard,
     JwtAuthGuard,
     RolesGuard,
@@ -111,7 +109,6 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     RegistrationResolver,
     VerificationRecordResolver,
     UserInfoResolver,
-    CapabilityRuntimeGuard,
     QmWorkerEntryGuard,
     JwtAuthGuard,
     RolesGuard,

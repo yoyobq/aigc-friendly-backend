@@ -7,9 +7,9 @@ import type {
   AiWorkflowContextMutationResult,
   AiWorkflowContextView,
 } from '@src/modules/ai-workflow-context/ai-workflow-context.types';
+import { AiWorkflowQueueService } from '@src/modules/ai-workflow-context/queue/ai-workflow-queue.service';
 import { AsyncTaskRecordService } from '@src/modules/async-task-record/async-task-record.service';
 import type { AsyncTaskRecordView } from '@src/modules/async-task-record/async-task-record.types';
-import { AiQueueService } from '@src/modules/common/ai-queue/ai-queue.service';
 import {
   TRANSACTION_RUNNER,
   type TransactionRunner,
@@ -29,7 +29,7 @@ import {
 export class CreateAndAdmitAiWorkflowUsecase {
   constructor(
     private readonly aiWorkflowContextService: AiWorkflowContextService,
-    private readonly aiQueueService: AiQueueService,
+    private readonly aiWorkflowQueueService: AiWorkflowQueueService,
     private readonly asyncTaskRecordService: AsyncTaskRecordService,
     @Inject(TRANSACTION_RUNNER)
     private readonly transactionRunner: TransactionRunner,
@@ -90,7 +90,7 @@ export class CreateAndAdmitAiWorkflowUsecase {
     readonly context: AiWorkflowContextView;
     readonly now: Date;
   }): Promise<CreateAndAdmitAiWorkflowResult> {
-    const health = await this.aiQueueService.checkWorkflowQueueAvailable();
+    const health = await this.aiWorkflowQueueService.checkWorkflowQueueAvailable();
     if (!health.available) {
       return await this.markAdmissionWaiting({
         context: input.context,
@@ -122,7 +122,7 @@ export class CreateAndAdmitAiWorkflowUsecase {
     }
 
     try {
-      await this.aiQueueService.enqueueWorkflow({
+      await this.aiWorkflowQueueService.enqueueWorkflow({
         workflowId: queuedResult.context.workflowId,
         traceId: queuedResult.context.traceId,
         jobId,

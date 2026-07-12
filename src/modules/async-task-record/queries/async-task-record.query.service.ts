@@ -1,8 +1,12 @@
 // src/modules/async-task-record/queries/async-task-record.query.service.ts
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { type FindOptionsWhere, In, IsNull, Repository } from 'typeorm';
 import { AsyncTaskRecordEntity } from '../async-task-record.entity';
+import {
+  CAPABILITY_STATE_READER,
+  type CapabilityStateReader,
+} from '@src/modules/common/capability-state-reader.contract';
 import type {
   AsyncTaskRecordStatus,
   AsyncTaskRecordView,
@@ -16,9 +20,12 @@ export class AsyncTaskRecordQueryService {
   constructor(
     @InjectRepository(AsyncTaskRecordEntity)
     private readonly asyncTaskRecordRepository: Repository<AsyncTaskRecordEntity>,
+    @Inject(CAPABILITY_STATE_READER)
+    private readonly capabilityStateReader: CapabilityStateReader,
   ) {}
 
   async findById(input: { readonly id: number }): Promise<AsyncTaskRecordView | null> {
+    this.capabilityStateReader.requireEnabled('runtime.async-task');
     const entity = await this.asyncTaskRecordRepository.findOne({ where: { id: input.id } });
     return entity ? this.toView(entity) : null;
   }
@@ -26,6 +33,7 @@ export class AsyncTaskRecordQueryService {
   async findByQueueJob(input: {
     readonly where: FindAsyncTaskRecordByQueueJobInput;
   }): Promise<AsyncTaskRecordView | null> {
+    this.capabilityStateReader.requireEnabled('runtime.async-task');
     const entity = await this.asyncTaskRecordRepository.findOne({ where: input.where });
     return entity ? this.toView(entity) : null;
   }
@@ -33,6 +41,7 @@ export class AsyncTaskRecordQueryService {
   async listByTraceId(input: {
     readonly where: ListAsyncTaskRecordsByTraceInput;
   }): Promise<AsyncTaskRecordView[]> {
+    this.capabilityStateReader.requireEnabled('runtime.async-task');
     const where: FindOptionsWhere<AsyncTaskRecordEntity> = {
       traceId: input.where.traceId,
     };
@@ -53,6 +62,7 @@ export class AsyncTaskRecordQueryService {
   async listByBizTarget(input: {
     readonly where: ListAsyncTaskRecordsByBizTargetInput;
   }): Promise<AsyncTaskRecordView[]> {
+    this.capabilityStateReader.requireEnabled('runtime.async-task');
     const where: FindOptionsWhere<AsyncTaskRecordEntity> = {
       bizType: input.where.bizType,
       bizKey: input.where.bizKey,
@@ -80,6 +90,7 @@ export class AsyncTaskRecordQueryService {
   async countByStatus(input: {
     readonly statuses: ReadonlyArray<AsyncTaskRecordStatus>;
   }): Promise<number> {
+    this.capabilityStateReader.requireEnabled('runtime.async-task');
     if (input.statuses.length === 0) {
       return 0;
     }
@@ -93,6 +104,7 @@ export class AsyncTaskRecordQueryService {
     readonly bizKey: string;
     readonly bizSubKey?: string | null;
   }): Promise<boolean> {
+    this.capabilityStateReader.requireEnabled('runtime.async-task');
     const records = await this.listByBizTarget({
       where: {
         bizType: input.bizType,
