@@ -68,7 +68,8 @@ For boundary contract naming, see docs/common/boundary-contract.rules.md.
 
 ## 依赖方向
 
-- 允许 modules(service) → infrastructure | core。
+- 允许 modules(service) → infrastructure | core | `src/types`；`src/types` 统一通过
+  `@app-types/*` 引用。
 - 禁止 modules(service) → adapters。
 - 上游依赖方向为 usecases → modules(service) | core。
 - 允许业务域 modules(service) → `src/modules/common/*`。

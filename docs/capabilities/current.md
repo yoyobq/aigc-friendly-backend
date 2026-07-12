@@ -10,14 +10,13 @@ namespace-only grouping. Execution and Workflow retain their own queues and life
 
 ## `ai.execution`
 
-Owns queued generate and embed admission, provider selection and invocation, provider-call
-observation, and the execution Worker lifecycle. It does not own workflow context or housekeeping.
-Durable Async Task recording is a hard prerequisite.
+Owns queued AI execution and its Worker lifecycle. See the dedicated
+[AI Execution decision](ai-execution.md).
 
 ## `ai.workflow`
 
-Owns workflow context, admission policy, execution state, queue lifecycle, and housekeeping. It may
-invoke AI Execution without absorbing provider execution or provider-call observations.
+Owns workflow context, admission, state, queue lifecycle, and housekeeping. See the dedicated
+[AI Workflow decision](ai-workflow.md).
 
 ## `identity.account`
 
@@ -47,7 +46,5 @@ workflow state or individual provider request/response facts.
 
 ## `runtime.email-delivery`
 
-Owns email admission, queue transport, sendmail delivery, Worker lifecycle, and delivery health. It
-does not own the business outcome that requested an email. Async Task recording is optional
-observation: audit failure may reduce trace quality but must not rewrite an accepted or completed
-delivery result. A disabled Worker does not claim queued jobs.
+Owns operated email admission, delivery, and Worker lifecycle. See the dedicated
+[Email Delivery decision](runtime-email-delivery.md).

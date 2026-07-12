@@ -15,7 +15,7 @@ export class AiCapabilityAnchor {}
 @CapabilityAnchorProvider({
   capabilityId: AI_EXECUTION_CAPABILITY_ID,
   mode: 'switchable',
-  decisionRef: 'docs/capabilities/current.md',
+  decisionRef: 'docs/capabilities/ai-execution.md',
   requires: ['runtime.async-task'],
 })
 export class AiExecutionCapabilityAnchor {}

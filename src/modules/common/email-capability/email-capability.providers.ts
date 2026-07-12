@@ -6,7 +6,7 @@ import { RUNTIME_EMAIL_DELIVERY_CAPABILITY_ID } from './email-capability.constan
 @CapabilityAnchorProvider({
   capabilityId: RUNTIME_EMAIL_DELIVERY_CAPABILITY_ID,
   mode: 'switchable',
-  decisionRef: 'docs/capabilities/current.md',
+  decisionRef: 'docs/capabilities/runtime-email-delivery.md',
   requires: [],
 })
 export class RuntimeEmailDeliveryCapabilityAnchor {}

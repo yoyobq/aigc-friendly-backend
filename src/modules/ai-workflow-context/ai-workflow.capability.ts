@@ -7,7 +7,7 @@ export const AI_WORKFLOW_CAPABILITY_ID = 'ai.workflow' as const;
 @CapabilityAnchorProvider({
   capabilityId: AI_WORKFLOW_CAPABILITY_ID,
   mode: 'switchable',
-  decisionRef: 'docs/capabilities/current.md',
+  decisionRef: 'docs/capabilities/ai-workflow.md',
   requires: ['ai.execution'],
 })
 export class AiWorkflowCapabilityAnchor {}
