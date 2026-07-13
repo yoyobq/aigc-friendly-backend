@@ -52,6 +52,49 @@ const cases = [
     expectViolation: false,
   },
   {
+    name: 'allow adapter using an inline type-only import from a dedicated types file',
+    filePath: 'src/adapters/api/graphql/account/account.resolver.ts',
+    code: `
+      import { type CompleteUserData } from '@src/usecases/account/fetch-user-info.types';
+      type Probe = CompleteUserData;
+      void (null as unknown as Probe);
+    `,
+    ruleId: RULES.adapterTypesFromUsecase,
+    expectViolation: false,
+  },
+  {
+    name: 'reject adapter value-importing from a dedicated types file',
+    filePath: 'src/adapters/api/graphql/account/account.resolver.ts',
+    code: `
+      import { CompleteUserData } from '@src/usecases/account/fetch-user-info.types';
+      type Probe = CompleteUserData;
+      void (null as unknown as Probe);
+    `,
+    ruleId: RULES.adapterTypesFromUsecase,
+    expectViolation: true,
+  },
+  {
+    name: 'reject adapter importing a type from a Usecase registry',
+    filePath: 'src/adapters/worker/ai-workflow/ai-workflow-job.processor.ts',
+    code: `
+      import type { AiWorkflowHandlerRegistry } from '@src/usecases/ai-worker/ai-workflow-handler.registry';
+      type Probe = AiWorkflowHandlerRegistry;
+      void (null as unknown as Probe);
+    `,
+    ruleId: RULES.adapterTypesFromUsecase,
+    expectViolation: true,
+  },
+  {
+    name: 'allow adapter importing a Usecases module for DI assembly',
+    filePath: 'src/adapters/api/graphql/graphql-adapter.module.ts',
+    code: `
+      import { AccountUsecasesModule } from '@src/usecases/account/account-usecases.module';
+      void AccountUsecasesModule;
+    `,
+    ruleId: RULES.adapterTypesFromUsecase,
+    expectViolation: false,
+  },
+  {
     name: 'reject adapter importing QueryService implementation',
     filePath: 'src/adapters/api/graphql/account/account.resolver.ts',
     code: `

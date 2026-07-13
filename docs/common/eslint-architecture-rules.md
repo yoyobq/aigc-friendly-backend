@@ -52,10 +52,12 @@ performs an automatic `--fix` pass.
   infrastructure registries by topology validation and behavior tests.
 
 - `local-architecture/no-adapter-types-from-usecase-implementations`
-  Allows adapters to import `*Usecase` execution classes from `*.usecase.ts`, but blocks importing
-  flow parameters, results, or other reusable types from those implementation files. A usecase
-  execution contract shared only with its calling adapter stays in an adjacent `*.types.ts`; promote
-  it to a bounded-context root type file only when it becomes a wider stable contract.
+  Allows adapters to import `*Usecase` execution classes from `*.usecase.ts` and Usecases modules for
+  DI assembly. Flow parameters, results, and other reusable types must use type-only imports from a
+  dedicated `*.types.ts` file. The rule blocks value imports from `*.types.ts` and type imports from
+  usecase helpers, normalizers, registries, contracts, or other internal files. The called-Usecase
+  relationship and physical adjacency of a `*.types.ts` file remain code-review constraints; ESLint
+  verifies the file shape and type-only import but does not infer the call graph.
 
 - `local-architecture/no-boundary-port-naming-drift`
   Blocks new `*.port.ts` / `*.ports.ts` boundary files and imports.

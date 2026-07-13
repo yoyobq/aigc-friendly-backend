@@ -164,6 +164,26 @@ function isUsecaseImplementationFilePath(filePath) {
  * @param {string} filePath
  * @returns {boolean}
  */
+function isUsecaseTypesFilePath(filePath) {
+  return /(^|[/\\])[^/\\]+\.types(?:\.ts)?$/.test(filePath);
+}
+
+/**
+ * @param {import('estree').ImportDeclaration & { importKind?: string }} node
+ * @param {import('estree').ImportDeclaration['specifiers'][number] & { importKind?: string }} specifier
+ * @returns {boolean}
+ */
+function isTypeOnlyImportSpecifier(node, specifier) {
+  return (
+    node.importKind === 'type' ||
+    (specifier.type === 'ImportSpecifier' && specifier.importKind === 'type')
+  );
+}
+
+/**
+ * @param {string} filePath
+ * @returns {boolean}
+ */
 function isMixedServiceFilePath(filePath) {
   const resolved = path.resolve(filePath);
   if (!isPathInside(resolved, MODULES_ROOT)) {
@@ -1045,7 +1065,7 @@ const localArchitecturePlugin = {
         type: /** @type {const} */ ('problem'),
         docs: {
           description:
-            'allow adapters to import usecase execution classes from *.usecase.ts, but require shared flow types to come from dedicated type files',
+            'allow adapters to import usecase execution classes, but require flow types to use type-only imports from dedicated *.types.ts files',
         },
         schema: [],
       },
@@ -1062,11 +1082,37 @@ const localArchitecturePlugin = {
               return;
             }
             const targetPath = resolveInternalImport(context.filename, node.source.value);
-            if (
-              !targetPath ||
-              !isPathInside(targetPath, USECASES_ROOT) ||
-              !isUsecaseImplementationFilePath(targetPath)
-            ) {
+            if (!targetPath || !isPathInside(targetPath, USECASES_ROOT)) {
+              return;
+            }
+
+            if (isUsecaseTypesFilePath(targetPath)) {
+              for (const specifier of node.specifiers) {
+                if (isTypeOnlyImportSpecifier(node, specifier)) {
+                  continue;
+                }
+                context.report({
+                  node: specifier,
+                  message:
+                    'Adapter 从 Usecase *.types.ts 只能使用 type-only import；运行时值必须来自 Usecase 执行类或其他允许的运行时边界。当前 import: "{{specifier}}"',
+                  data: { specifier: node.source.value },
+                });
+              }
+              return;
+            }
+
+            if (!isUsecaseImplementationFilePath(targetPath)) {
+              for (const specifier of node.specifiers) {
+                if (!isTypeOnlyImportSpecifier(node, specifier)) {
+                  continue;
+                }
+                context.report({
+                  node: specifier,
+                  message:
+                    'Adapter 只能从 Usecase 相邻 *.types.ts type-only 导入流程类型；禁止从 helper、normalize、registry、contract 或其他内部文件借类型。当前 import: "{{specifier}}"',
+                  data: { specifier: node.source.value },
+                });
+              }
               return;
             }
 
