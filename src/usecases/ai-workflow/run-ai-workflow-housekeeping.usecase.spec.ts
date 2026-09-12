@@ -1,3 +1,4 @@
+import { requireAiWorkflowTerminalDrain } from '@src/modules/ai-workflow-context/ai-workflow-capability.helper';
 /// <reference types="jest" />
 import type {
   AiWorkflowContextHousekeepingCandidate,
@@ -21,6 +22,7 @@ import { RunAiWorkflowHousekeepingUsecase } from './run-ai-workflow-housekeeping
 import { createEnabledCapabilityStateReader } from '../../../test/support/capability/capability-state-reader.fixture';
 
 type AiWorkflowContextServiceMock = {
+  readonly requireTerminalDrain: () => void;
   readonly listDueAdmissionWaitingContexts: jest.Mock<
     Promise<AiWorkflowContextHousekeepingCandidate[]>
   >;
@@ -71,6 +73,7 @@ describe('RunAiWorkflowHousekeepingUsecase', () => {
 
   beforeEach(() => {
     aiWorkflowContextService = {
+      requireTerminalDrain: () => requireAiWorkflowTerminalDrain(createAiExecutionBlockedReader()),
       listDueAdmissionWaitingContexts: jest.fn().mockResolvedValue([]),
       listStaleQueuedContexts: jest.fn().mockResolvedValue([]),
       listTerminalContextsForDrain: jest.fn().mockResolvedValue([]),

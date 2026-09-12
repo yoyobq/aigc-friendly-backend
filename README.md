@@ -7,7 +7,7 @@ For AI/Agent: read `docs/README.md` first.
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![TypeScript](https://img.shields.io/badge/language-TypeScript-3178C6.svg)
 ![NestJS](https://img.shields.io/badge/framework-NestJS-E0234E.svg)
-![Node](https://img.shields.io/badge/node-%3E%3D20.19-green.svg)
+![Node](https://img.shields.io/badge/node-24.20.0-green.svg)
 
 基于 NestJS + TypeScript 的后端基础框架，当前以 GraphQL 为主入口，使用 MySQL + TypeORM，并遵循严格的分层架构约束。
 
@@ -196,16 +196,16 @@ Capability 是既有 `adapters -> usecases -> modules -> infrastructure` 分层�
 
 ### 环境准备
 
-- Node.js >= 20.19
+- Node.js 24.20.0（支持范围见 package.json engines）
 - MySQL >= 8.0
-- npm
+- npm 11.19.0
 
 ### 安装与运行
 
 1. **安装依赖**
 
    ```bash
-   npm install
+   npm ci
    ```
 
 2. **配置环境变量**
@@ -218,8 +218,11 @@ Capability 是既有 `adapters -> usecases -> modules -> infrastructure` 分层�
 3. **启动应用**
 
    ```bash
-   # 开发模式（API）
+   # 开发模式（API + Worker）
    npm run start:dev
+
+   # 仅启动 API
+   npm run dev:api
 
    # 开发模式（Worker）
    npm run dev:worker
@@ -291,7 +294,7 @@ npm run test:e2e:smoke
 - 真实第三方受控 Smoke 单独放在 `test/99-third-party-live-smoke/`
 - E2E 默认读取 `env/.env.e2e`，会按测试组清理目标 MySQL 测试库与 Redis DB。
 
-### 基础 CI 能力（空库 migration 演练）
+### 本地空库 migration 演练
 
 ```bash
 # 默认演练：读取演练环境的 DB_NAME，清空目标库后执行 baseline migrations
@@ -304,7 +307,7 @@ MIGRATION_DRILL_DATABASE=<目标数据库名> MIGRATION_DRILL_ALLOW_NON_TEST_DB=
 MIGRATION_DRILL_CREATE_TEMP_DB=true npm run migration:drill:empty-db
 ```
 
-- 脚本会校验关键表、关键索引、关键外键，失败会返回非 0 退出码，可直接作为 CI 阻断项。
+- 脚本会校验关键表、关键索引、关键外键，失败返回非 0 退出码。本轮没有配置 CI；这些命令在本地执行。
 - 脚本内部固定 `synchronize=false`，不受 e2e 环境 `DB_SYNCHRONIZE=true` 影响。
 - 若目标库名包含 `test/drill/ci`，可不传 `MIGRATION_DRILL_ALLOW_NON_TEST_DB=true`。
 
@@ -318,6 +321,28 @@ MIGRATION_DRILL_CREATE_TEMP_DB=true npm run migration:drill:empty-db
 - **GraphQL**: DTO / Input / Args / Result 保持在 adapter 层；枚举、标量与 schema 初始化放在 `src/adapters/api/graphql/schema/`。
 - **ORM Entity**: 只表达持久化结构，不添加 GraphQL / HTTP / Swagger 等 adapter decorator。
 - **Capability**: 稳定 decision 与已安装 Anchor 是能力语义和代码锚点；switchable 行为必须保留显式 gate，generated capability 文档只能由命令生成；普通跨能力调用不引入 dispatcher / bus。
+
+## 通用基线与协作验证
+
+- [规则入口](docs/README.md)区分通用层规则、[开源领域实现约定](docs/project-convention/domain-implementation-current.md)与既有 Capability 决策。
+- [Collaboration 规则](docs/common/capability-collaboration.rules.md)治理最小消费承诺、历史断言、独立审查、证据范围及变异检测。
+- [Workflow 消费 Execution 文本生成](docs/collaborations/ai.workflow/ai.execution--text-generation.md)提供真实组合测试入口。旧 AiWorkerService mock 测试仍用于 Workflow 自身回归。
+- [AIGC 项目的测试与可执行信任体系](docs/human/aigc-testing-trust-system.zh-CN.md)供人类阅读，不作为实现规则来源。
+
+源码使用 NodeNext 编译/解析，Jest 使用专用 CommonJS 转换并通过 VM Modules 启动；`npm run typecheck` 同时检查源码与独立工具脚本。`npm run lint` 不修改文件。安装脚本只允许 package.json 中与锁文件版本匹配的 allowScripts 项；更新依赖后需重新核对许可清单。
+
+```bash
+npm run dev            # 联合启动 API 与 Worker，带进程名前缀
+npm run dev:api        # 独立 API watch
+npm run dev:worker     # 独立 Worker watch
+npm run build
+npm run start:all      # 使用 dist/src/bootstraps 下的生产构建
+npm run smoke:dev      # 联合开发启动、API readiness、Worker 装配及退出检查
+npm run lint:architecture-fixtures
+npm run test:e2e:file -- worker test/08-qm-worker/ai-workflow-execution-collaboration.e2e-spec.ts
+```
+
+本地冒烟禁用 AI Execution、Workflow 和邮件投递，使用独立队列前缀；数据库仍来自显式环境配置。验收应指定专用临时 MySQL 库、Redis 实例/命名空间及文件目录，不能清理其他项目的开发或测试数据。`test:e2e:smoke` 是真实第三方入口，与不调用外部服务的 `smoke:dev` 不同。
 
 ## API 访问
 
@@ -337,3 +362,5 @@ MIGRATION_DRILL_CREATE_TEMP_DB=true npm run migration:drill:empty-db
 - [NestJS Documentation](https://docs.nestjs.com)
 - [TypeORM Documentation](https://typeorm.io)
 - [Apollo GraphQL](https://www.apollographql.com/docs/apollo-server/)
+
+本轮版本差异、兼容适配与本地实测证据见[基线对齐验收记录](docs/reports/2026-09-12-baseline-alignment.md)。

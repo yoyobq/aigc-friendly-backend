@@ -1,12 +1,13 @@
 // src/infrastructure/logger/logger.module.ts
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { LoggerModule as PinoLoggerModule } from 'nestjs-pino';
 
 @Module({
   imports: [
     ConfigModule,
-    PinoLoggerModule.forRootAsync({
+    PinoLoggerModule.forRootAsync<IncomingMessage, ServerResponse>({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         return {

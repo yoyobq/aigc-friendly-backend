@@ -1,6 +1,6 @@
 // test/08-qm-worker/email-queue-consume.e2e-spec.ts
 import { VerificationRecordType } from '@app-types/models/verification-record.types';
-import { TokenHelper } from '@modules/auth/token.helper';
+import { TokenHelper } from '@modules/auth/token.service';
 import { getQueueToken } from '@nestjs/bullmq';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -298,10 +298,14 @@ const waitJobFinalState = async (input: {
     if (job) {
       const state = await job.getState();
       if (state === 'completed' || state === 'failed') {
+        // getState() reads Redis but does not refresh the earlier Job snapshot.
+        // Read the result after observing the terminal state, without weakening assertions.
+        const finalJob = await input.queue.getJob(input.jobId);
+        if (!finalJob) throw new Error(`Terminal job disappeared: ${input.jobId}`);
         return {
           state,
-          returnvalue: job.returnvalue,
-          failedReason: job.failedReason,
+          returnvalue: finalJob.returnvalue,
+          failedReason: finalJob.failedReason,
         };
       }
     }

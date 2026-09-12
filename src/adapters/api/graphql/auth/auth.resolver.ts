@@ -6,8 +6,8 @@ import { Args, Mutation, Resolver } from '@nestjs/graphql';
 import { FetchUserInfoUsecase } from '@usecases/account/fetch-user-info.usecase';
 import type { CompleteUserData } from '@usecases/account/fetch-user-info.types';
 import { LoginWithPasswordUsecase } from '@usecases/auth/login-with-password.usecase';
-import { LoginResult } from '../account/dto/login-result.dto';
-import { UserInfoDTO } from '../account/dto/user-info.dto';
+import { LoginResult } from '../common/dto/login-result.dto';
+import { UserInfoDTO } from '../common/dto/user-info.dto';
 import { AuthLoginInput } from './dto/auth-login.input';
 
 /**

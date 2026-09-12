@@ -6,7 +6,7 @@ import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
 import { postGql as postGqlUtils } from '../utils/e2e-graphql-utils';
 
-import { TokenHelper } from '@modules/auth/token.helper';
+import { TokenHelper } from '@modules/auth/token.service';
 import { ApiModule } from '@src/bootstraps/api/api.module';
 import { CreateAccountUsecase } from '@usecases/account/create-account.usecase';
 import { initGraphQLSchema } from '../../src/adapters/api/graphql/schema/schema.init';

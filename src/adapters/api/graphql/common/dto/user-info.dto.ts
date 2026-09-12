@@ -1,4 +1,4 @@
-// src/adapters/api/graphql/account/dto/user-info.dto.ts
+// src/adapters/api/graphql/common/dto/user-info.dto.ts
 
 import { IdentityTypeEnum } from '@app-types/models/account.types';
 import { Gender, UserState } from '@app-types/models/user-info.types';

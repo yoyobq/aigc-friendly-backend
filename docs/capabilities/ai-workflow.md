@@ -13,3 +13,5 @@ Task availability is inherited through AI Execution rather than repeated in `req
 When Workflow is blocked only by `ai.execution`, terminal reconciliation may drain from facts already
 owned by Workflow without making a new execution call. Explicitly disabling Workflow, disabling the
 `ai` parent, or losing durable Async Task availability does not permit that drain path.
+
+Collaboration: [Workflow text generation](../collaborations/ai.workflow/ai.execution--text-generation.md).

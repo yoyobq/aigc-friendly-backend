@@ -13,7 +13,8 @@ Source of truth: `eslint.config.mjs` is the executable source of truth; this fil
   `npx eslint <path>`
 - Full lint:
   `npm run lint`
-  This runs the generated capability check, usecase normalize guard, architecture fixtures, and then ESLint with `--fix`.
+  This first runs `scripts/check-usecase-normalize-guard.js` and the architecture lint fixtures,
+  then ESLint with `--fix`.
 - No-fix full ESLint check:
   `npx eslint "{src,apps,libs,test}/**/*.ts" --cache --cache-location .eslintcache`
 - Type-level confidence:
@@ -36,6 +37,21 @@ performs an automatic `--fix` pass.
   `modules-contracts` must not depend on same-domain services, queries, or internals; contracts
   should only reference other contracts, stable module types, core contracts/types, or `@app-types/*`.
   It also allows adapters to `import type` same-domain module root `*.types.ts` files only.
+  Runtime enum values needed by GraphQL DTO decorators or schema registration should therefore come
+  from `types` / `@app-types/*` or adapter-local GraphQL-only enums, not from module root type files.
+  TypeScript aliases and extensionless imports are resolved through `eslint-import-resolver-typescript`;
+  architecture fixtures cover both forms so resolver regressions cannot silently disable the matrix.
+  Module files are categorized as contracts/tokens, types, queries, Nest wiring, services, pure
+  rules, capability gates, internal runtime support (including codecs/helpers), or other internals.
+  Ordinary usecases cannot import Nest wiring or runtime support. Same-domain and common pure rules
+  are reusable; cross-domain pure-module imports are rejected. Pure rules cannot import services,
+  ORM entities or infrastructure. Framework/I/O imports and implicit clock/random/config reads
+  receive additional checks; semantic purity and contract implementations still require review.
+  Only adapter wiring imports usecase wiring. Guards may invoke usecases; shared schema, decorators
+  and mappers may not. Cross-scope GraphQL DTO imports have no file allowlist.
+  The matrix checks imports, re-exports, require and dynamic imports. Dependency fixtures exercise
+  both accepted usage and forbidden paths. Capability admission and operation gates remain governed
+  separately by accepted capability decisions and behavior tests.
 
 - `local-architecture/no-infrastructure-to-usecases-imports`
   Blocks infrastructure importing usecase implementations, modules, helpers, barrels, or scene-local
@@ -46,18 +62,11 @@ performs an automatic `--fix` pass.
   Blocks API and Worker adapters importing `*.query.service.ts` implementations. Adapters obtain
   read-side results through usecases.
 
-- `local-architecture/no-adapter-to-infrastructure-imports`
-  Blocks API and Worker adapters importing infrastructure through relative paths or configured
-  aliases. Runtime payload views and queue identifiers stay adapter-local and are reconciled with
-  infrastructure registries by topology validation and behavior tests.
-
 - `local-architecture/no-adapter-types-from-usecase-implementations`
   Allows adapters to import `*Usecase` execution classes from `*.usecase.ts` and Usecases modules for
   DI assembly. Flow parameters, results, and other reusable types must use type-only imports from a
   dedicated `*.types.ts` file. The rule blocks value imports from `*.types.ts` and type imports from
-  usecase helpers, normalizers, registries, contracts, or other internal files. The called-Usecase
-  relationship and physical adjacency of a `*.types.ts` file remain code-review constraints; ESLint
-  verifies the file shape and type-only import but does not infer the call graph.
+  usecase helpers, normalizers, registries, contracts, or other internal files.
 
 - `local-architecture/no-boundary-port-naming-drift`
   Blocks new `*.port.ts` / `*.ports.ts` boundary files and imports.
@@ -110,10 +119,17 @@ performs an automatic `--fix` pass.
   QueryService may depend on same-domain QueryServices, read repositories, core, types, or
   infrastructure query implementations, but not mixed read/write services.
 
+- `local-architecture/no-upper-types-from-module-implementations`
+  Blocks adapter/usecase type-only imports, mixed type specifiers and erased interface/type imports
+  from module implementation files. TypeScript symbol resolution distinguishes injected runtime
+  service classes from borrowed interfaces. Inline import type queries use the same boundary.
+  Stable module types belong in the bounded-context `*.types.ts`; contracts retain their owning layer.
+
 - `local-architecture/no-upstream-entity-imports`
   Blocks `src/adapters/**` and `src/usecases/**` from importing ORM `*.entity.ts` files.
-  Upstream layers must use View, DTO, record snapshot, or stable contract types instead of
-  importing Entity classes, including type-only imports.
+  Usecases must use View, ReadModel, record snapshot, result, or stable data-shape types;
+  adapters may map those shapes into adapter-owned DTOs. Neither layer may import Entity classes,
+  including through type-only imports.
 
 - `local-architecture/no-runtime-config-outside-wiring`
   Blocks direct `process.env` outside infrastructure, bootstraps, and tests.
@@ -133,8 +149,10 @@ performs an automatic `--fix` pass.
   Blocks `any` in source code covered by the main ESLint config.
 
 - Type-aware strictness rules
-  Current config enables `no-floating-promises`, `no-unsafe-argument`, `no-unsafe-assignment`,
-  `no-unsafe-call`, `no-unsafe-member-access`, `no-unsafe-return`, and `no-unused-vars`.
+  Current config inherits `typescript-eslint` `recommendedTypeChecked`, including
+  `no-unnecessary-type-assertion`, and explicitly enables `no-floating-promises`,
+  `no-unsafe-argument`, `no-unsafe-assignment`, `no-unsafe-call`, `no-unsafe-member-access`,
+  `no-unsafe-return`, and `no-unused-vars`.
 
 - Complexity and size warnings
   Current config warns on function complexity, max depth, and max lines per function.
@@ -157,7 +175,7 @@ Do not treat missing lint coverage as permission to violate the docs.
 
 ## Supplemental Scans
 
-Run these when preparing P3a inventory or reviewing architecture-sensitive patches.
+Run these when reviewing architecture-sensitive patches or checking existing implementations.
 
 - Types importing core:
   `rg -n "from ['\"](@src/|src/)?core/|from ['\"]@core/|import\\(['\"](@src/|src/)?core/|require\\(['\"](@src/|src/)?core/" src/types -g '*.ts'`
@@ -184,6 +202,8 @@ Run these when preparing P3a inventory or reviewing architecture-sensitive patch
 ## Notes
 
 - Tests have a relaxed override for some strictness rules; do not infer production architecture exceptions from test-only imports.
+- `boundaries/dependencies` is disabled for test files because co-located tests intentionally assemble
+  collaborators across production layers. Production files and architecture fixtures remain enforced.
 - Tests may define local GraphQL resolver fixtures, so the GraphQL decorator placement rule is disabled
   for test files.
 - Root-level CommonJS helper files under `scripts/*.js` and `test/*.js` use a non-type-checked

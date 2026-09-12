@@ -1,4 +1,4 @@
-import { VerificationCodeHelper } from './verification-code.helper';
+import { VerificationCodeHelper } from './verification-code.service';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConsumableQueryService } from './queries/consumable.query.service';

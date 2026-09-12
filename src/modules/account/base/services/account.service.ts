@@ -1,13 +1,7 @@
 // src/modules/account/base/services/account.service.ts
 
 import type { PersistenceTransactionContext } from '@app-types/common/transaction.types';
-import {
-  AccountStatus,
-  AudienceTypeEnum,
-  IdentityTypeEnum,
-  LoginHistoryItemModel,
-} from '@app-types/models/account.types';
-import { Gender, type GeographicInfo, UserState } from '@app-types/models/user-info.types';
+import { IdentityTypeEnum, LoginHistoryItemModel } from '@app-types/models/account.types';
 import { ACCOUNT_ERROR, AUTH_ERROR, DomainError } from '@core/common/errors/domain-error';
 import { LegacyPasswordCryptoHelper } from '@modules/common/password/legacy-password-crypto.helper';
 import { Injectable } from '@nestjs/common';
@@ -18,54 +12,13 @@ import { Repository } from 'typeorm';
 // ✅ base 层实体（始终存在）
 import { AccountEntity } from '../entities/account.entity';
 import { UserInfoEntity } from '../entities/user-info.entity';
-export interface AccountCreateData {
-  loginName?: string | null;
-  loginEmail?: string | null;
-  loginPassword?: string;
-  status?: AccountStatus;
-  audience?: AudienceTypeEnum;
-  identityHint?: string | null;
-  recentLoginHistory?: LoginHistoryItemModel[] | null;
-  createdAt?: Date;
-  updatedAt?: Date;
-}
-
-export interface UserInfoCreateData {
-  accountId?: number;
-  nickname?: string;
-  gender?: Gender;
-  birthDate?: string | null;
-  avatarUrl?: string | null;
-  email?: string | null;
-  signature?: string | null;
-  accessGroup?: IdentityTypeEnum[];
-  address?: string | null;
-  phone?: string | null;
-  tags?: string[] | null;
-  geographic?: GeographicInfo | null;
-  metaDigest?: IdentityTypeEnum[] | null;
-  notifyCount?: number;
-  unreadCount?: number;
-  userState?: UserState;
-  createdAt?: Date;
-  updatedAt?: Date;
-}
-
-export interface UserInfoUpdateData {
-  nickname?: string;
-  gender?: Gender;
-  birthDate?: string | null;
-  avatarUrl?: string | null;
-  email?: string | null;
-  signature?: string | null;
-  address?: string | null;
-  phone?: string | null;
-  tags?: string[] | null;
-  geographic?: GeographicInfo | null;
-  notifyCount?: number;
-  unreadCount?: number;
-  userState?: UserState;
-}
+import type {
+  AccountCreateData,
+  UserInfoCreateData,
+  UserInfoUpdateData,
+  AccountSnapshot,
+} from '../../account.types';
+import { toAccountSnapshot } from '../../account-view.mapper';
 
 @Injectable()
 export class AccountService {
@@ -106,30 +59,20 @@ export class AccountService {
     });
   }
 
-  /** 创建账户实体（不落库） */
-  createAccountEntity(params: {
+  /** 创建并保存账户，实体仅在模块内部持有。 */
+  async createAccount(params: {
     accountData: AccountCreateData;
     transactionContext?: PersistenceTransactionContext;
-  }): AccountEntity {
-    const { accountData, transactionContext } = params;
-    const repository = this.getAccountRepository(transactionContext);
-    return repository.create(accountData);
-  }
-
-  /** 落库账户实体 */
-  async saveAccount(params: {
-    account: AccountEntity;
-    transactionContext?: PersistenceTransactionContext;
-  }): Promise<AccountEntity> {
-    const { account, transactionContext } = params;
-    const repository = this.getAccountRepository(transactionContext);
-    return await repository.save(account);
+  }): Promise<AccountSnapshot> {
+    const repository = this.getAccountRepository(params.transactionContext);
+    const account = repository.create(params.accountData);
+    return toAccountSnapshot(await repository.save(account));
   }
 
   /** 更新账户 */
   async updateAccount(
     id: number,
-    updateData: Partial<AccountEntity>,
+    updateData: AccountCreateData,
     transactionContext?: PersistenceTransactionContext,
   ): Promise<void> {
     const repository = this.getAccountRepository(transactionContext);
@@ -152,12 +95,12 @@ export class AccountService {
    * 显式锁定账户以避免并发覆盖
    * @param accountId 账户 ID
    * @param transactionContext 事务上下文
-   * @returns 锁定的账户实体
+   * @returns 锁定的账户快照
    */
   async lockByIdForUpdate(
     accountId: number,
     transactionContext: PersistenceTransactionContext,
-  ): Promise<AccountEntity> {
+  ): Promise<AccountSnapshot> {
     const repository = this.getAccountRepository(transactionContext);
     const account = await repository
       .createQueryBuilder('account')
@@ -169,27 +112,16 @@ export class AccountService {
       throw new DomainError(ACCOUNT_ERROR.ACCOUNT_NOT_FOUND, '账户不存在');
     }
 
-    return account;
+    return toAccountSnapshot(account);
   }
 
-  /** 创建用户信息实体（不落库） */
-  createUserInfoEntity(params: {
+  /** 创建并保存用户信息；保留同一事务中的实体加密订阅器。 */
+  async createUserInfo(params: {
     userInfoData: UserInfoCreateData;
     transactionContext?: PersistenceTransactionContext;
-  }): UserInfoEntity {
-    const { userInfoData, transactionContext } = params;
-    const repository = this.getUserInfoRepository(transactionContext);
-    return repository.create(userInfoData);
-  }
-
-  /** 落库用户信息实体 */
-  async saveUserInfo(params: {
-    userInfo: UserInfoEntity;
-    transactionContext?: PersistenceTransactionContext;
-  }): Promise<UserInfoEntity> {
-    const { userInfo, transactionContext } = params;
-    const repository = this.getUserInfoRepository(transactionContext);
-    return await repository.save(userInfo);
+  }): Promise<void> {
+    const repository = this.getUserInfoRepository(params.transactionContext);
+    await repository.save(repository.create(params.userInfoData));
   }
 
   async updateUserInfoFields(params: {

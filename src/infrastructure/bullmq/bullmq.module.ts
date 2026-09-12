@@ -2,7 +2,7 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import type { RedisOptions } from 'ioredis';
+import type { RedisOptions } from 'bullmq';
 import { BullMqProducerGateway } from './producer.gateway';
 import { BULLMQ_REGISTER_QUEUE_OPTIONS } from './queue-registry';
 

@@ -31,6 +31,7 @@ const GROUPS = {
       'test/08-qm-worker/ai-worker-consume-persistence.e2e-spec.ts',
       'test/08-qm-worker/ai-worker-consume-execution.e2e-spec.ts',
       'test/08-qm-worker/ai-workflow-generic-handler.e2e-spec.ts',
+      'test/08-qm-worker/ai-workflow-execution-collaboration.e2e-spec.ts',
     ],
     needs: {
       mysql: true,
@@ -114,6 +115,8 @@ const jestConfig = {
   transform: {
     '^.+\\.(t|j)s$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
   },
+
+  modulePathIgnorePatterns: ['<rootDir>/.tmp/'],
 
   dependencyExtractor: '<rootDir>/test/jest-type-dependency-extractor.js',
 

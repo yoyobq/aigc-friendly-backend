@@ -11,7 +11,7 @@ import { BullMqWorkerRuntime } from '@src/infrastructure/bullmq/worker.runtime';
 import { AiProviderCallRecordEntity } from '@src/modules/ai-provider-call-record/ai-provider-call-record.entity';
 import { AsyncTaskRecordEntity } from '@src/modules/async-task-record/async-task-record.entity';
 import type { AsyncTaskRecordStatus } from '@src/modules/async-task-record/async-task-record.types';
-import { TokenHelper } from '@src/modules/auth/token.helper';
+import { TokenHelper } from '@src/modules/auth/token.service';
 import { Queue } from 'bullmq';
 import request from 'supertest';
 import { DataSource } from 'typeorm';

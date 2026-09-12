@@ -3,10 +3,7 @@ import type {
   CreateAiWorkflowContextInput,
 } from '@src/modules/ai-workflow-context/ai-workflow-context.types';
 export { AI_WORKFLOW_ASYNC_TASK_BIZ_TYPE } from '@src/modules/ai-workflow-context/ai-workflow-context.types';
-export {
-  AI_WORKFLOW_JOB_NAME,
-  AI_WORKFLOW_QUEUE_NAME,
-} from '@src/modules/ai-workflow-context/queue/ai-workflow-queue.constants';
+export { AI_WORKFLOW_JOB_NAME, AI_WORKFLOW_QUEUE_NAME } from '@app-types/common/ai-queue.types';
 
 export const AI_WORKFLOW_ADMISSION_RETRY_DELAY_MS = 30 * 1000;
 export const AI_WORKFLOW_ADMISSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;

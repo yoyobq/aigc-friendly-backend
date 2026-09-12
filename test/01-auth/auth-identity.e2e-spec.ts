@@ -1,7 +1,7 @@
 // test/01-auth/auth-identity.e2e-spec.ts
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { TokenHelper } from '@src/modules/auth/token.helper';
+import { TokenHelper } from '@src/modules/auth/token.service';
 
 import { IdentityTypeEnum, LoginTypeEnum } from '@app-types/models/account.types';
 import request from 'supertest';

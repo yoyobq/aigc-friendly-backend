@@ -3,11 +3,8 @@ import type { PersistenceTransactionContext } from '@app-types/common/transactio
 import { AccountStatus, UserAccountView } from '@app-types/models/account.types';
 import { PasswordPolicyService } from '@core/common/password/password-policy.service';
 import { Inject, Injectable } from '@nestjs/common';
-import {
-  AccountService,
-  type AccountCreateData,
-  type UserInfoCreateData,
-} from '@src/modules/account/base/services/account.service';
+import { AccountService } from '@src/modules/account/base/services/account.service';
+import type { AccountCreateData, UserInfoCreateData } from '@src/modules/account/account.types';
 import { AccountQueryService } from '@src/modules/account/queries/account.query.service';
 import {
   TRANSACTION_RUNNER,
@@ -78,7 +75,7 @@ export class CreateAccountUsecase {
     }
 
     // 1) 创建账户（先写临时密码拿到 createdAt）
-    const account = this.accountService.createAccountEntity({
+    const savedAccount = await this.accountService.createAccount({
       transactionContext,
       accountData: {
         ...accountData,
@@ -88,7 +85,6 @@ export class CreateAccountUsecase {
         updatedAt: new Date(),
       },
     });
-    const savedAccount = await this.accountService.saveAccount({ account, transactionContext });
 
     // 2) 依据 createdAt 生成最终哈希密码并更新
     const hashedPassword = AccountService.hashPasswordWithTimestamp(
@@ -102,7 +98,7 @@ export class CreateAccountUsecase {
     });
 
     // 3) 写入 UserInfo
-    const userInfo = this.accountService.createUserInfoEntity({
+    await this.accountService.createUserInfo({
       transactionContext,
       userInfoData: {
         ...userInfoData,
@@ -111,7 +107,6 @@ export class CreateAccountUsecase {
         updatedAt: new Date(),
       },
     });
-    await this.accountService.saveUserInfo({ userInfo, transactionContext });
 
     return await this.accountQueryService.getUserAccountViewById({
       accountId: savedAccount.id,

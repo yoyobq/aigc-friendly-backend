@@ -57,7 +57,7 @@ import {
 import {
   requireAiWorkflowEnabled,
   requireAiWorkflowTerminalDrain,
-} from './ai-workflow-capability.gate';
+} from './ai-workflow-capability.helper';
 
 const HOUSEKEEPING_SELECT_COLUMNS = [
   'context.workflowId',
@@ -84,6 +84,11 @@ const HOUSEKEEPING_SELECT_COLUMNS = [
 
 @Injectable()
 export class AiWorkflowContextService {
+  /** Explicit drain gate; reads only capability state, never new Execution facts. */
+  requireTerminalDrain(): void {
+    requireAiWorkflowTerminalDrain(this.capabilityStateReader);
+  }
+
   constructor(
     @InjectRepository(AiWorkflowContextEntity)
     private readonly aiWorkflowContextRepository: Repository<AiWorkflowContextEntity>,

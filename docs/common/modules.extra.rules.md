@@ -19,7 +19,7 @@ Source of truth: This file defines modules(service) supplementary rules; code ex
 
 ## 事务上下文参与能力
 
-- modules(service) 可以接收 usecase 传入的 transaction context。
+- modules(service) 可以接收 usecase 传入的 `PersistenceTransactionContext`。
 - modules(service) 可以基于该事务上下文执行同事务内细粒度写入。
 - modules(service) 不得提供通用 `runTransaction`、`withTransaction` 或等价事务入口。
 - 已迁移的 service 级事务入口不得恢复，不得新增调用点。

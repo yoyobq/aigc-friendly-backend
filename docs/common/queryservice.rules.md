@@ -33,12 +33,9 @@ Source of truth: This file defines QueryService rules; code examples elsewhere m
 ## 命名方式
 
 - 简单读且以 Entity 为语义中心：`<entity>.query.service.ts`。
-  - 示例：`verification-record.query.service.ts`
 - 单一读取语义且不等于实体名：`<semantic>.query.service.ts`。
-  - 示例：`consumable.query.service.ts`
-- 带结果整形、读取阶段判定或登录装配等场景语义。
+- 带结果整形或读取阶段判定等场景语义。
   以读取语义命名。
-  - 示例：`login-result.query.service.ts`
 
 ## 职责分配
 
@@ -62,6 +59,19 @@ Source of truth: This file defines QueryService rules; code examples elsewhere m
 - 不做事务编排与写入。
   - 写操作与事务编排由 usecases 负责。
 
+## 读取迁移与映射复用
+
+- 独立读取入口迁入 QueryService 后，应核对调用面并删除无调用的旧 Service 查询方法，
+  避免保留两套相同查询。仍有调用者时，先迁移调用者或复用同域内部只读查询实现。
+- 写 Service 为锁定、聚合约束检查、批量 diff 和写入结果进行的内部读取属于写操作的一部分，
+  不因读写分离而强制迁入 QueryService。
+- Service 与 QueryService 输出同一稳定 View 时，可共用同域模块内部的 `*-view.mapper.ts`。
+  Mapper 仅做字段投影，无 I/O，不选择场景策略或权限；Entity 输入不得泄漏到上游。
+  它属于模块内部实现，不因无副作用就成为 Core policy 或 Usecase 可导入的纯规则。
+- 复用写入时已取得的记录进行映射，不为去重额外查询数据库；保留原有事务上下文与读取时点。
+- QueryService 不得为了复用映射而依赖混合读写 Service。不同可见性、默认值或结果语义的
+  View 不应仅因字段相似强行合并。
+
 ## 依赖方向
 
 - adapters → usecases
@@ -81,15 +91,6 @@ Source of truth: This file defines QueryService rules; code examples elsewhere m
   放在 `src/modules/<bounded-context>/<bounded-context>.types.ts`。
 - 仅当该类型跨多个 bounded context 稳定复用时，才上收到 `src/types`。
 
-## Account 读模型稳定口径
-
-- `AccountQueryService` 是 account / userInfo 读侧视图与规范化的主要入口。
-- `UserInfoView` 的 production 字段拼装应收敛到稳定 mapper，避免登录读取、严格读取、可见资料读取各维护一套默认值逻辑。
-- 登录兜底读取、严格读取、可见资料读取可以是不同读取模式，但不得各自维护完整 view shape。
-- `FetchUserInfoUsecase` 负责登录流程读取与安全校验，不应长期作为通用 view 字段拼装真源。
-- userInfo 可见性读取应复用 core 中的纯可见性 policy，例如 `canViewUserInfo()`。
-- Session authority snapshot 属于 query-side projection，不是 account 聚合实体契约。
-
 ## 拆分原则
 
 - 单文件单语义。
@@ -100,3 +101,7 @@ Source of truth: This file defines QueryService rules; code examples elsewhere m
 - 当出现不同权限策略时，考虑拆分。
 - 当出现不同输出形态时，考虑拆分。
 - 若只是几个轻量方法且语义一致，不必拆分。
+
+## 项目约定
+
+- 具体领域的读取与 View 维护入口见[当前领域实现约定](../project-convention/domain-implementation-current.md)。

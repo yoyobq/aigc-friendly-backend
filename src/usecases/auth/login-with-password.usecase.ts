@@ -6,7 +6,7 @@ import { AccountStatus } from '@app-types/models/account.types';
 import { AuthLoginModel } from '@app-types/models/auth.types';
 import { AUTH_ERROR, DomainError, isDomainError } from '@core/common/errors';
 import { Injectable } from '@nestjs/common';
-import { TokenHelper } from '@modules/auth/token.helper';
+import { TokenHelper } from '@modules/auth/token.service';
 import { AccountService } from '@src/modules/account/base/services/account.service';
 import { AccountQueryService } from '@src/modules/account/queries/account.query.service';
 import { PinoLogger } from 'nestjs-pino';

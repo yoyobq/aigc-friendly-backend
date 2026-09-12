@@ -15,7 +15,7 @@ import {
   Min,
 } from 'class-validator';
 import GraphQLJSON from 'graphql-type-json';
-import { UserInfoDTO } from './user-info.dto';
+import { UserInfoDTO } from '../../common/dto/user-info.dto';
 
 @InputType()
 export class UpdateUserInfoInput {

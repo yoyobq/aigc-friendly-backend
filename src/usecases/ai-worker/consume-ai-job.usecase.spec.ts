@@ -3,10 +3,8 @@ import { DomainError, THIRDPARTY_ERROR } from '@src/core/common/errors/domain-er
 import type { AsyncTaskRecordView } from '@src/modules/async-task-record/async-task-record.types';
 import type { AsyncTaskRecordService } from '@src/modules/async-task-record/async-task-record.service';
 import type { AiWorkerService } from '@src/modules/common/ai-worker/ai-worker.service';
-import type {
-  AiProviderCallRecordService,
-  AiProviderCallRecordView,
-} from '@src/modules/ai-provider-call-record/ai-provider-call-record.service';
+import { AiProviderCallRecordService } from '@src/modules/ai-provider-call-record/ai-provider-call-record.service';
+import type { AiProviderCallRecordView } from '@src/modules/ai-provider-call-record/ai-provider-call-record.types';
 import { ConsumeAiEmbedJobUsecase, ConsumeAiGenerateJobUsecase } from './consume-ai-job.usecase';
 
 type AsyncTaskRecordServiceMock = {

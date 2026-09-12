@@ -10,12 +10,10 @@ import { ACCOUNT_ERROR, AUTH_ERROR, DomainError } from '@core/common/errors/doma
 import { AccountSecurityService } from '@modules/account/base/services/account-security.service';
 import { AccountQueryService } from '@modules/account/queries/account.query.service';
 import { AuthService } from '@modules/auth/auth.service';
-import {
-  LoginBootstrapQueryService,
-  LoginUserDataCollection,
-} from '@modules/auth/queries/login-bootstrap.query.service';
+import { LoginBootstrapQueryService } from '@modules/auth/queries/login-bootstrap.query.service';
+import type { LoginUserDataCollection } from '@src/modules/auth/auth.types';
 import { LoginResultQueryService } from '@modules/auth/queries/login-result.query.service';
-import { TokenHelper } from '@modules/auth/token.helper';
+import { TokenHelper } from '@modules/auth/token.service';
 import { Injectable } from '@nestjs/common';
 import { AccountService } from '@src/modules/account/base/services/account.service';
 import { PinoLogger } from 'nestjs-pino';

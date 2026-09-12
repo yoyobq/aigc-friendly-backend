@@ -80,3 +80,15 @@ export interface VerificationRecordView {
   /** 创建时间 */
   createdAt: Date;
 }
+
+export type VerificationRecordConsumeTargetConstraint =
+  { mode: 'IGNORE' } | { mode: 'NULL_ONLY' } | { mode: 'MATCH_OR_NULL'; accountId: number };
+
+export type VerificationRecordValidationSnapshot = {
+  id: number;
+  type: VerificationRecordType;
+  status: VerificationRecordStatus;
+  expiresAt: Date;
+  notBefore: Date | null;
+  targetAccountId: number | null;
+};

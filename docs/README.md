@@ -2,9 +2,12 @@
 
 For AIGC. Read less. Route first.
 
+This index routes reading only; it does not override tracked rules or accepted decisions.
+
 ## Folders
 
 - `docs/common/`: global architecture and shared conventions
+- `docs/collaborations/`: consumer-owned cross-capability promises and executable verification
 - `docs/capabilities/`: stable semantic capability decisions referenced by code anchors
 - `docs/api/`: API / GraphQL adapter rules
 - `docs/worker/`: worker / queue / async-consumer rules
@@ -17,7 +20,7 @@ For AIGC. Read less. Route first.
 
 ## Conflict Or Overlap Resolution
 
-Before applying multiple rule documents, read `docs/common/rule-precedence.rules.md` first.
+When rules overlap or ownership is unclear, use `docs/common/rule-precedence.rules.md`. Independent rules remain jointly applicable.
 
 ## Global GraphQL Error Contract
 
@@ -49,6 +52,13 @@ Before applying multiple rule documents, read `docs/common/rule-precedence.rules
 - QueryService or type placement:
   - `docs/common/queryservice.rules.md`
   - `docs/common/type.rules.md`
+
+- Cross-capability consumption or changes affecting another capability:
+  - `docs/common/capability-collaboration.rules.md`
+  - both accepted decisions and their linked agreements in `docs/collaborations/`
+
+- Existing domain implementation ownership:
+  - `docs/project-convention/domain-implementation-current.md` after applicable common rules
 
 - Aggregate roots, child entities, or Entity purity:
   - `docs/common/aggregate.rules.md`
@@ -130,6 +140,8 @@ Before applying multiple rule documents, read `docs/common/rule-precedence.rules
 - `capabilities/current.md`: stable current semantic capability boundaries
 - `generated/capabilities-current.md`: generated shallow projection from the API/Worker module graphs
 - `eslint-architecture-rules.md`: executable lint rule map and architecture validation commands
+- `capability-collaboration.rules`: consumer promises, evidence scope, historical assertions and mutation detection
+- `domain-implementation-current.md`: open-source domain implementation conventions
 - `boundary-contract.rules`: layer-owned contract naming and port/contract distinction
 - `aggregate.rules`: aggregate root and child-entity write boundaries
 - `modules.rules`: reusable same-domain services only

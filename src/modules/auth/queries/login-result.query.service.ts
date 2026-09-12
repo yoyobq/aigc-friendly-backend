@@ -2,7 +2,7 @@
 import { BasicLoginResult, EnrichedLoginResult } from '@app-types/auth/login-flow.types';
 import { AccountStatus, IdentityTypeEnum } from '@app-types/models/account.types';
 import { Injectable } from '@nestjs/common';
-import { LoginUserDataCollection } from './login-bootstrap.query.service';
+import type { LoginUserDataCollection } from '@src/modules/auth/auth.types';
 
 @Injectable()
 export class LoginResultQueryService {

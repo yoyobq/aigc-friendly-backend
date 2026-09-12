@@ -1,4 +1,4 @@
-// src/modules/verification-record/verification-code.helper.ts
+// src/modules/verification-record/verification-code.service.ts
 import { Injectable } from '@nestjs/common';
 import { randomBytes, randomInt } from 'crypto';
 

@@ -12,16 +12,13 @@ import {
   VERIFICATION_RECORD_ERROR,
 } from '@core/common/errors/domain-error';
 import { Inject, Injectable } from '@nestjs/common';
-import {
+import { VerificationRecordService } from '@src/modules/verification-record/verification-record.service';
+import type {
   VerificationRecordDetailView,
-  VerificationRecordQueryService,
   VerificationRecordView,
-} from '@src/modules/verification-record/queries/verification-record.query.service';
-import {
-  VerificationRecordService,
-  type VerificationRecordConsumeTargetConstraint,
-  type VerificationRecordValidationSnapshot,
-} from '@src/modules/verification-record/verification-record.service';
+  VerificationRecordConsumeTargetConstraint,
+  VerificationRecordValidationSnapshot,
+} from '@src/modules/verification-record/verification-record.types';
 import {
   TRANSACTION_RUNNER,
   type TransactionRunner,
@@ -171,7 +168,6 @@ export class ConsumeVerificationRecordUsecase {
 
   constructor(
     private readonly verificationRecordService: VerificationRecordService,
-    private readonly verificationRecordQueryService: VerificationRecordQueryService,
     @Inject(TRANSACTION_RUNNER)
     private readonly transactionRunner: TransactionRunner,
   ) {}
@@ -291,7 +287,7 @@ export class ConsumeVerificationRecordUsecase {
           throw new DomainError(VERIFICATION_RECORD_ERROR.RECORD_NOT_FOUND, '验证记录不存在');
         }
 
-        return this.verificationRecordQueryService.toDetailView(updatedRecord);
+        return updatedRecord;
       } catch (error) {
         if (error instanceof DomainError) {
           throw error;
@@ -351,7 +347,7 @@ export class ConsumeVerificationRecordUsecase {
         throw new DomainError(VERIFICATION_RECORD_ERROR.RECORD_NOT_FOUND, '验证记录不存在');
       }
 
-      return this.verificationRecordQueryService.toCleanView(updatedRecord);
+      return updatedRecord;
     } catch (error) {
       if (error instanceof DomainError) {
         throw error;

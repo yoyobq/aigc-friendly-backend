@@ -6,6 +6,7 @@ import { defineConfig } from 'eslint/config';
 import globals from 'globals';
 import path from 'node:path';
 import tseslint from 'typescript-eslint';
+import ts from 'typescript';
 
 const PROJECT_ROOT = import.meta.dirname;
 const ADAPTERS_ROOT = path.join(PROJECT_ROOT, 'src', 'adapters');
@@ -28,6 +29,108 @@ const USECASES_CONTRACTS_ELEMENT_PATTERNS = [
   'src/usecases/*/*.contract.ts',
   'src/usecases/*/**/*.contract.ts',
 ];
+
+/**
+ * @typedef {{ type: string, captured?: Record<string, string> }} BoundaryElementSelector
+ * @typedef {{
+ *   element?: { type: string, captured?: Record<string, string> },
+ *   file?: { categories: string },
+ * }} BoundaryEntitySelector
+ * @typedef {{
+ *   to: BoundaryElementSelector,
+ *   dependency?: { kind: 'type' | 'value' },
+ * }} BoundaryDependencyEffect
+ * @typedef {{
+ *   from: BoundaryElementSelector,
+ *   allow: BoundaryDependencyEffect[],
+ * }} BoundaryDependencyPolicy
+ */
+
+/** @type {Record<string, BoundaryEntitySelector>} */
+const BOUNDARY_ENTITY_SELECTORS = {
+  'adapters-common': { file: { categories: 'adapters-common' } },
+  'adapters-guards': { file: { categories: 'adapters-guards' } },
+  'adapters-wiring': { file: { categories: 'adapters-wiring' } },
+  'api-adapters-scope': { element: { type: 'api-adapters-scope' } },
+  'worker-adapters-scope': { element: { type: 'worker-adapters-scope' } },
+  'adapters-integration': { element: { type: 'adapters-integration' } },
+  usecases: { element: { type: 'usecases' }, file: { categories: 'usecases' } },
+  'usecases-any': { element: { type: 'usecases' } },
+  'usecases-wiring': { element: { type: 'usecases' }, file: { categories: 'usecases-wiring' } },
+  'modules-pure': { element: { type: 'modules' }, file: { categories: 'modules-pure' } },
+  'modules-gates': { element: { type: 'modules' }, file: { categories: 'modules-gates' } },
+  'usecases-contracts': {
+    element: { type: 'usecases' },
+    file: { categories: 'usecases-contracts' },
+  },
+  'modules-contracts': {
+    element: { type: 'modules' },
+    file: { categories: 'modules-contracts' },
+  },
+  'modules-types': {
+    element: { type: 'modules' },
+    file: { categories: 'modules-types' },
+  },
+  'modules-queries': {
+    element: { type: 'modules' },
+    file: { categories: 'modules-queries' },
+  },
+  'modules-wiring': {
+    element: { type: 'modules' },
+    file: { categories: 'modules-wiring' },
+  },
+  'modules-services': {
+    element: { type: 'modules' },
+    file: { categories: 'modules-services' },
+  },
+  'modules-support': {
+    element: { type: 'modules' },
+    file: { categories: 'modules-support' },
+  },
+  'modules-internal': {
+    element: { type: 'modules' },
+    file: { categories: 'modules-internal' },
+  },
+  infrastructure: { element: { type: 'infrastructure' } },
+  core: { element: { type: 'core' } },
+  types: { element: { type: 'types' } },
+};
+
+/** @param {BoundaryElementSelector} selector */
+function asBoundaryEntitySelector({ type, captured }) {
+  const entitySelector = BOUNDARY_ENTITY_SELECTORS[type];
+  if (!entitySelector) {
+    throw new Error(`Unknown boundary selector type: ${type}`);
+  }
+  if (!captured || !entitySelector.element) {
+    return entitySelector;
+  }
+
+  return {
+    ...entitySelector,
+    element: {
+      ...entitySelector.element,
+      ...(captured ? { captured } : {}),
+    },
+  };
+}
+
+/**
+ * Express the policy table using the entity selectors required by eslint-plugin-boundaries v7.
+ *
+ * @param {BoundaryDependencyPolicy[]} policies
+ */
+function asBoundaryDependencyPolicies(policies) {
+  return policies.map(({ from, allow }) => ({
+    from: asBoundaryEntitySelector(from),
+    allow: allow.map(({ to, ...dependencyEffect }) => ({
+      ...dependencyEffect,
+      to: asBoundaryEntitySelector(to),
+    })),
+  }));
+}
+
+// Keep this in sync with MODULES_CONTRACTS_ELEMENT_PATTERNS.
 const BOUNDARY_CONTRACT_FILE_PATH_PATTERN = /(^|[/\\])[^/\\]+\.contract(?:\.ts)?$/;
 const ENTITY_FILE_PATH_PATTERN = /(^|[/\\])[^/\\]+\.entity(?:\.ts)?$/;
 const GRAPHQL_ADAPTER_ROOT = path.join(PROJECT_ROOT, 'src', 'adapters', 'api', 'graphql');
@@ -460,6 +563,69 @@ function checkImportExpressionNode(context, node, onResolvedImport) {
 
 const localArchitecturePlugin = {
   rules: {
+    'no-upper-types-from-module-implementations': {
+      meta: { type: 'problem', schema: [] },
+      create(context) {
+        if (
+          isTestFilePath(context.filename) ||
+          !(
+            isPathInside(context.filename, USECASES_ROOT) ||
+            isPathInside(context.filename, ADAPTERS_ROOT)
+          )
+        )
+          return {};
+        const services = context.sourceCode.parserServices;
+        const checker = services.program?.getTypeChecker();
+        return {
+          ImportDeclaration(node) {
+            const target = resolveInternalImport(context.filename, node.source.value);
+            if (
+              !target ||
+              !isPathInside(target, MODULES_ROOT) ||
+              /\.(types|contract|tokens)(\.ts)?$/.test(target)
+            )
+              return;
+            for (const specifier of node.specifiers) {
+              const symbol = checker?.getSymbolAtLocation(
+                services.esTreeNodeToTSNodeMap.get(specifier.local),
+              );
+              const resolved =
+                symbol && symbol.flags & ts.SymbolFlags.Alias
+                  ? checker.getAliasedSymbol(symbol)
+                  : symbol;
+              const onlyType =
+                resolved &&
+                resolved.flags & ts.SymbolFlags.Type &&
+                !(resolved.flags & ts.SymbolFlags.Value);
+              if (isTypeOnlyImportSpecifier(node, specifier) || onlyType) {
+                context.report({
+                  node: specifier,
+                  message:
+                    'Upper layers must import module types from the bounded-context *.types.ts or boundary contract, never implementation files.',
+                });
+              }
+            }
+          },
+          TSImportType(node) {
+            const source =
+              node.source?.value ?? node.argument?.value ?? node.parameter?.literal?.value;
+            if (typeof source !== 'string') return;
+            const target = resolveInternalImport(context.filename, source);
+            if (
+              target &&
+              isPathInside(target, MODULES_ROOT) &&
+              !/\.(types|contract|tokens)(\.ts)?$/.test(target)
+            ) {
+              context.report({
+                node,
+                message:
+                  'Import type queries must use a module type contract, never an implementation file.',
+              });
+            }
+          },
+        };
+      },
+    },
     'no-boundary-port-naming-drift': {
       meta: {
         type: /** @type {const} */ ('problem'),
@@ -972,64 +1138,6 @@ const localArchitecturePlugin = {
             node,
             message:
               'Adapter 层禁止直接依赖 QueryService；必须通过 Usecase 获取读侧结果。当前 import: "{{specifier}}"',
-            data: { specifier },
-          });
-        }
-
-        /** @param {import('estree').Node & { source?: { value?: unknown } }} node */
-        function reportIfNeeded(node) {
-          checkStaticImportLikeNode(context, node, (specifier, targetPath) => {
-            checkImport(node, specifier, targetPath);
-          });
-        }
-
-        return {
-          ImportDeclaration: reportIfNeeded,
-          ExportAllDeclaration: reportIfNeeded,
-          ExportNamedDeclaration: reportIfNeeded,
-          /** @param {import('estree').CallExpression} node */
-          CallExpression(node) {
-            checkRequireCallNode(context, node, (specifier, targetPath) => {
-              checkImport(node, specifier, targetPath);
-            });
-          },
-          /** @param {import('estree').ImportExpression} node */
-          ImportExpression(node) {
-            checkImportExpressionNode(context, node, (specifier, targetPath) => {
-              checkImport(node, specifier, targetPath);
-            });
-          },
-        };
-      },
-    },
-    'no-adapter-to-infrastructure-imports': {
-      meta: {
-        type: /** @type {const} */ ('problem'),
-        docs: {
-          description: 'disallow API and Worker adapters importing infrastructure implementation',
-        },
-        schema: [],
-      },
-      /** @param {import('eslint').Rule.RuleContext} context */
-      create(context) {
-        if (!isPathInside(context.filename, ADAPTERS_ROOT)) {
-          return {};
-        }
-
-        /**
-         * @param {import('estree').Node} node
-         * @param {string} specifier
-         * @param {string} targetPath
-         * @returns {void}
-         */
-        function checkImport(node, specifier, targetPath) {
-          if (!isPathInside(targetPath, INFRASTRUCTURE_ROOT)) {
-            return;
-          }
-          context.report({
-            node,
-            message:
-              'Adapter 层禁止依赖 infrastructure；协议视图留在 adapter，本地映射到 Usecase 输入。当前 import: "{{specifier}}"',
             data: { specifier },
           });
         }
@@ -1662,7 +1770,7 @@ const localArchitecturePlugin = {
           context.report({
             node,
             message:
-              '业务域 modules 禁止跨域依赖；当前从 "{{fromScope}}" 依赖了 "{{toScope}}"。如需跨域读取请走 QueryService 契约上提或经 usecase 编排。当前 import: "{{specifier}}"',
+              '业务域 modules 禁止跨域依赖；当前从 "{{fromScope}}" 依赖了 "{{toScope}}"。跨域读取必须由 usecase 调用被读域 QueryService 进行编排。当前 import: "{{specifier}}"',
             data: { fromScope, specifier, toScope },
           });
         }
@@ -1698,7 +1806,7 @@ const localArchitecturePlugin = {
 
 export default defineConfig(
   {
-    ignores: ['eslint.config.mjs', 'dist/**', 'node_modules/**'],
+    ignores: ['eslint.config.mjs', 'dist/**', 'node_modules/**', '.tmp/**'],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
@@ -1724,123 +1832,132 @@ export default defineConfig(
       'local-architecture': localArchitecturePlugin,
     },
     settings: {
-      'boundaries/dependency-nodes': ['import'],
+      'import/resolver': {
+        typescript: {
+          project: './tsconfig.json',
+        },
+      },
+      'boundaries/dependency-nodes': ['import', 'export', 'require', 'dynamic-import'],
       'boundaries/elements': [
-        { type: 'adapters-common', pattern: 'src/adapters/api/graphql/decorators', mode: 'folder' },
-        { type: 'adapters-common', pattern: 'src/adapters/api/graphql/guards', mode: 'folder' },
-        { type: 'adapters-common', pattern: 'src/adapters/api/graphql/common', mode: 'folder' },
-        { type: 'adapters-common', pattern: 'src/adapters/api/graphql/schema', mode: 'folder' },
-        { type: 'adapters-common', pattern: 'src/adapters/api/graphql/*.ts', mode: 'file' },
+        { type: 'adapters-common', pattern: 'src/adapters/api/graphql/decorators' },
+        { type: 'adapters-common', pattern: 'src/adapters/api/graphql/guards' },
+        { type: 'adapters-common', pattern: 'src/adapters/api/graphql/common' },
+        { type: 'adapters-common', pattern: 'src/adapters/api/graphql/schema' },
         {
           type: 'api-adapters-scope',
           pattern: 'src/adapters/api/graphql/*',
-          mode: 'folder',
           capture: ['adapterScope'],
         },
         {
           type: 'worker-adapters-scope',
           pattern: 'src/adapters/worker/*',
-          mode: 'folder',
           capture: ['adapterScope'],
         },
         {
           type: 'adapters-integration',
           pattern: 'src/adapters/api/integration-events',
-          mode: 'folder',
-        },
-        {
-          type: 'usecases-contracts',
-          pattern: USECASES_CONTRACTS_ELEMENT_PATTERNS[0],
-          mode: 'file',
-          capture: ['usecaseScope'],
-        },
-        {
-          type: 'usecases-contracts',
-          pattern: USECASES_CONTRACTS_ELEMENT_PATTERNS[1],
-          mode: 'file',
-          capture: ['usecaseScope'],
         },
         {
           type: 'usecases',
-          pattern: 'src/usecases/*/*.ts',
-          mode: 'file',
+          pattern: 'src/usecases/*',
           capture: ['usecaseScope'],
         },
         {
-          type: 'usecases',
-          pattern: 'src/usecases/*/**/*.ts',
-          mode: 'file',
-          capture: ['usecaseScope'],
-        },
-        {
-          type: 'modules-contracts',
-          pattern: MODULES_CONTRACTS_ELEMENT_PATTERNS[0],
-          mode: 'file',
-          capture: ['moduleScope'],
-        },
-        {
-          type: 'modules-contracts',
-          pattern: MODULES_CONTRACTS_ELEMENT_PATTERNS[1],
-          mode: 'file',
-          capture: ['moduleScope'],
-        },
-        {
-          type: 'modules-types',
-          pattern: 'src/modules/*/*.types.ts',
-          mode: 'file',
-          capture: ['moduleScope'],
-        },
-        {
-          type: 'modules-types',
-          pattern: 'src/modules/*/**/*.types.ts',
-          mode: 'file',
-          capture: ['moduleScope'],
-        },
-        {
-          type: 'modules-queries',
-          pattern: 'src/modules/*/**/queries',
-          mode: 'folder',
-          capture: ['moduleScope'],
-        },
-        {
-          type: 'modules-queries',
-          pattern: 'src/modules/*/**/*.query.service.ts',
-          mode: 'file',
-          capture: ['moduleScope'],
-        },
-        {
-          type: 'modules-services',
-          pattern: 'src/modules/*/**/services',
-          mode: 'folder',
-          capture: ['moduleScope'],
-        },
-        {
-          type: 'modules-services',
-          pattern: 'src/modules/*/**/service',
-          mode: 'folder',
-          capture: ['moduleScope'],
-        },
-        {
-          type: 'modules-internal',
+          type: 'modules',
           pattern: 'src/modules/*',
-          mode: 'folder',
-          capture: ['moduleScope'],
-        },
-        {
-          type: 'modules-internal',
-          pattern: 'src/modules/*/*.ts',
-          mode: 'file',
-          capture: ['moduleScope'],
-        },
-        {
-          type: 'modules-internal',
-          pattern: 'src/modules/*/**/*.ts',
-          mode: 'file',
           capture: ['moduleScope'],
         },
         { type: 'infrastructure', pattern: 'src/infrastructure/**' },
         { type: 'core', pattern: 'src/core/**' },
         { type: 'types', pattern: 'src/types/**' },
+      ],
+      'boundaries/files': [
+        {
+          category: 'adapters-wiring',
+          pattern: 'src/adapters/**/*.module.ts',
+          exclusive: true,
+        },
+        {
+          category: 'adapters-guards',
+          pattern: 'src/adapters/api/graphql/guards/**/*.ts',
+          exclusive: true,
+        },
+        {
+          category: 'adapters-common',
+          pattern: [
+            'src/adapters/api/graphql/*.ts',
+            'src/adapters/api/graphql/{decorators,guards,common,schema}/**/*.ts',
+          ],
+          exclusive: true,
+        },
+        {
+          category: 'usecases-contracts',
+          pattern: USECASES_CONTRACTS_ELEMENT_PATTERNS,
+          exclusive: true,
+        },
+        { category: 'usecases-wiring', pattern: 'src/usecases/**/*.module.ts', exclusive: true },
+        { category: 'usecases', pattern: 'src/usecases/**/*.ts', exclusive: true },
+        {
+          category: 'modules-contracts',
+          pattern: [...MODULES_CONTRACTS_ELEMENT_PATTERNS, 'src/modules/**/*.tokens.ts'],
+          exclusive: true,
+        },
+        {
+          category: 'modules-types',
+          pattern: ['src/modules/*/*.types.ts', 'src/modules/*/**/*.types.ts'],
+          exclusive: true,
+        },
+        {
+          category: 'modules-pure',
+          pattern: [
+            'src/modules/**/*.policy.ts',
+            'src/modules/**/*.calculator.ts',
+            'src/modules/**/*.matcher.ts',
+            'src/modules/**/*.parser.ts',
+            'src/modules/**/*.converter.ts',
+            'src/modules/**/*.state.ts',
+            'src/modules/**/*.pure.ts',
+            'src/modules/**/*.constants.ts',
+          ],
+          exclusive: true,
+        },
+        {
+          category: 'modules-gates',
+          pattern: 'src/modules/**/*.gate.ts',
+          exclusive: true,
+        },
+        {
+          category: 'modules-queries',
+          pattern: ['src/modules/*/**/queries/**/*.ts', 'src/modules/*/**/*.query.service.ts'],
+          exclusive: true,
+        },
+        {
+          category: 'modules-wiring',
+          pattern: 'src/modules/**/*.module.ts',
+          exclusive: true,
+        },
+        {
+          category: 'modules-services',
+          pattern: [
+            'src/modules/**/*.service.ts',
+            'src/modules/**/*.store.ts',
+            'src/modules/*/**/services/**/*.ts',
+            'src/modules/*/**/service/**/*.ts',
+          ],
+          exclusive: true,
+        },
+        {
+          category: 'modules-support',
+          pattern: [
+            'src/modules/**/*.codec.ts',
+            'src/modules/**/*.error-mapping.ts',
+            'src/modules/**/*.helper.ts',
+            'src/modules/**/*.mapper.ts',
+            'src/modules/**/*.util.ts',
+          ],
+          exclusive: true,
+        },
+        { category: 'modules-internal', pattern: 'src/modules/**/*.ts', exclusive: true },
       ],
     },
     rules: {
@@ -1848,15 +1965,90 @@ export default defineConfig(
         'error',
         {
           default: 'disallow',
-          rules: [
+          checkInternals: true,
+          policies: asBoundaryDependencyPolicies([
+            {
+              from: { type: 'modules-gates' },
+              allow: [
+                {
+                  to: {
+                    type: 'modules-contracts',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                { to: { type: 'core' } },
+                { to: { type: 'types' } },
+              ],
+            },
+            {
+              from: { type: 'adapters-guards' },
+              allow: [
+                { to: { type: 'adapters-common' } },
+                { to: { type: 'adapters-guards' } },
+                { to: { type: 'usecases' } },
+                { to: { type: 'core' } },
+                { to: { type: 'types' } },
+              ],
+            },
+            {
+              from: { type: 'usecases-wiring' },
+              allow: [
+                { to: { type: 'usecases-any' } },
+                { to: { type: 'modules-wiring' } },
+                { to: { type: 'modules-services' } },
+                { to: { type: 'modules-contracts' } },
+                { to: { type: 'core' } },
+                { to: { type: 'types' } },
+              ],
+            },
+            {
+              from: { type: 'modules-pure' },
+              allow: [
+                {
+                  to: {
+                    type: 'modules-pure',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                { to: { type: 'modules-pure', captured: { moduleScope: 'common' } } },
+                {
+                  to: {
+                    type: 'modules-types',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                {
+                  to: {
+                    type: 'modules-contracts',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                { to: { type: 'core' } },
+                { to: { type: 'types' } },
+              ],
+            },
+
+            {
+              from: { type: 'adapters-wiring' },
+              allow: [
+                { to: { type: 'adapters-common' } },
+                { to: { type: 'adapters-guards' } },
+                { to: { type: 'api-adapters-scope' } },
+                { to: { type: 'worker-adapters-scope' } },
+                { to: { type: 'usecases-wiring' } },
+                { to: { type: 'core' } },
+                { to: { type: 'types' } },
+              ],
+            },
             {
               from: { type: 'api-adapters-scope' },
               allow: [
                 { to: { type: 'adapters-common' } },
+                { to: { type: 'adapters-guards' } },
                 {
                   to: {
                     type: 'api-adapters-scope',
-                    captured: { adapterScope: '{{from.adapterScope}}' },
+                    captured: { adapterScope: '{{from.element.captured.adapterScope}}' },
                   },
                 },
                 { to: { type: 'usecases' } },
@@ -1865,7 +2057,7 @@ export default defineConfig(
                 {
                   to: {
                     type: 'modules-types',
-                    captured: { moduleScope: '{{from.adapterScope}}' },
+                    captured: { moduleScope: '{{from.element.captured.adapterScope}}' },
                   },
                   dependency: { kind: 'type' },
                 },
@@ -1877,7 +2069,7 @@ export default defineConfig(
                 {
                   to: {
                     type: 'worker-adapters-scope',
-                    captured: { adapterScope: '{{from.adapterScope}}' },
+                    captured: { adapterScope: '{{from.element.captured.adapterScope}}' },
                   },
                 },
                 { to: { type: 'usecases' } },
@@ -1889,6 +2081,7 @@ export default defineConfig(
               from: { type: 'adapters-common' },
               allow: [
                 { to: { type: 'adapters-common' } },
+                { to: { type: 'adapters-guards' } },
                 { to: { type: 'core' } },
                 { to: { type: 'types' } },
               ],
@@ -1904,10 +2097,11 @@ export default defineConfig(
             {
               from: { type: 'usecases' },
               allow: [
+                { to: { type: 'modules-gates', captured: { moduleScope: 'common' } } },
                 {
                   to: {
                     type: 'usecases',
-                    captured: { usecaseScope: '{{from.usecaseScope}}' },
+                    captured: { usecaseScope: '{{from.element.captured.usecaseScope}}' },
                   },
                 },
                 { to: { type: 'usecases-contracts' } },
@@ -1915,6 +2109,13 @@ export default defineConfig(
                 { to: { type: 'modules-types' } },
                 { to: { type: 'modules-queries' } },
                 { to: { type: 'modules-services' } },
+                {
+                  to: {
+                    type: 'modules-pure',
+                    captured: { moduleScope: '{{from.element.captured.usecaseScope}}' },
+                  },
+                },
+                { to: { type: 'modules-pure', captured: { moduleScope: 'common' } } },
                 { to: { type: 'core' } },
                 { to: { type: 'types' } },
               ],
@@ -1933,13 +2134,13 @@ export default defineConfig(
                 {
                   to: {
                     type: 'modules-contracts',
-                    captured: { moduleScope: '{{from.moduleScope}}' },
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
                   },
                 },
                 {
                   to: {
                     type: 'modules-types',
-                    captured: { moduleScope: '{{from.moduleScope}}' },
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
                   },
                 },
                 { to: { type: 'modules-types', captured: { moduleScope: 'common' } } },
@@ -1953,7 +2154,7 @@ export default defineConfig(
                 {
                   to: {
                     type: 'modules-types',
-                    captured: { moduleScope: '{{from.moduleScope}}' },
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
                   },
                 },
                 { to: { type: 'modules-types', captured: { moduleScope: 'common' } } },
@@ -1967,29 +2168,108 @@ export default defineConfig(
                 {
                   to: {
                     type: 'modules-queries',
-                    captured: { moduleScope: '{{from.moduleScope}}' },
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
                   },
                 },
                 {
                   to: {
                     type: 'modules-types',
-                    captured: { moduleScope: '{{from.moduleScope}}' },
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
                   },
                 },
                 {
                   to: {
                     type: 'modules-contracts',
-                    captured: { moduleScope: '{{from.moduleScope}}' },
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
                   },
                 },
                 {
                   to: {
                     type: 'modules-internal',
-                    captured: { moduleScope: '{{from.moduleScope}}' },
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                {
+                  to: {
+                    type: 'modules-support',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
                   },
                 },
                 { to: { type: 'modules-services', captured: { moduleScope: 'common' } } },
+                { to: { type: 'modules-contracts', captured: { moduleScope: 'common' } } },
+                { to: { type: 'modules-types', captured: { moduleScope: 'common' } } },
+                { to: { type: 'modules-internal', captured: { moduleScope: 'common' } } },
+                { to: { type: 'modules-support', captured: { moduleScope: 'common' } } },
+                { to: { type: 'modules-gates', captured: { moduleScope: 'common' } } },
+                {
+                  to: {
+                    type: 'modules-pure',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                { to: { type: 'modules-pure', captured: { moduleScope: 'common' } } },
+                { to: { type: 'infrastructure' } },
+                { to: { type: 'core' } },
+                { to: { type: 'types' } },
+              ],
+            },
+            {
+              from: { type: 'modules-wiring' },
+              allow: [
+                {
+                  to: {
+                    type: 'modules-wiring',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                {
+                  to: {
+                    type: 'modules-services',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                {
+                  to: {
+                    type: 'modules-queries',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                {
+                  to: {
+                    type: 'modules-support',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                {
+                  to: {
+                    type: 'modules-types',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                {
+                  to: {
+                    type: 'modules-contracts',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                {
+                  to: {
+                    type: 'modules-internal',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                { to: { type: 'modules-wiring', captured: { moduleScope: 'common' } } },
+                { to: { type: 'modules-services', captured: { moduleScope: 'common' } } },
                 { to: { type: 'modules-queries', captured: { moduleScope: 'common' } } },
+                { to: { type: 'modules-support', captured: { moduleScope: 'common' } } },
+                { to: { type: 'modules-gates', captured: { moduleScope: 'common' } } },
+                {
+                  to: {
+                    type: 'modules-pure',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                { to: { type: 'modules-pure', captured: { moduleScope: 'common' } } },
                 { to: { type: 'modules-contracts', captured: { moduleScope: 'common' } } },
                 { to: { type: 'modules-types', captured: { moduleScope: 'common' } } },
                 { to: { type: 'modules-internal', captured: { moduleScope: 'common' } } },
@@ -2003,30 +2283,96 @@ export default defineConfig(
               allow: [
                 {
                   to: {
+                    type: 'modules-support',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                {
+                  to: {
                     type: 'modules-services',
-                    captured: { moduleScope: '{{from.moduleScope}}' },
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
                   },
                 },
                 {
                   to: {
                     type: 'modules-types',
-                    captured: { moduleScope: '{{from.moduleScope}}' },
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
                   },
                 },
                 {
                   to: {
                     type: 'modules-contracts',
-                    captured: { moduleScope: '{{from.moduleScope}}' },
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
                   },
                 },
                 {
                   to: {
                     type: 'modules-internal',
-                    captured: { moduleScope: '{{from.moduleScope}}' },
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
                   },
                 },
                 { to: { type: 'modules-services', captured: { moduleScope: 'common' } } },
                 { to: { type: 'modules-queries', captured: { moduleScope: 'common' } } },
+                { to: { type: 'modules-contracts', captured: { moduleScope: 'common' } } },
+                { to: { type: 'modules-types', captured: { moduleScope: 'common' } } },
+                { to: { type: 'modules-internal', captured: { moduleScope: 'common' } } },
+                { to: { type: 'modules-support', captured: { moduleScope: 'common' } } },
+                { to: { type: 'modules-gates', captured: { moduleScope: 'common' } } },
+                {
+                  to: {
+                    type: 'modules-pure',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                { to: { type: 'modules-pure', captured: { moduleScope: 'common' } } },
+                { to: { type: 'infrastructure' } },
+                { to: { type: 'core' } },
+                { to: { type: 'types' } },
+              ],
+            },
+            {
+              from: { type: 'modules-support' },
+              allow: [
+                {
+                  to: {
+                    type: 'modules-support',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                {
+                  to: {
+                    type: 'modules-services',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                {
+                  to: {
+                    type: 'modules-types',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                {
+                  to: {
+                    type: 'modules-contracts',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                {
+                  to: {
+                    type: 'modules-internal',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                { to: { type: 'modules-services', captured: { moduleScope: 'common' } } },
+                { to: { type: 'modules-support', captured: { moduleScope: 'common' } } },
+                { to: { type: 'modules-gates', captured: { moduleScope: 'common' } } },
+                {
+                  to: {
+                    type: 'modules-pure',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                { to: { type: 'modules-pure', captured: { moduleScope: 'common' } } },
                 { to: { type: 'modules-contracts', captured: { moduleScope: 'common' } } },
                 { to: { type: 'modules-types', captured: { moduleScope: 'common' } } },
                 { to: { type: 'modules-internal', captured: { moduleScope: 'common' } } },
@@ -2040,32 +2386,38 @@ export default defineConfig(
               allow: [
                 {
                   to: {
+                    type: 'modules-support',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                {
+                  to: {
                     type: 'modules-internal',
-                    captured: { moduleScope: '{{from.moduleScope}}' },
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
                   },
                 },
                 {
                   to: {
                     type: 'modules-services',
-                    captured: { moduleScope: '{{from.moduleScope}}' },
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
                   },
                 },
                 {
                   to: {
                     type: 'modules-queries',
-                    captured: { moduleScope: '{{from.moduleScope}}' },
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
                   },
                 },
                 {
                   to: {
                     type: 'modules-types',
-                    captured: { moduleScope: '{{from.moduleScope}}' },
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
                   },
                 },
                 {
                   to: {
                     type: 'modules-contracts',
-                    captured: { moduleScope: '{{from.moduleScope}}' },
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
                   },
                 },
                 { to: { type: 'modules-services', captured: { moduleScope: 'common' } } },
@@ -2073,6 +2425,15 @@ export default defineConfig(
                 { to: { type: 'modules-contracts', captured: { moduleScope: 'common' } } },
                 { to: { type: 'modules-types', captured: { moduleScope: 'common' } } },
                 { to: { type: 'modules-internal', captured: { moduleScope: 'common' } } },
+                { to: { type: 'modules-support', captured: { moduleScope: 'common' } } },
+                { to: { type: 'modules-gates', captured: { moduleScope: 'common' } } },
+                {
+                  to: {
+                    type: 'modules-pure',
+                    captured: { moduleScope: '{{from.element.captured.moduleScope}}' },
+                  },
+                },
+                { to: { type: 'modules-pure', captured: { moduleScope: 'common' } } },
                 { to: { type: 'infrastructure' } },
                 { to: { type: 'core' } },
                 { to: { type: 'types' } },
@@ -2096,12 +2457,11 @@ export default defineConfig(
               from: { type: 'types' },
               allow: [{ to: { type: 'types' } }],
             },
-          ],
+          ]),
         },
       ],
       'local-architecture/no-infrastructure-to-modules-imports': 'error',
       'local-architecture/no-infrastructure-to-usecases-imports': 'error',
-      'local-architecture/no-adapter-to-infrastructure-imports': 'error',
       'local-architecture/no-adapter-to-queryservice-imports': 'error',
       'local-architecture/no-adapter-types-from-usecase-implementations': 'error',
       'local-architecture/no-cross-domain-usecases-imports': 'error',
@@ -2115,6 +2475,7 @@ export default defineConfig(
       'local-architecture/no-runtime-config-outside-wiring': 'error',
       'local-architecture/no-transaction-manager-alias': 'error',
       'local-architecture/no-upstream-entity-imports': 'error',
+      'local-architecture/no-upper-types-from-module-implementations': 'error',
       'local-architecture/no-usecase-transaction-manager-orm-api': 'error',
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-floating-promises': 'error',
@@ -2214,6 +2575,64 @@ export default defineConfig(
     },
   },
   {
+    files: [
+      'src/modules/**/*.{policy,calculator,matcher,parser,converter,state,pure,constants}.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '@nestjs/**',
+                'typeorm',
+                'typeorm/**',
+                'nestjs-*',
+                'axios',
+                'bullmq',
+                'ioredis',
+                'fs',
+                'fs/**',
+                'node:fs',
+                'node:fs/**',
+                'http',
+                'https',
+                'net',
+                'child_process',
+                'node:http',
+                'node:https',
+                'node:net',
+                'node:child_process',
+              ],
+              message:
+                'Module pure rules must remain framework-free, deterministic and free of I/O.',
+            },
+            { group: RESTRICTED_SRC_TYPES_IMPORT_PATTERNS },
+          ],
+        },
+      ],
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'Math',
+          property: 'random',
+          message: 'Pass randomness as explicit input to pure rules.',
+        },
+        {
+          object: 'Date',
+          property: 'now',
+          message: 'Pass the scene time as explicit input to pure rules.',
+        },
+        {
+          object: 'process',
+          property: 'env',
+          message: 'Pure rules must not read runtime configuration.',
+        },
+      ],
+    },
+  },
+  {
     ...tseslint.configs.disableTypeChecked,
     files: ['scripts/*.js', 'test/*.js'],
     rules: {
@@ -2227,6 +2646,7 @@ export default defineConfig(
   {
     files: ['test/**/*.ts', '**/*.spec.ts', '**/*.test.ts', 'e2e/**/*.ts'],
     rules: {
+      'boundaries/dependencies': 'off',
       complexity: 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
@@ -2234,7 +2654,7 @@ export default defineConfig(
       '@typescript-eslint/no-unsafe-call': 'off',
       '@typescript-eslint/no-unsafe-argument': 'off',
       '@typescript-eslint/no-unsafe-return': 'off',
-      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
       '@typescript-eslint/unbound-method': 'off',

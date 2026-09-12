@@ -1,3 +1,4 @@
+import { toAccountSnapshot } from '../account-view.mapper';
 // src/modules/account/queries/account.query.service.ts
 import type { PersistenceTransactionContext } from '@app-types/common/transaction.types';
 import {
@@ -56,7 +57,7 @@ export class AccountQueryService {
       throw new DomainError(ACCOUNT_ERROR.ACCOUNT_NOT_FOUND, '账户不存在');
     }
 
-    return this.toUserAccountView(account);
+    return toAccountSnapshot(account);
   }
 
   async findAccountSnapshotById(params: {
@@ -65,7 +66,7 @@ export class AccountQueryService {
   }): Promise<AccountSnapshot | null> {
     const accountRepository = this.getAccountRepository(params.transactionContext);
     const account = await accountRepository.findOne({ where: { id: params.accountId } });
-    return account ? this.toUserAccountView(account) : null;
+    return account ? toAccountSnapshot(account) : null;
   }
 
   async getUserAccountViewById(params: {
@@ -159,19 +160,6 @@ export class AccountQueryService {
 
     const randomSuffix = this.generateRandomString(12);
     return `${fallbackBase}#${randomSuffix}`;
-  }
-
-  toUserAccountView(account: AccountEntity): UserAccountView {
-    return {
-      id: account.id,
-      loginName: account.loginName,
-      loginEmail: account.loginEmail,
-      status: account.status,
-      identityHint: account.identityHint,
-      recentLoginHistory: account.recentLoginHistory || null,
-      createdAt: account.createdAt,
-      updatedAt: account.updatedAt,
-    };
   }
 
   async getVisibleUserInfo(params: {

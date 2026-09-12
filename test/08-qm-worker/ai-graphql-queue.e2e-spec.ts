@@ -6,7 +6,7 @@ import { ApiModule } from '@src/bootstraps/api/api.module';
 import { WorkerModule } from '@src/bootstraps/worker/worker.module';
 import { BULLMQ_JOBS, BULLMQ_QUEUES } from '@src/infrastructure/bullmq/bullmq.constants';
 import { BullMqWorkerRuntime } from '@src/infrastructure/bullmq/worker.runtime';
-import { TokenHelper } from '@src/modules/auth/token.helper';
+import { TokenHelper } from '@src/modules/auth/token.service';
 import { AsyncTaskRecordEntity } from '@src/modules/async-task-record/async-task-record.entity';
 import type { AsyncTaskRecordStatus } from '@src/modules/async-task-record/async-task-record.types';
 import { AiWorkerService } from '@src/modules/common/ai-worker/ai-worker.service';
@@ -327,10 +327,14 @@ const waitJobFinalState = async (input: {
     if (job) {
       const state = await job.getState();
       if (state === 'completed' || state === 'failed') {
+        // getState() reads Redis but does not refresh the earlier Job snapshot.
+        // Read the result after observing the terminal state, without weakening assertions.
+        const finalJob = await input.queue.getJob(input.jobId);
+        if (!finalJob) throw new Error(`Terminal job disappeared: ${input.jobId}`);
         return {
           state,
-          returnvalue: job.returnvalue,
-          failedReason: job.failedReason,
+          returnvalue: finalJob.returnvalue,
+          failedReason: finalJob.failedReason,
         };
       }
     }

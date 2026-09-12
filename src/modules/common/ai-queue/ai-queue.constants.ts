@@ -1,5 +1,5 @@
-import { BULLMQ_JOBS, BULLMQ_QUEUES } from '@src/infrastructure/bullmq/bullmq.constants';
-
-export const AI_QUEUE_NAME = BULLMQ_QUEUES.AI;
-export const AI_GENERATE_JOB_NAME = BULLMQ_JOBS.AI.GENERATE;
-export const AI_EMBED_JOB_NAME = BULLMQ_JOBS.AI.EMBED;
+export {
+  AI_QUEUE_NAME,
+  AI_GENERATE_JOB_NAME,
+  AI_EMBED_JOB_NAME,
+} from '@app-types/common/ai-queue.types';

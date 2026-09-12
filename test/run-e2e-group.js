@@ -96,10 +96,13 @@ const run = () => {
     if (passthroughArgs.length) {
       jestArgs.push(...passthroughArgs);
     }
-    const command = debugMode ? 'node' : 'npx';
-    const commandArgs = debugMode
-      ? ['--inspect-brk', './node_modules/.bin/jest', ...jestArgs]
-      : ['jest', ...jestArgs];
+    const command = 'node';
+    const commandArgs = [
+      '--experimental-vm-modules',
+      ...(debugMode ? ['--inspect-brk'] : []),
+      './node_modules/jest/bin/jest.js',
+      ...jestArgs,
+    ];
     const result = spawnSync(command, commandArgs, {
       stdio: 'inherit',
       env,

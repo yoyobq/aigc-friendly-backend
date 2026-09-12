@@ -2,7 +2,6 @@ import { Inject, Injectable } from '@nestjs/common';
 import { resolveAsyncTaskBizKey } from '@src/core/common/async-task/async-task-identifier.policy';
 import { normalizeOptionalText } from '@src/core/common/input-normalize/input-normalize.policy';
 import { AiWorkflowContextService } from '@src/modules/ai-workflow-context/ai-workflow-context.service';
-import { requireAiWorkflowTerminalDrain } from '@src/modules/ai-workflow-context/ai-workflow-capability.gate';
 import type {
   AiWorkflowContextHousekeepingCandidate,
   AiWorkflowContextStatus,
@@ -53,7 +52,7 @@ export class RunAiWorkflowHousekeepingUsecase {
     const workflowState = this.capabilityStateReader.getState('ai.workflow');
     const canRunEnabledPhases = workflowState.effectiveState === 'enabled';
     if (!canRunEnabledPhases) {
-      requireAiWorkflowTerminalDrain(this.capabilityStateReader);
+      this.aiWorkflowContextService.requireTerminalDrain();
     }
     const now = input.now ?? new Date();
     const limit = resolveBatchLimit(input.limit);

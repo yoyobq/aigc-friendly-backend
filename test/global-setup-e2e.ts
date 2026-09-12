@@ -157,7 +157,13 @@ const checkBullMq = async (): Promise<void> => {
     throw new Error('BULLMQ_PREFIX is invalid');
   }
   const queue = new Queue('__e2e_setup_healthcheck__', {
-    connection: buildRedisOptions(),
+    connection: {
+      host: resolveEnvString('REDIS_HOST'),
+      port: resolveEnvNumber('REDIS_PORT'),
+      db: resolveEnvNumber('REDIS_DB'),
+      password: process.env.REDIS_PASSWORD || undefined,
+      tls: process.env.REDIS_TLS === 'true' ? {} : undefined,
+    },
     prefix,
   });
   try {

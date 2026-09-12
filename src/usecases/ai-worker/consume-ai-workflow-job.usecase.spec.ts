@@ -1,10 +1,8 @@
 /// <reference types="jest" />
 import type { PersistenceTransactionContext } from '@app-types/common/transaction.types';
 import { DomainError, THIRDPARTY_ERROR } from '@src/core/common/errors/domain-error';
-import type {
-  AiProviderCallRecordService,
-  AiProviderCallRecordView,
-} from '@src/modules/ai-provider-call-record/ai-provider-call-record.service';
+import { AiProviderCallRecordService } from '@src/modules/ai-provider-call-record/ai-provider-call-record.service';
+import type { AiProviderCallRecordView } from '@src/modules/ai-provider-call-record/ai-provider-call-record.types';
 import type { AiWorkflowContextService } from '@src/modules/ai-workflow-context/ai-workflow-context.service';
 import type {
   AiWorkflowContextMutationResult,

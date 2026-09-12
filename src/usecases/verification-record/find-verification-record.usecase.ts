@@ -3,10 +3,8 @@
 import { VerificationRecordType } from '@app-types/models/verification-record.types';
 import { DomainError, VERIFICATION_RECORD_ERROR } from '@core/common/errors/domain-error';
 import { Injectable } from '@nestjs/common';
-import {
-  VerificationRecordQueryService,
-  VerificationRecordView,
-} from '@src/modules/verification-record/queries/verification-record.query.service';
+import { VerificationRecordQueryService } from '@src/modules/verification-record/queries/verification-record.query.service';
+import type { VerificationRecordView } from '@src/modules/verification-record/verification-record.types';
 
 /**
  * 查找验证记录用例参数

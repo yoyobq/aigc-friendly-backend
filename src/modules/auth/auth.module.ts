@@ -8,7 +8,7 @@ import { IdentityAuthenticationCapabilityAnchor } from './auth.capability';
 import { AUTH_TOKENS } from './auth.tokens';
 import { LoginBootstrapQueryService } from './queries/login-bootstrap.query.service';
 import { LoginResultQueryService } from './queries/login-result.query.service';
-import { TokenHelper } from './token.helper';
+import { TokenHelper } from './token.service';
 
 /**
  * 认证模块

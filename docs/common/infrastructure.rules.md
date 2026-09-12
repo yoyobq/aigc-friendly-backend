@@ -33,8 +33,17 @@ For boundary contract naming, see docs/common/boundary-contract.rules.md.
 
 ## 依赖方向
 
+- 允许 infrastructure 依赖 infrastructure 内部实现、core 与 framework-free 的 `src/types`。
 - 允许 infrastructure 依赖其实现的 core-owned、usecase-owned 或 module-owned boundary contract。
-- infrastructure 实现上层 boundary contract 时，只能 import 对应 contract / token / 最小共享类型。
+- infrastructure 只有在实际实现或 DI wiring 上层 boundary contract 时，才能 import 对应
+  `*.contract.ts` 中的 interface、injection token 与该 contract 签名直接需要的最小
+  framework-free 类型。实现位置不改变 contract ownership。
+- `docs/project-convention/domain-implementation-current.md` 明列的 legacy core interface
+  可维持既有文件名，但使用同一个窄
+  import surface；不得借 legacy 名称扩大依赖。所有新增 boundary declaration 必须使用
+  `*.contract.ts`。
+- “允许依赖 usecase-owned contract”不等于允许依赖 usecases 层：除上述 contract import surface
+  外，`src/usecases/**` 的实现类、module、helper、scene type 和 barrel 都禁止 import。
 - 禁止 infrastructure import usecase 实现文件、usecase module、业务 service、QueryService 或 ORM Entity 作为协作对象。
 - 禁止 usecases 依赖 infrastructure。
 - 禁止 adapters 依赖 infrastructure。

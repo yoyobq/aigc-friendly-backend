@@ -50,7 +50,7 @@ For boundary contract naming, see docs/common/boundary-contract.rules.md.
 - 领域规则优先，技术细节后置。
 - 抽象稳定，具体实现可替换。
 - Boundary contract 是某一层拥有的依赖边界模式，不是独立分层。
-- 本仓库新增 boundary contract 文件默认使用 `*.contract.ts`。
+- 本仓库新增 boundary contract 文件必须使用 `*.contract.ts`。
   Port 只作为架构术语出现，不作为新增文件后缀。
 - Core-owned boundary contract 必须表达纯领域能力，不承载 usecase 编排、事务、队列调度等运行时能力。
 - 纯函数优先，最小副作用。
@@ -61,21 +61,18 @@ For boundary contract naming, see docs/common/boundary-contract.rules.md.
   `*.policy.ts` / `*.state.ts`。
   只要它保持纯函数、无 I/O、无 DI、无 ORM，就不违反 core 规则。
   当该规则跨场景稳定复用后，再评估是否上收到 `src/core/<domain>`。
+- 输入 normalize 的领域无关 primitive 放在 `src/core/common/input-normalize`；稳定、领域专属且
+  跨多个独立场景复用的纯规则放在 `src/core/<domain>`。不得把领域规则仅因多个调用点提升到
+  `core/common`。
+- 场景输入的默认值、空值/list policy 选择、跨字段语义与错误映射仍由 owning Usecase 负责；
+  这些职责不会因为实现为纯函数就变成 core 或 module ownership。
+- 上述 module-local pure policy 规则只适用于由该 module 拥有的领域规则，不适用于外部协议解析
+  或 usecase 场景输入收敛；后两者遵循 input-normalize 规则。
 
-## 当前 Account Policy 口径
+## 项目约定与受限例外
 
-- `role-access.policy.ts` 承载角色展开与角色判断。
-- `user-info-visibility.policy.ts` 承载 userInfo 可见性的纯判断。
-- `parse-staff-id.ts` 承载 staffId 解析的纯判断。
-- Account 状态迁移、访问摘要投影、注册中间态不变量只有在出现稳定重复或明确聚合不变量证据时，才进入 `core/account`。
-
-## Legacy 兼容口径
-
-- 当前 `src/core/**` 中保留的共享 contract / interface 必须使用 `*.contract.ts`
-  或更具体的纯类型 / helper 命名。
-- Legacy contract 只能做必要维护，不得继续扩大职责、增加新的反向依赖或作为新 contract 的放置模板。
-- 新增 core-owned boundary contract 使用 `*.contract.ts`，不得使用 `*.port.ts`
-  / `*.ports.ts` 命名。
+- 具体领域 policy 位置及历史兼容清单见[当前领域实现约定](../project-convention/domain-implementation-current.md)。
+- 只有清单明列的历史实现允许必要兼容维护；不得扩大职责、增加反向依赖或作为新增代码模板。
 - 新增运行时、事务、队列、外部系统、provider、gateway 等能力边界时，先判断实际 owning layer。
   只有纯领域能力才允许新增 core-owned boundary contract。
 

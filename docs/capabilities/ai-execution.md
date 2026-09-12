@@ -15,3 +15,5 @@ availability switch and is an implicit prerequisite.
 
 Disabled or blocked execution stops new admission and Worker activation. A disabled Worker must not
 claim queued work.
+
+Collaboration: [Workflow text generation](../collaborations/ai.workflow/ai.execution--text-generation.md).

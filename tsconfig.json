@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
+    "module": "nodenext",
     "declaration": true,
     "removeComments": true,
     "emitDecoratorMetadata": true,
@@ -23,7 +23,10 @@
       "@adapters/*": ["./src/adapters/*"],
       "@usecases/*": ["./src/usecases/*"],
       "@app-types/*": ["./src/types/*"]
-    }
+    },
+    "moduleResolution": "nodenext",
+    "resolvePackageJsonExports": true,
+    "types": ["node", "jest"]
   },
   "include": ["src/**/*", "test/**/*", "scripts/**/*.ts", "jest.config.ts"],
   "exclude": ["node_modules", "dist"]

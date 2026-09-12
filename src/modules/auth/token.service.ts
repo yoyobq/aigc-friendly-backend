@@ -1,4 +1,5 @@
-// src/modules/auth/token.helper.ts
+import { isAllowedAudience } from './audience.policy';
+// src/modules/auth/token.service.ts
 import {
   GenerateAccessTokenParams,
   GenerateRefreshTokenParams,
@@ -100,12 +101,7 @@ export class TokenHelper {
   }
 
   validateAudience(audience: string, configAudience: string): boolean {
-    if (!audience || !configAudience) {
-      return false;
-    }
-
-    const allowedAudiences = configAudience.split(',').map((aud) => aud.trim());
-    return allowedAudiences.includes(audience);
+    return isAllowedAudience(audience, configAudience);
   }
 
   verifyToken({ token }: { token: string }): JwtPayload {

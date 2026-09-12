@@ -219,7 +219,7 @@ export class RegisterWithEmailUsecase {
         );
       }
 
-      const account = this.accountService.createAccountEntity({
+      const savedAccount = await this.accountService.createAccount({
         transactionContext,
         accountData: {
           loginName,
@@ -231,7 +231,6 @@ export class RegisterWithEmailUsecase {
           updatedAt: new Date(),
         },
       });
-      const savedAccount = await this.accountService.saveAccount({ account, transactionContext });
 
       await this.accountService.updateAccountPasswordHash({
         accountId: savedAccount.id,
@@ -242,7 +241,7 @@ export class RegisterWithEmailUsecase {
         transactionContext,
       });
 
-      const userInfo = this.accountService.createUserInfoEntity({
+      await this.accountService.createUserInfo({
         transactionContext,
         userInfoData: {
           accountId: savedAccount.id,
@@ -254,7 +253,6 @@ export class RegisterWithEmailUsecase {
           updatedAt: new Date(),
         },
       });
-      await this.accountService.saveUserInfo({ userInfo, transactionContext });
 
       return await this.accountQueryService.getUserAccountViewById({
         accountId: savedAccount.id,

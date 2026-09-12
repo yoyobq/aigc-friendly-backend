@@ -96,8 +96,8 @@ For layer-owned boundary contract naming, see docs/common/boundary-contract.rule
 - 不作为领域模型向下游传播。
 - 不与 ORM Entity 合并。
 - GraphQL decorator 只能出现在 adapter 层 DTO / Args / Input / Result 类型中。
-- `Input` / `Result` 词本身不是 adapter 专属：framework-free 的 usecase-owned Input / flow
-  Result 可以留在 usecase；只有 adapter 协议 shape 或携带协议 decorator 的 Input / Result
+- `Input` / `Result` 词本身不是 adapter 专属：framework-free 的 usecase-owned input / flow
+  result 可以留在 usecase；只有 adapter 协议 shape 或携带协议 decorator 的 Input / Result
   属于本节的 adapter 类型。
 
 典型内容：
@@ -118,7 +118,7 @@ For layer-owned boundary contract naming, see docs/common/boundary-contract.rule
   bounded context 根类型文件或领域内局部位置。
 - 在 GraphQL 侧通过集中注册暴露。
 - 同一 bounded context 内共享、但需要 GraphQL DTO 或 `enum.registry.ts` 以运行时值引用的领域
-  enum，也应放在 `src/types` 并通过 `@app-types/*` 导入。
+  enum，也应优先放在 `src/types` 并通过 `@app-types/*` 导入。
   不要为了 GraphQL 暴露在 adapter 层维护同义 `Gql*` 副本，也不要让 adapter 对
   `src/modules/<bounded-context>/<bounded-context>.types.ts` 做值导入。
 - 若 module 内代码希望继续从 bounded context 根类型入口使用该 enum，该根类型文件可以从
@@ -152,7 +152,8 @@ For layer-owned boundary contract naming, see docs/common/boundary-contract.rule
 - 禁止使用 `@src/types/*` 混用入口。
 - 同域多层共享但未跨域的稳定类型，统一放在 `src/modules/<bounded-context>/<bounded-context>.types.ts`。
 - 仅由一个 Usecase 与其调用 adapter 共享的执行输入 / 结果，留在 Usecase 相邻 `*.types.ts`；
-  当它成为多个 Usecase、modules(service) 或整个 bounded context 的稳定公共契约时，才提升到 bounded context 根类型文件。
+  当它成为多个 Usecase、modules(service) 或整个 bounded context 的稳定公共契约时，才提升到
+  bounded context 根类型文件。
 - 同域上游（含 adapters / usecases）若需复用该类类型，只允许 `import type` 或纯类型 import
   此 bounded context 根公共类型文件；该规则不允许 adapters import modules 的 service、
   QueryService、Entity、局部 `queries/*.types.ts`，也不允许任何值导入。

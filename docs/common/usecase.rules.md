@@ -12,11 +12,14 @@ For boundary contract naming, see docs/common/boundary-contract.rules.md.
 ## 目标与定位
 
 - Usecase 负责写操作编排与业务流程协调。
-- 上游由 adapters 调用，下游只依赖允许的 modules(service)、core、`src/types` 或 layer-owned boundary contract。
-- 写语义一律在 Usecase 内完成。
-  包括 C/U/D 的编排、校验、权限与错误映射。
+- 上游由 adapters 调用，下游只依赖允许的 modules(service)、core、`src/types` 或 layer-owned
+  boundary contract。
+- 写流程的场景语义由 Usecase 拥有。
+  包括 C/U/D 的场景输入策略、流程级校验与授权、事务、跨域协调和场景错误映射。
 - modules(service) 仅提供细粒度写操作。
-  由 Usecase 统一编排。
+  由 Usecase 统一编排；聚合写入口仍须保护本聚合不变量，不能依赖每个调用者重复校验。
+  聚合边界见 [aggregate.rules.md](./aggregate.rules.md)，纯规则放置见
+  [core.rules.md](./core.rules.md)。
 - Usecase 可拥有少量 usecase-owned boundary contract。
   用于事务、调度等用例编排所需的运行时能力边界。
   这是一种边界模式，不是独立分层，也不意味着建立全局 boundary contract 层或 `ports` 层。
@@ -28,8 +31,9 @@ For boundary contract naming, see docs/common/boundary-contract.rules.md.
 - usecases 可依赖 usecase-owned boundary contract。
   该类 contract 只定义 contract / token / 最小共享类型，不承载业务流程实现，也不是独立分层。
   共享的 usecase 编排运行时能力统一放在 `src/usecases/common/ports/*.contract.ts`。
-  `*.contract.ts` 是本仓库 lint 识别的 usecase-owned boundary contract 后缀；
-  不使用 `*.port.ts` 新增并行约定。
+  `*.contract.ts` 是本仓库 usecase-owned boundary contract 的固定后缀；不使用 `*.port.ts`
+  新增并行约定。当前 lint 会拦截 port 命名漂移，并把 usecase-owned contract 建模为独立
+  boundary element；具体执行覆盖见 `docs/common/eslint-architecture-rules.md`。
   Port 只作为架构讨论术语出现，不作为新增文件后缀。
   单个用例私有能力优先 colocate 在该 usecase 附近。
 - usecases → usecases 仅限同域编排型依赖。
@@ -72,10 +76,13 @@ For boundary contract naming, see docs/common/boundary-contract.rules.md.
 
 ## 职责与输出
 
-- Usecase 负责流程编排、事务边界、错误映射与权限组合，不创建 adapter-owned DTO，也不重复定义本应由 QueryService 统一的读侧 View。
+- Usecase 负责流程编排、事务边界、错误映射与权限组合，不创建 adapter-owned DTO，也不重复
+  定义本应由 QueryService 统一的读侧 View。
 - 纯读和写后读的稳定读侧口径交给 QueryService，避免多个 Usecase 各自拼装同一 View。
-- Usecase 对 adapter 返回 QueryService 产出的稳定 View / ReadModel，或 usecase-owned 的流程 Result / summary；不得返回 ORM Entity。Adapter 再把这些结果映射为协议 DTO。
-- Usecase 是 QueryService 唯一的上层调用者；同一 bounded context 内部允许 QueryService 以只读、无环方式组合其他 QueryService，详见 `docs/common/queryservice.rules.md`。
+- Usecase 对 adapter 返回 QueryService 产出的稳定 View / ReadModel，或 usecase-owned 的流程
+  Result / summary；不得返回 ORM Entity。Adapter 再把这些结果映射为协议 DTO。
+- Usecase 是 QueryService 唯一的上层调用者；同一 bounded context 内部允许 QueryService 以
+  只读、无环方式组合其他 QueryService，详见 `docs/common/queryservice.rules.md`。
 - 对于 Worker 生命周期中的降级输入，Usecase 必须接收显式上下文字段。
   例如 failed 事件缺失 `job`。
 - Usecase 必须完成可查询的失败记录落库。
@@ -85,7 +92,8 @@ For boundary contract naming, see docs/common/boundary-contract.rules.md.
 ## 读写协作方式
 
 - 纯读放在 modules(service) 的 QueryService，便于复用。
-- modules(service) 可提供基础写方法，但不得包含完整写语义或流程编排。
+- modules(service) 可提供保护本聚合约束的细粒度写方法，但不得接管 Usecase 的场景决策、
+  流程授权、事务入口或跨域编排。
 - Usecase 编排批量输入时，不得默认在循环中逐条 `await` 调用读写 service、QueryService、
   repository 封装或外部访问能力。
   应优先让下游提供批量读取/批量写入接口，由 usecase 做一次性收集、内存 diff 与批量提交。
@@ -97,7 +105,8 @@ For boundary contract naming, see docs/common/boundary-contract.rules.md.
 - `Outbox` 可作为一致性设计选项进行评估。
 - 写后读优先走 QueryService，输出统一的稳定 View / ReadModel。
 - 若写后读属于同域且读逻辑稳定，可复用 modules(service) 的只读方法。
-- 输出仍以稳定 View / ReadModel 或 usecase-owned Result / summary 为准，不返回 Entity，也不在 usecase 创建协议 DTO。
+- 输出仍以稳定 View / ReadModel 或 usecase-owned Result / summary 为准，不返回 Entity，
+  也不在 usecase 创建协议 DTO。
 
 ## 错误与权限
 
@@ -131,4 +140,5 @@ For boundary contract naming, see docs/common/boundary-contract.rules.md.
 
 - 一个 Usecase 只处理一个写语义或一个业务流程。
 - 当流程中出现多个独立的写语义时，拆分为多个 Usecase，由上层编排。
-- 可复用的读侧输出口径由 QueryService 统一；流程专属结果由 owning usecase 定义，避免各 Usecase 重复定义同一读模型。
+- 可复用的读侧输出口径由 QueryService 统一；流程专属结果由 owning usecase 定义，避免各
+  Usecase 重复定义同一读模型。

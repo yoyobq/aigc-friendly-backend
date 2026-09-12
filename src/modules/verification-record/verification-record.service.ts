@@ -15,17 +15,13 @@ import { getTypeOrmEntityManager } from '@src/infrastructure/database/transactio
 import { QueryFailedError, Repository } from 'typeorm';
 import { VerificationRecordEntity } from './verification-record.entity';
 
-export type VerificationRecordConsumeTargetConstraint =
-  { mode: 'IGNORE' } | { mode: 'NULL_ONLY' } | { mode: 'MATCH_OR_NULL'; accountId: number };
-
-export type VerificationRecordValidationSnapshot = {
-  id: number;
-  type: VerificationRecordType;
-  status: VerificationRecordStatus;
-  expiresAt: Date;
-  notBefore: Date | null;
-  targetAccountId: number | null;
-};
+import type {
+  VerificationRecordConsumeTargetConstraint,
+  VerificationRecordValidationSnapshot,
+  VerificationRecordDetailView,
+  VerificationRecordView,
+} from './verification-record.types';
+import { toCleanView, toDetailView } from './verification-record-view.mapper';
 
 /**
  * 验证记录服务
@@ -118,7 +114,7 @@ export class VerificationRecordService {
   async createRecord(
     params: CreateVerificationRecordParams,
     transactionContext?: PersistenceTransactionContext,
-  ): Promise<VerificationRecordEntity> {
+  ): Promise<VerificationRecordDetailView> {
     const repository = this.getRepository(transactionContext);
 
     try {
@@ -142,7 +138,7 @@ export class VerificationRecordService {
       });
 
       // 保存到数据库
-      return await repository.save(record);
+      return toDetailView(await repository.save(record));
     } catch (error) {
       // 处理唯一约束冲突（token 指纹重复）
       if (this.isUniqueConstraintViolation(error)) {
@@ -180,7 +176,7 @@ export class VerificationRecordService {
     status: VerificationRecordStatus,
     consumedByAccountId?: number,
     transactionContext?: PersistenceTransactionContext,
-  ): Promise<VerificationRecordEntity> {
+  ): Promise<VerificationRecordDetailView> {
     const repository = this.getRepository(transactionContext);
 
     try {
@@ -198,7 +194,7 @@ export class VerificationRecordService {
         record.consumedAt = new Date();
       }
 
-      return await repository.save(record);
+      return toDetailView(await repository.save(record));
     } catch (error) {
       if (error instanceof DomainError) {
         throw error;
@@ -226,7 +222,7 @@ export class VerificationRecordService {
     transactionContext?: PersistenceTransactionContext;
   }): Promise<{
     affected: number;
-    updatedRecord: VerificationRecordEntity | null;
+    updatedRecord: VerificationRecordView | null;
     validationRecord: VerificationRecordValidationSnapshot | null;
   }> {
     const { where, context, transactionContext } = params;
@@ -301,7 +297,7 @@ export class VerificationRecordService {
     const updatedRecord = await repository.findOne({ where });
     return {
       affected: updateResult.affected ?? 0,
-      updatedRecord: updatedRecord ?? null,
+      updatedRecord: updatedRecord ? toCleanView(updatedRecord) : null,
       validationRecord: null,
     };
   }
@@ -311,8 +307,8 @@ export class VerificationRecordService {
     transactionContext?: PersistenceTransactionContext;
   }): Promise<{
     affected: number;
-    updatedRecord: VerificationRecordEntity | null;
-    currentRecord: VerificationRecordEntity | null;
+    updatedRecord: VerificationRecordDetailView | null;
+    currentRecord: VerificationRecordDetailView | null;
   }> {
     const { recordId, transactionContext } = params;
     const repository = this.getRepository(transactionContext);
@@ -330,14 +326,14 @@ export class VerificationRecordService {
       return {
         affected: 0,
         updatedRecord: null,
-        currentRecord,
+        currentRecord: currentRecord ? toDetailView(currentRecord) : null,
       };
     }
 
     const updatedRecord = await repository.findOne({ where: { id: recordId } });
     return {
       affected: result.affected ?? 0,
-      updatedRecord: updatedRecord ?? null,
+      updatedRecord: updatedRecord ? toDetailView(updatedRecord) : null,
       currentRecord: null,
     };
   }
@@ -352,7 +348,7 @@ export class VerificationRecordService {
    * @param record 验证记录实体
    * @returns 是否有效
    */
-  isRecordValid(record: VerificationRecordEntity): boolean {
+  isRecordValid(record: VerificationRecordValidationSnapshot): boolean {
     const now = new Date();
 
     // 检查状态

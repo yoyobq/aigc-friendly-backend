@@ -1,4 +1,4 @@
-// src/modules/auth/token.helper.spec.ts
+// src/modules/auth/token.service.spec.ts
 
 import {
   GenerateAccessTokenParams,
@@ -9,7 +9,7 @@ import { AudienceTypeEnum } from '@app-types/models/account.types';
 import { JsonWebTokenError, JwtService, NotBeforeError, TokenExpiredError } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PinoLogger } from 'nestjs-pino';
-import { TokenHelper } from './token.helper';
+import { TokenHelper } from './token.service';
 
 describe('TokenHelper', () => {
   let tokenHelper: TokenHelper;

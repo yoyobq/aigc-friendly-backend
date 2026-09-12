@@ -22,6 +22,8 @@ For boundary contract naming, see docs/common/boundary-contract.rules.md.
 ## 允许内容
 
 - 同域读服务与细粒度写服务。
+- 聚合写入口执行本聚合的不变量校验、状态迁移约束与持久化保护；Usecase 决定场景策略、
+  流程授权与编排。稳定纯规则的放置遵循 [core.rules.md](./core.rules.md)。
 - ORM Entity 与 Repository 的内部使用与封装。
 - 接收 usecase 传入的 `PersistenceTransactionContext`，并在同一事务内执行细粒度写入。
 - QueryService 归属 modules(service)。
@@ -38,11 +40,14 @@ For boundary contract naming, see docs/common/boundary-contract.rules.md.
   Boundary contract 是归属某一层的边界模式，不是独立分层；不得建立全局 boundary
   contract 层或 `ports` 层来集中放置所有接口。
   新增边界文件使用 `*.contract.ts`，不使用 `*.port.ts` 新增并行约定。
-- 对外只导出 service、必要 DI token 与稳定类型。
+- 对上游导出 service、必要 DI token 与稳定类型。同一 bounded context 的 usecase 也可以直接
+  复用 module-owned 的纯 policy、calculator、matcher、parser；它们必须无框架、ORM、I/O、
+  配置读取及运行时 Service 依赖。纯计算所需的确定性算法依赖使用最小 framework-free contract。
+  跨 bounded context 协作仍通过 Service / QueryService / contract；已形成跨场景稳定领域规则的
+  纯逻辑可按 core 规则归入 owning domain 的 core。
+  `helper`、`codec`、`mapper` 名称本身不授予纯规则或上游公开资格。
 - 同域多层共享的稳定 View / contract type 可放在 bounded context 根 `*.types.ts` 对外暴露。
-- 领域专用排序解析器。
-  只负责排序白名单与列解析。
-- 不引入业务规则。
+- 领域专用排序解析器只负责排序白名单与列解析，不在排序解析器中引入业务规则。
 - 业务域模块可依赖 `src/modules/common/*` 提供的共享能力。
 - `src/modules/common/*` 可依赖 infrastructure / core / types。
 - `src/modules/common/*` 内部可按能力目录拆分 module / service / provider / helper / types。
@@ -51,7 +56,7 @@ For boundary contract naming, see docs/common/boundary-contract.rules.md.
 
 - 跨域读写编排与事务边界控制。
 - 业务域 modules(service) 直接依赖其他业务域 modules(service)。
-  例如 `account` 不直接依赖 `verification-record`；同层 bounded context 间协作必须上提到 usecase 编排。
+  同层 bounded context 间协作必须上提到 usecase 编排。
 - 提供全局事务入口。
 - 提供可被跨 bounded context 复用的 `runTransaction`、`withTransaction`、`transaction` 包裹方法。
 - 直接依赖 transaction boundary contract。
@@ -62,16 +67,14 @@ For boundary contract naming, see docs/common/boundary-contract.rules.md.
 - 在 service 内部开启跨域事务。
 - 对上游返回 ORM Entity 或 QueryBuilder。
 - `src/modules/common/*` 反向依赖业务域模块。
-  例如 `auth`、`account`、`verification-record`、`third-party-auth` 等。
 - 在 `src/modules/common/*` 中放置业务实体、业务仓储、业务专属 QueryService。
 - 将某个业务域暂时抽空后，仅把残余实现改名为 `common` 继续复用。
 
 ## 依赖方向
 
-- 允许 modules(service) → infrastructure | core | `src/types`；`src/types` 统一通过
-  `@app-types/*` 引用。
+- 允许 modules(service) → infrastructure | core | `src/types`。
 - 禁止 modules(service) → adapters。
-- 上游依赖方向为 usecases → modules(service) | core。
+- 上游依赖方向为 usecases → modules(service) | core | `src/types`。
 - 允许业务域 modules(service) → `src/modules/common/*`。
 - 禁止业务域 modules(service) → 其他业务域 modules(service)。
 - 禁止 `src/modules/common/*` → 业务域 modules(service)。
@@ -94,7 +97,9 @@ For boundary contract naming, see docs/common/boundary-contract.rules.md.
 ## 设计原则
 
 - 读写分离。
-  纯读放在 QueryService。
+  对上游的独立读取入口放在 QueryService；写方法内部为锁定、约束检查、批量 diff 或写入
+  结果所需的读取仍可留在本模块写实现中。读取迁移与映射复用见
+  [queryservice.rules.md](./queryservice.rules.md)。
 - 写操作由 usecases 统一编排。
 - 事务边界由 usecase 持有。
 - modules(service) 只接收事务上下文，不拥有全局事务入口。
@@ -113,36 +118,18 @@ For boundary contract naming, see docs/common/boundary-contract.rules.md.
   的 CRUD。
   若必须逐条处理，需有明确原因，例如强顺序、行级锁、单条失败隔离、外部接口限流，且输入规模
   有清晰上限。
+- TypeORM 批量 QueryBuilder 写入要区分 Entity property name 与数据库物理列名。
+  `repository.save()` / `repository.update()` 以及基于 Entity metadata 的 insert `.values()`
+  可使用 Entity property name；`InsertQueryBuilder.orUpdate(overwrite, conflictTarget)` 接收的是
+  数据库列名。
+  例如物理列 `display_name` 与 Entity property `displayName` 不可混用。
+  相关单测不得只验证链式 mock 被调用；至少断言传给 QueryBuilder 的列名语义，或用真实 SQL /
+  行为验证覆盖。
 - 读接口优先集合化。
   当单个读取与多个读取语义相同时，优先提供 `listByIds({ ids })` / `findByKeys({ keys })`
   这类批量入口；单个值作为 `[id]` / `[key]` 调用同一逻辑，避免维护两套重复查询口径。
 - 读侧输出整形。
   对外输出去敏感字段的 View、ReadModel 或 Record snapshot；协议 DTO 由 adapter 映射。
-
-## Account / UserInfo 当前稳定边界
-
-- `AccountService` 当前只承接 account / userInfo 域内细粒度写入、必要锁能力与登录历史写入。
-- `AccountService` 不承接其他业务域身份档案或管理能力。
-- nickname 生成、注册前账号唯一性查询、account view 映射等能力应按稳定度收敛到同域 service 或 QueryService。
-- account / userInfo 的读侧查询与 view 映射优先归属 `AccountQueryService`。
-- 注册前账号唯一性读取可归属同域 QueryService。
-- 密码哈希 / 验证应归属通用密码能力或账号域明确 service，不应散落在 usecase / adapter。
-- `accessGroup` 与 `metaDigest` 的同步必须通过显式写入口表达。
-  不得伪装成普通 userInfo patch。
-- `AccountService.runTransaction()` 与类似 service 级事务入口已迁移到 usecase-owned `TransactionRunner`。
-  新写流程不得在业务 service 上恢复通用事务入口。
-
-## VerificationRecord 当前稳定边界
-
-- `VerificationRecordService` 是 `VerificationRecord` 聚合写入口。
-- `VerificationRecordService.createRecord()` 负责创建验证记录。
-- `VerificationRecordService.consumeRecord()` 负责消费状态落账、消费时 target 绑定与失败原因解析。
-- `VerificationRecordService.revokeRecord()` 负责撤销状态落账与失败原因解析。
-- Issuer service 负责 token 生成、重复检查与签发编排，最终仍通过聚合写入口写入。
-- verification-record 同域纯规则承载状态机与 target constraint。
-- `VerificationRecordQueryService`、`ConsumableQueryService` 与只读 repository 保持只读语义。
-- 预读验证记录、可消费记录读取都不得在 QueryService 中写库。
-- 需要绑定 target account 时，应在同一次消费语义中表达，不得拆成 QueryService 顺手补写。
 
 ## 结构与命名
 
@@ -157,3 +144,7 @@ For boundary contract naming, see docs/common/boundary-contract.rules.md.
 - 不要把业务域目录直接作为 `common` 的子目录或别名镜像。
 - 涉及多进程运行时按进程职责拆分模块。
 - API 入队能力与 worker 消费能力必须拆分为独立模块。
+
+## 项目约定
+
+- 具体业务模块的职责与实现入口见[当前领域实现约定](../project-convention/domain-implementation-current.md)。

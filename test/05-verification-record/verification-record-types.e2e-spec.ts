@@ -1,7 +1,7 @@
 // test/05-verification-record/verification-record-types.e2e-spec.ts
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { TokenHelper } from '@src/modules/auth/token.helper';
+import { TokenHelper } from '@src/modules/auth/token.service';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';

@@ -1,7 +1,7 @@
 import type { CapabilityStateSnapshot } from '@app-types/common/capability.types';
 import { CAPABILITY_ERROR, DomainError } from '@src/core/common/errors/domain-error';
 import type { CapabilityStateReader } from '@src/modules/common/capability-state-reader.contract';
-import { requireAiWorkflowTerminalDrain } from './ai-workflow-capability.gate';
+import { requireAiWorkflowTerminalDrain } from './ai-workflow-capability.helper';
 
 describe(requireAiWorkflowTerminalDrain.name, () => {
   it('allows owned terminal drain when AI execution is the only blocker', () => {

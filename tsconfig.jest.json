@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Jest stays on its established CommonJS transform until the dedicated ESM migration.
+    "module": "commonjs",
+    "moduleResolution": "node10",
+    "resolvePackageJsonExports": false,
+    "ignoreDeprecations": "6.0"
+  }
+}

@@ -16,7 +16,7 @@ import { Roles } from '../decorators/roles.decorator';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
 import { BasicUserInfoDTO } from './dto/basic-user-info.dto';
-import { UserInfoDTO } from './dto/user-info.dto';
+import { UserInfoDTO } from '../common/dto/user-info.dto';
 import {
   UpdateAccessGroupInput,
   UpdateAccessGroupResult,

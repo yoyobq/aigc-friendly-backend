@@ -1,5 +1,7 @@
+import type { Gender, GeographicInfo, UserState } from '@app-types/models/user-info.types';
 import type {
   AccountStatus,
+  AudienceTypeEnum,
   IdentityTypeEnum,
   LoginHistoryItemModel,
 } from '@app-types/models/account.types';
@@ -52,4 +54,53 @@ export interface AccountLoginBootstrapSnapshot {
     readonly createdAt: Date;
     readonly updatedAt: Date;
   };
+}
+
+export interface AccountCreateData {
+  loginName?: string | null;
+  loginEmail?: string | null;
+  loginPassword?: string;
+  status?: AccountStatus;
+  audience?: AudienceTypeEnum;
+  identityHint?: string | null;
+  recentLoginHistory?: LoginHistoryItemModel[] | null;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface UserInfoCreateData {
+  accountId?: number;
+  nickname?: string;
+  gender?: Gender;
+  birthDate?: string | null;
+  avatarUrl?: string | null;
+  email?: string | null;
+  signature?: string | null;
+  accessGroup?: IdentityTypeEnum[];
+  address?: string | null;
+  phone?: string | null;
+  tags?: string[] | null;
+  geographic?: GeographicInfo | null;
+  metaDigest?: IdentityTypeEnum[] | null;
+  notifyCount?: number;
+  unreadCount?: number;
+  userState?: UserState;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface UserInfoUpdateData {
+  nickname?: string;
+  gender?: Gender;
+  birthDate?: string | null;
+  avatarUrl?: string | null;
+  email?: string | null;
+  signature?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  tags?: string[] | null;
+  geographic?: GeographicInfo | null;
+  notifyCount?: number;
+  unreadCount?: number;
+  userState?: UserState;
 }

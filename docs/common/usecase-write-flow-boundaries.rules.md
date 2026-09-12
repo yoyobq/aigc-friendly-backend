@@ -75,25 +75,15 @@ contract。
 - modules(service) 不得为了跨聚合或跨 bounded context 写入开启事务。
 - 业务 service 上的 `runTransaction`、`withTransaction`、`transaction` 等方法不得作为新写流程入口。
 - 已迁移的 service 级事务入口不得恢复，不得新增调用点。
-- account 行锁若仍需复用，应由 usecase 先开启事务，再显式调用
-  `lockByIdForUpdate(accountId, transactionContext)` 这类域内锁方法。
-  不应继续通过 `runInLockedAccountTransaction()` 之类的包装入口获取事务能力。
+- 需要行锁时，由 Usecase 先开启事务，再显式调用模块的锁方法并传入同一事务上下文。
+  不通过业务 Service 的事务包装入口获取锁能力。
 - ESLint 会阻止 usecase 直接调用事务上下文的 ORM API。
   包括 `getRepository`、`createQueryBuilder`、`save`、`insert`、`update`、`delete`、
   `query`。
   usecase 可以接收和传递 `PersistenceTransactionContext`，但实际 ORM 操作应下沉到
   modules service / QueryService / repository 封装。
 
-## 6. Account / Verification 当前稳定口径
-
-- account 写 usecase 是 account / userInfo 写流程的事务持有者。
-- registration 主流程由 usecase 持有事务边界。
-- verification 主流程由 usecase 持有事务边界。
-- `AccountService.runTransaction()`、`VerificationRecordService.runTransaction()` 与其他 service 级事务入口已迁移到
-  `TransactionRunner` 口径。
-- 新写流程不得在业务 service 上恢复通用事务入口。
-
-## 7. QueryService 的角色
+## 6. QueryService 的角色
 
 QueryService 只负责：
 
@@ -106,3 +96,7 @@ QueryService 不负责：
 - 写流程编排。
 - 事务组织。
 - 跨步骤业务决策。
+
+## 项目约定
+
+- 具体业务流程的事务调用方式和已移除入口见[当前领域实现约定](../project-convention/domain-implementation-current.md)。

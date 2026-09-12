@@ -270,10 +270,14 @@ const waitJobFinalState = async (input: {
     if (job) {
       const state = await job.getState();
       if (state === 'completed' || state === 'failed') {
+        // getState() reads Redis but does not refresh the earlier Job snapshot.
+        // Read the result after observing the terminal state, without weakening assertions.
+        const finalJob = await input.queue.getJob(input.jobId);
+        if (!finalJob) throw new Error(`Terminal job disappeared: ${input.jobId}`);
         return {
           state,
-          returnvalue: job.returnvalue,
-          failedReason: job.failedReason,
+          returnvalue: finalJob.returnvalue,
+          failedReason: finalJob.failedReason,
         };
       }
     }

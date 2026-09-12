@@ -1,6 +1,6 @@
 // src/modules/auth/auth.service.ts
 
-import { TokenHelper } from './token.helper';
+import { TokenHelper } from './token.service';
 import { Inject, Injectable } from '@nestjs/common';
 import { JwtPayload } from '@app-types/jwt.types';
 import { PinoLogger } from 'nestjs-pino';

@@ -193,7 +193,10 @@ describe('Register (e2e)', () => {
       });
 
       // 通过多个条件查找需要清理的账户
-      const whereConditions: Array<{ loginEmail?: any; loginName?: any }> = [];
+      const whereConditions: Array<{
+        loginEmail?: ReturnType<typeof In<string>>;
+        loginName?: ReturnType<typeof In<string>>;
+      }> = [];
       if (emails.length > 0) {
         whereConditions.push({ loginEmail: In(emails) });
       }

@@ -1,3 +1,8 @@
+import type {
+  CreateAiProviderCallRecordInput,
+  UpdateAiProviderCallRecordPatch,
+  AiProviderCallRecordView,
+} from '@src/modules/ai-provider-call-record/ai-provider-call-record.types';
 import type { PersistenceTransactionContext } from '@app-types/common/transaction.types';
 import { DomainError, THIRDPARTY_ERROR } from '@core/common/errors/domain-error';
 import { Injectable } from '@nestjs/common';
@@ -5,84 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { getTypeOrmEntityManager } from '@src/infrastructure/database/transaction/typeorm-persistence-transaction-context';
 import { QueryFailedError, Repository, type EntityManager } from 'typeorm';
 import { AiProviderCallRecordEntity } from './ai-provider-call-record.entity';
-import type {
-  AiProviderCallRecordProviderStatus,
-  AiProviderCallRecordSource,
-} from './ai-provider-call-record.types';
-
-export interface CreateAiProviderCallRecordInput {
-  readonly asyncTaskRecordId?: number | null;
-  readonly traceId: string;
-  readonly accountId?: number | null;
-  readonly nicknameSnapshot?: string | null;
-  readonly bizType?: string | null;
-  readonly bizKey?: string | null;
-  readonly bizSubKey?: string | null;
-  readonly source: AiProviderCallRecordSource;
-  readonly provider: string;
-  readonly model: string;
-  readonly taskType: string;
-  readonly providerRequestId?: string | null;
-  readonly providerStatus: AiProviderCallRecordProviderStatus;
-  readonly promptTokens?: number | null;
-  readonly completionTokens?: number | null;
-  readonly totalTokens?: number | null;
-  readonly costAmount?: string | null;
-  readonly costCurrency?: string | null;
-  readonly normalizedErrorCode?: string | null;
-  readonly providerErrorCode?: string | null;
-  readonly errorMessage?: string | null;
-  readonly providerStartedAt?: Date | null;
-  readonly providerFinishedAt?: Date | null;
-  readonly providerLatencyMs?: number | null;
-}
-
-export interface UpdateAiProviderCallRecordPatch {
-  readonly providerRequestId?: string | null;
-  readonly providerStatus?: AiProviderCallRecordProviderStatus;
-  readonly promptTokens?: number | null;
-  readonly completionTokens?: number | null;
-  readonly totalTokens?: number | null;
-  readonly costAmount?: string | null;
-  readonly costCurrency?: string | null;
-  readonly normalizedErrorCode?: string | null;
-  readonly providerErrorCode?: string | null;
-  readonly errorMessage?: string | null;
-  readonly providerStartedAt?: Date | null;
-  readonly providerFinishedAt?: Date | null;
-  readonly providerLatencyMs?: number | null;
-}
-
-export interface AiProviderCallRecordView {
-  readonly id: number;
-  readonly asyncTaskRecordId: number | null;
-  readonly traceId: string;
-  readonly callSeq: number;
-  readonly accountId: number | null;
-  readonly nicknameSnapshot: string | null;
-  readonly bizType: string | null;
-  readonly bizKey: string | null;
-  readonly bizSubKey: string | null;
-  readonly source: AiProviderCallRecordSource;
-  readonly provider: string;
-  readonly model: string;
-  readonly taskType: string;
-  readonly providerRequestId: string | null;
-  readonly providerStatus: AiProviderCallRecordProviderStatus;
-  readonly promptTokens: number | null;
-  readonly completionTokens: number | null;
-  readonly totalTokens: number | null;
-  readonly costAmount: string | null;
-  readonly costCurrency: string | null;
-  readonly normalizedErrorCode: string | null;
-  readonly providerErrorCode: string | null;
-  readonly errorMessage: string | null;
-  readonly providerStartedAt: Date | null;
-  readonly providerFinishedAt: Date | null;
-  readonly providerLatencyMs: number | null;
-  readonly createdAt: Date;
-  readonly updatedAt: Date;
-}
+import type {} from './ai-provider-call-record.types';
 
 @Injectable()
 export class AiProviderCallRecordService {

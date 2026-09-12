@@ -5,12 +5,10 @@ import {
   VerificationRecordType,
 } from '@app-types/models/verification-record.types';
 import { DomainError, VERIFICATION_RECORD_ERROR } from '@core/common/errors/domain-error';
-import { VerificationCodeHelper } from '@modules/verification-record/verification-code.helper';
+import { VerificationCodeHelper } from '@modules/verification-record/verification-code.service';
 import { Injectable } from '@nestjs/common';
-import {
-  VerificationRecordDetailView,
-  VerificationRecordQueryService,
-} from '@src/modules/verification-record/queries/verification-record.query.service';
+import { VerificationRecordQueryService } from '@src/modules/verification-record/queries/verification-record.query.service';
+import type { VerificationRecordDetailView } from '@src/modules/verification-record/verification-record.types';
 import { VerificationRecordService } from '@src/modules/verification-record/verification-record.service';
 
 /**
@@ -124,7 +122,7 @@ export class CreateVerificationRecordUsecase {
     });
 
     return {
-      record: this.verificationRecordQueryService.toDetailView(record),
+      record: record,
       token,
       generatedByServer,
     };

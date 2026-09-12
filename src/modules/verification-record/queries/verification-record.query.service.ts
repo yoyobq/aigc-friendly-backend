@@ -2,17 +2,10 @@
 import type { PersistenceTransactionContext } from '@app-types/common/transaction.types';
 import { VerificationRecordType } from '@app-types/models/verification-record.types';
 import { Injectable } from '@nestjs/common';
-import type {
-  VerificationRecordDetailView,
-  VerificationRecordView,
-} from '../verification-record.types';
-import { VerificationRecordEntity } from '../verification-record.entity';
+import type { VerificationRecordView } from '../verification-record.types';
 import { VerificationReadQueryService } from './verification-read.query.service';
 
-export type {
-  VerificationRecordDetailView,
-  VerificationRecordView,
-} from '../verification-record.types';
+export type { VerificationRecordView } from '../verification-record.types';
 
 @Injectable()
 export class VerificationRecordQueryService {
@@ -52,13 +45,5 @@ export class VerificationRecordQueryService {
     transactionContext?: PersistenceTransactionContext;
   }): Promise<number | null> {
     return await this.verificationReadQueryService.getTargetAccountIdByRecordId(params);
-  }
-
-  toCleanView(record: VerificationRecordEntity): VerificationRecordView {
-    return this.verificationReadQueryService.toCleanView(record);
-  }
-
-  toDetailView(record: VerificationRecordEntity): VerificationRecordDetailView {
-    return this.verificationReadQueryService.toDetailView(record);
   }
 }

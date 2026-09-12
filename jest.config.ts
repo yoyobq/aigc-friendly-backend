@@ -44,6 +44,7 @@ const config: Config = {
   testRegex: '.*.spec.ts$',
   testPathIgnorePatterns: [
     '/node_modules/',
+    '/\\.tmp/',
     '/dist/',
     '/test/', // 排除 test 目录下的 E2E 测试
   ],
@@ -58,6 +59,8 @@ const config: Config = {
       },
     ],
   },
+
+  modulePathIgnorePatterns: ['<rootDir>/.tmp/'],
 
   dependencyExtractor: '<rootDir>/test/jest-type-dependency-extractor.js',
 
@@ -113,13 +116,14 @@ const config: Config = {
   errorOnDeprecated: true,
 
   // 检测打开的句柄
-  detectOpenHandles: true,
+  detectOpenHandles: false,
+
+  maxWorkers: 4,
 
   // 强制退出
   forceExit: true,
 
   // 最大工作进程数
-  maxWorkers: '50%',
 
   // 预设配置
   preset: 'ts-jest',
@@ -127,7 +131,7 @@ const config: Config = {
   // 删除已弃用的 globals 配置
   // globals: {
   //   'ts-jest': {
-  //     tsconfig: 'tsconfig.json',
+  //     tsconfig: 'tsconfig.jest.json',
   //   },
   // },
 
