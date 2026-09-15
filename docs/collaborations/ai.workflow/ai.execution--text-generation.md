@@ -1,4 +1,4 @@
-# Workflow 消费 Execution：文本生成
+# Capability Collaboration Agreement：Workflow 消费 Execution 文本生成
 
 消费者为 `ai.workflow`，提供者为 `ai.execution`。本协议记录已有
 `generic_text_generate` 流程的消费承诺，不新增 Capability、入口或运行时目录。
@@ -28,18 +28,30 @@
 允许 Workflow 上下文、队列状态、异步任务审计及 provider 调用记录发生已有定义的写入；允许失败
 重试导致多次 provider 调用。成功任务重放与 terminal drain 不允许产生新的 provider 调用。
 
-独立组合测试：
+真实组合测试（与独立审查是不同证据）：
 `test/08-qm-worker/ai-workflow-execution-collaboration.e2e-spec.ts`，已加入默认 Worker 清单。
 它运行真实 API/Worker 根模块、MySQL、Redis/BullMQ、handler、AiWorkerService、registry、
 事务与审计。API 测试根额外导入已有 AiWorkflowUsecasesModule，以调用现有应用入口；不改变生产
 API 装配。仅替换基础设施 OpenAI/Qwen/local provider 客户端，返回值由测试独立给定。
 
 ```bash
-npm run test:e2e:file -- test/08-qm-worker/ai-workflow-execution-collaboration.e2e-spec.ts --needs=mysql,redis,bullmq
+npm run test:e2e:file -- worker test/08-qm-worker/ai-workflow-execution-collaboration.e2e-spec.ts
 npm run test:e2e:worker
 ```
 
 上述测试证明本地组合与消费语义，不证明外部模型质量、远程 SDK/网络或供应商可用性。
+当前组合场景选择 OpenAI，Qwen/local 用于断言未被误调用；不代表所有 provider 路由均已获得组合验证。
+组合测试将请求 model `consumer-model-42` 与返回 model `provider-resolved-model-17` 区分，
+分别断言请求参数、Workflow 输出和 provider 调用记录，验证结果中的 model 来自提供者返回值。
+该补强已通过完整 6 场景；临时将 handler 输出 model 改为请求值时，原断言明确检测到值不匹配，
+还原生产实现后完整 6 场景再次通过。这是作者验证与变异证据，不是独立审查。
+本地日志位于 `.tmp/baseline-alignment/` 的 `agreement-model-mutation-20260915.log` 与
+`agreement-model-restored-20260916.log`。变异轮在断言失败后另有异步审计连接关闭报错，
+不计作 model 语义检测证据；还原复验没有该报错。
+非法输入的组合场景覆盖空 userPrompt；其他输入校验见
+`src/usecases/ai-worker/generic-text-generate-workflow.handler.spec.ts`，属于局部证据。
+显式关闭 Workflow、关闭父级 AI 和缺失 Async Task 的 drain 限制见
+`src/modules/ai-workflow-context/ai-workflow-capability.gate.spec.ts`，属于 gate 单元证据。
 原有以 AiWorkerService mock 驱动 Workflow 的测试继续保留，只计入局部编排证据。
 本轮实际执行结果、临时变异检测与还原复验见[验收记录](../../reports/2026-09-12-baseline-alignment.md)；未执行的独立人员审查不能由作者自检代替。
 

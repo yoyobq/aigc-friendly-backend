@@ -55,7 +55,8 @@ class ControlledProvider implements AiProviderClient {
       accepted: true,
       outputText: 'provider-owned result 独立结果',
       provider: this.name,
-      model: input.model,
+      // Deliberately differs from the request to detect accidental request-value fallback.
+      model: 'provider-resolved-model-17',
       providerJobId: 'provider-job-17',
       providerRequestId: 'provider-request-23',
       providerStatus: 'succeeded',
@@ -212,7 +213,7 @@ describe('ai.workflow consumes ai.execution: real composition', () => {
       outputPayloadJson: {
         outputText: 'provider-owned result 独立结果',
         provider: 'openai',
-        model: 'consumer-model-42',
+        model: 'provider-resolved-model-17',
         providerJobId: 'provider-job-17',
         providerRequestId: 'provider-request-23',
       },
@@ -222,7 +223,7 @@ describe('ai.workflow consumes ai.execution: real composition', () => {
       reason: 'worker_completed',
     });
     expect(await calls(admitted.traceId)).toMatchObject([
-      { provider: 'openai', model: 'consumer-model-42', providerStatus: 'succeeded' },
+      { provider: 'openai', model: 'provider-resolved-model-17', providerStatus: 'succeeded' },
     ]);
   }, 60_000);
 

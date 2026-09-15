@@ -137,6 +137,7 @@ Semantic `requires` and runtime dependencies are different graphs. Queue/job nam
 
 - Same-capability calls remain ordinary usecase-to-module calls.
 - Cross-capability business calls use an existing owner-facing surface or a narrow typed contract; no generic dispatcher or envelope is required.
+- Stable consumer promises across capabilities are governed by [Capability Collaboration Agreements](capability-collaboration.rules.md). Follow that rule's admission criteria, ownership and verification requirements; both capability decisions link to applicable agreements. Agreements do not redefine capability ownership or executable prerequisites.
 - API-to-Worker work uses explicit queue transport and payload contracts.
 - Runtime call direction does not redefine semantic ownership.
 - Physical moves begin after semantic decisions and public surfaces are accepted.

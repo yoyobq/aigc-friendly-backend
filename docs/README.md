@@ -7,7 +7,7 @@ This index routes reading only; it does not override tracked rules or accepted d
 ## Folders
 
 - `docs/common/`: global architecture and shared conventions
-- `docs/collaborations/`: consumer-owned cross-capability promises and executable verification
+- `docs/collaborations/`: Capability Collaboration Agreements — stable consumer promises and executable verification
 - `docs/capabilities/`: stable semantic capability decisions referenced by code anchors
 - `docs/api/`: API / GraphQL adapter rules
 - `docs/worker/`: worker / queue / async-consumer rules
@@ -53,7 +53,7 @@ When rules overlap or ownership is unclear, use `docs/common/rule-precedence.rul
   - `docs/common/queryservice.rules.md`
   - `docs/common/type.rules.md`
 
-- Cross-capability consumption or changes affecting another capability:
+- Cross-capability consumption, Agreement changes, or changes affecting another capability:
   - `docs/common/capability-collaboration.rules.md`
   - both accepted decisions and their linked agreements in `docs/collaborations/`
 
@@ -140,7 +140,7 @@ When rules overlap or ownership is unclear, use `docs/common/rule-precedence.rul
 - `capabilities/current.md`: stable current semantic capability boundaries
 - `generated/capabilities-current.md`: generated shallow projection from the API/Worker module graphs
 - `eslint-architecture-rules.md`: executable lint rule map and architecture validation commands
-- `capability-collaboration.rules`: consumer promises, evidence scope, historical assertions and mutation detection
+- `capability-collaboration.rules`: Capability Collaboration Agreement admission, granularity, ownership, change review and evidence
 - `domain-implementation-current.md`: open-source domain implementation conventions
 - `boundary-contract.rules`: layer-owned contract naming and port/contract distinction
 - `aggregate.rules`: aggregate root and child-entity write boundaries

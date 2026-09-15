@@ -182,6 +182,7 @@ Capability 是既有 `adapters -> usecases -> modules -> infrastructure` 分层�
 - **Worker 观察点**：可关闭能力的 processor 使用 `autorun: false`，由激活用例在 `getState` 确认为 effective `enabled` 后启动；关闭时不领取 backlog，也不把合法关闭状态变成启动错误。
 - **跨进程协作**：API 与 Worker 之间使用显式 BullMQ queue/job contract，不使用 capability envelope 隐藏进程边界。
 - **跨能力调用**：优先复用 owner-facing surface 或窄 typed contract，普通调用不经过 capability bus。
+- **Capability Collaboration Agreement**：记录消费者依赖提供者的一组稳定语义承诺，由双方 decision 链接发现；消费者维护消费预期与场景测试，提供者拥有能力语义。相关变更按 [Agreement 规则](docs/common/capability-collaboration.rules.md)验证承诺，组合测试提供验证证据。Agreement 不增加运行时组件，也不改变能力边界或 `requires`。
 - **本地观察**：`npm run capability:list` 查看从模块图计算出的浅投影，`npm run capability:docs` 生成 `docs/generated/capabilities-current.md`，`npm run capability:docs:check` 校验同步。入口模块只是代码导航起点，不声称提供文件级 ownership 视图。
 
 新增或合并 capability 代码时，先读：
@@ -322,11 +323,11 @@ MIGRATION_DRILL_CREATE_TEMP_DB=true npm run migration:drill:empty-db
 - **ORM Entity**: 只表达持久化结构，不添加 GraphQL / HTTP / Swagger 等 adapter decorator。
 - **Capability**: 稳定 decision 与已安装 Anchor 是能力语义和代码锚点；switchable 行为必须保留显式 gate，generated capability 文档只能由命令生成；普通跨能力调用不引入 dispatcher / bus。
 
-## 通用基线与协作验证
+## 通用基线与 Agreement 验证
 
 - [规则入口](docs/README.md)区分通用层规则、[开源领域实现约定](docs/project-convention/domain-implementation-current.md)与既有 Capability 决策。
-- [Collaboration 规则](docs/common/capability-collaboration.rules.md)治理最小消费承诺、历史断言、独立审查、证据范围及变异检测。
-- [Workflow 消费 Execution 文本生成](docs/collaborations/ai.workflow/ai.execution--text-generation.md)提供真实组合测试入口。旧 AiWorkerService mock 测试仍用于 Workflow 自身回归。
+- [Capability Collaboration Agreement 规则](docs/common/capability-collaboration.rules.md)治理协议的准入、粒度、双方权责、变更重验与证据范围。
+- [Workflow → Execution 文本生成 Agreement](docs/collaborations/ai.workflow/ai.execution--text-generation.md)记录最小消费承诺、允许副作用和真实组合测试入口。旧 AiWorkerService mock 测试仍用于 Workflow 自身回归。
 - [AIGC 项目的测试与可执行信任体系](docs/human/aigc-testing-trust-system.zh-CN.md)供人类阅读，不作为实现规则来源。
 
 源码使用 NodeNext 编译/解析，Jest 使用专用 CommonJS 转换并通过 VM Modules 启动；`npm run typecheck` 同时检查源码与独立工具脚本。`npm run lint` 不修改文件。安装脚本只允许 package.json 中与锁文件版本匹配的 allowScripts 项；更新依赖后需重新核对许可清单。

@@ -21,7 +21,7 @@ Source of truth: Repository-local implementation conventions only; common layer 
 ## AI Workflow / Execution
 
 - ai.workflow 持有上下文、admission、队列和 housekeeping；ai.execution 持有 provider 选择与调用。按既有 decision 保持显式 gate、activation 和 terminal drain。
-- Workflow handler 通过 AiWorkerService 消费 Execution；真实组合验证从双方 decision 链接的 collaboration agreement 发现。
+- Workflow handler 通过 AiWorkerService 消费 Execution；消费承诺与真实组合验证从双方 decision 链接的 Capability Collaboration Agreement 发现。
 - Capability ID、mode、requires 和生成观察工具不由目录或规则升级重新定义。
 
 ## 历史边界

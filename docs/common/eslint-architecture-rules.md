@@ -13,15 +13,15 @@ Source of truth: `eslint.config.mjs` is the executable source of truth; this fil
   `npx eslint <path>`
 - Full lint:
   `npm run lint`
-  This first runs `scripts/check-usecase-normalize-guard.js` and the architecture lint fixtures,
-  then ESLint with `--fix`.
+  This runs the generated capability check, usecase normalize guard and architecture fixtures,
+  then ESLint with `--no-cache`. It does not modify files.
 - No-fix full ESLint check:
-  `npx eslint "{src,apps,libs,test}/**/*.ts" --cache --cache-location .eslintcache`
+  `npx eslint "{src,apps,libs,test,scripts}/**/*.ts" --no-cache`
 - Type-level confidence:
   `npm run typecheck`
 
-Prefer `npx eslint <path>` or the no-fix full command while investigating because `npm run lint`
-performs an automatic `--fix` pass.
+Prefer `npx eslint <path>` for file-scoped investigation; `npm run lint` also runs the repository
+architecture and capability checks without an automatic `--fix` pass.
 
 ## Rule Map
 

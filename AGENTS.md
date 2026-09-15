@@ -70,6 +70,7 @@ Detailed or fast-changing rules belong in `docs/`.
 - Treat outbox as an architectural option, not an existing reusable component.
 - `TransactionRunner` is the current usecase-owned transaction boundary contract; do not introduce parallel `TransactionPort` / `UnitOfWork` aliases.
 - Cross-capability calls use an existing owner-facing surface or a narrow typed contract. Do not introduce a generic Capability bus, dispatcher, envelope, or session registry for ordinary calls.
+- Capability Collaboration Agreements record stable consumer promises across capabilities. For relevant changes, discover affected agreements from both decisions and actual calls, then verify the affected promises under `docs/common/capability-collaboration.rules.md`.
 - A switchable capability must gate its real owner-facing behaviors explicitly. Capability-aware Workers use `autorun: false` and an activation usecase so disabled work remains unclaimed and observable.
 
 ## Type Placement
@@ -90,7 +91,7 @@ Use `docs/README.md` as the source of task routing. Common routes:
 - GraphQL error/auth/session response contract: `docs/api/graphql-error-contract-current.md` plus `docs/api/adapters.rules.md`.
 - Boundary contract or port/contract naming: `docs/common/boundary-contract.rules.md`.
 - Capability identity, anchors, prerequisites, explicit gates, runtime contributions, providers, queues, or Worker activation: `docs/common/capability.rules.md` plus the referenced decision under `docs/capabilities/`; when evaluating an authorized proposal or selecting the smallest implementation shape, also read `docs/common/capability-plugin-authoring.guide.md`; for an unaccepted boundary or phased migration, read `plans/README.md` and the matching human-approved active plan.
-- Cross-capability consumption: `docs/common/capability-collaboration.rules.md`, both accepted decisions and their linked agreements.
+- Cross-capability consumption / Agreement changes: `docs/common/capability-collaboration.rules.md`, both accepted decisions and their linked agreements.
 - Existing domain implementation ownership: `docs/project-convention/domain-implementation-current.md` after the common layer rules.
 - QueryService or shared type placement: `docs/common/queryservice.rules.md` and `docs/common/type.rules.md`.
 - Worker queues or async consumers: `docs/worker/*.rules.md` and queue/audit project conventions.
